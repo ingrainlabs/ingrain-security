@@ -1,10 +1,10 @@
 ---
 name: relevance-triage
 description: >-
-  Lightweight pre-screening classifier for the security analysis pipeline.
-  Given a task title and description, decides whether the change has ANY
-  potential security implications that warrant a thorough threat analysis.
-  Read-only; not for direct/proactive use — driven by the pipeline.
+  Lightweight pre-screening classifier for the security review pipeline. Given a
+  task title and description, decides whether the change has ANY potential
+  security implications that warrant a thorough threat analysis. Read-only; not
+  for direct/proactive use — driven by the ingrain-security-review orchestrator.
 tools: Read, Grep, Glob
 model: haiku
 ---
@@ -31,9 +31,9 @@ A task is NOT security-relevant if it ONLY involves:
 - Renaming variables or files with no behavioral change
 - Updating non-executable assets (images, icons, illustrations)
 
-When in doubt, classify as relevant=true. It is far better to run an unnecessary analysis than to miss a security concern.
+When in doubt, classify as major (relevant). It is far better to run an unnecessary analysis than to miss a security concern.
 
-Respond with relevant=true if the task has any potential security implications, or relevant=false with a concise reason explaining why the task has no security relevance.
+Return your verdict as `major` if the task has any potential security implications, or `minor` with a concise reason explaining why the task has no security relevance.
 
 Task title: {title}
 Task description: {description}
