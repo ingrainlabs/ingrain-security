@@ -1,16 +1,17 @@
 /**
- * Live per-subagent tests, table-driven. Each case runs the session in isolation
- * as one subagent (`claude --agent <name>`) and asserts the output's *shape* (a
- * verdict keyword, a 0-100 score, a preserved `T1` tag, required fields).
- * Assertions are loose because live model output varies.
+ * Live per-worker tests, table-driven. Each case dispatches one worker the way
+ * the orchestrator does — its SKILL.md body as the system prompt, restricted to
+ * the read-only tools — and asserts the output's *shape* (a verdict keyword, a
+ * 0-100 score, a preserved `T1` tag, required fields). Assertions are loose
+ * because live model output varies.
  *
- * The cases live in a single CASES table — mirroring the EXPECTED-map loop in
- * static/agents.test.ts — so adding or tuning an agent test is a one-row change.
+ * The cases live in a single CASES table — mirroring the WORKERS loop in
+ * static/agents.test.ts — so adding or tuning a worker test is a one-row change.
  */
 
 import { assertEquals } from "@std/assert";
 import { assertContainsAll, assertContainsAny, assertHasScore0to100 } from "../lib/matchers.ts";
-import { AGENT_TIMEOUT_MS, TRIAGE_TIMEOUT_MS } from "../lib/claudeRunner.ts";
+import { AGENT_TIMEOUT_MS, TRIAGE_TIMEOUT_MS, workerDispatchPrompt } from "../lib/claudeRunner.ts";
 import type { RunResult } from "../lib/types.ts";
 import { runChecked } from "../lib/reporter.ts";
 import {
@@ -22,40 +23,43 @@ import {
   THREAT_AND_MITIGATIONS,
 } from "../lib/sampleInputs.ts";
 
+/** Read-only tools every worker is dispatched with. */
+const READ_ONLY_TOOLS = ["Read", "Grep", "Glob"];
+
 interface AgentCase {
-  /** Subagent to run the session as (`--agent`). */
-  agent: string;
+  /** Worker skill to dispatch (skills/<worker>/SKILL.md). */
+  worker: string;
   /** Display label for the INPUT/OUTPUT/VERDICT block and the test name. */
   label: string;
-  /** Prompt fed to the agent. */
-  prompt: string;
+  /** Input fed to the worker (becomes the dispatch INPUT). */
+  input: string;
   /** Per-call timeout. */
   timeoutMs: number;
-  /** Shape assertions on the agent's response. */
+  /** Shape assertions on the worker's response. */
   check: (r: RunResult) => void;
 }
 
 const CASES: AgentCase[] = [
   {
     // relevance-triage (haiku): classifies a plan as `major` or `minor`.
-    agent: "relevance-triage",
+    worker: "relevance-triage",
     label: "relevance-triage :: major plan",
-    prompt: MAJOR_PLAN,
+    input: MAJOR_PLAN,
     timeoutMs: TRIAGE_TIMEOUT_MS,
     check: (r) => assertContainsAny(r.text, [/\bmajor\b/i], "expected a 'major' verdict"),
   },
   {
-    agent: "relevance-triage",
+    worker: "relevance-triage",
     label: "relevance-triage :: minor plan",
-    prompt: MINOR_PLAN,
+    input: MINOR_PLAN,
     timeoutMs: TRIAGE_TIMEOUT_MS,
     check: (r) => assertContainsAny(r.text, [/\bminor\b/i], "expected a 'minor' verdict"),
   },
   {
     // threat-generator (sonnet): produces a threat list with stable tags T1, T2, …
-    agent: "threat-generator",
+    worker: "threat-generator",
     label: "threat-generator :: major plan",
-    prompt: MAJOR_PLAN,
+    input: MAJOR_PLAN,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {
       assertContainsAny(r.text, [/\bT1\b/], "expected at least a 'T1' threat tag");
@@ -65,9 +69,9 @@ const CASES: AgentCase[] = [
   {
     // risk-scorer (sonnet): scores each threat likelihood x impact (0-100), with
     // an overall criticality band, and preserves the tags.
-    agent: "risk-scorer",
+    worker: "risk-scorer",
     label: "risk-scorer :: frozen threats",
-    prompt: TASK_AND_FROZEN_THREATS,
+    input: TASK_AND_FROZEN_THREATS,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {
       assertContainsAll(r.text, [/likelihood/i, /impact/i], "expected likelihood & impact labels");
@@ -78,9 +82,9 @@ const CASES: AgentCase[] = [
   {
     // threat-critic (sonnet): scores a threat model 0-100 and returns a verdict.
     // The weak fixture biases toward needs-revision but we assert only the shape.
-    agent: "threat-critic",
+    worker: "threat-critic",
     label: "threat-critic :: weak model",
-    prompt: TASK_AND_WEAK_MODEL,
+    input: TASK_AND_WEAK_MODEL,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {
       assertContainsAny(r.text, [/approved/i, /needs[-\s]revision/i], "expected a verdict");
@@ -89,9 +93,9 @@ const CASES: AgentCase[] = [
   },
   {
     // mitigation-critic (sonnet): scores mitigation coverage 0-100 + a verdict.
-    agent: "mitigation-critic",
+    worker: "mitigation-critic",
     label: "mitigation-critic :: sample mitigations",
-    prompt: THREAT_AND_MITIGATIONS,
+    input: THREAT_AND_MITIGATIONS,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {
       assertContainsAny(r.text, [/approved/i, /needs[-\s]revision/i], "expected a verdict");
@@ -101,9 +105,9 @@ const CASES: AgentCase[] = [
   {
     // mitigation-generator (sonnet): proposes mitigations for the selected threats,
     // each with Yield / Effort / threatTags fields.
-    agent: "mitigation-generator",
+    worker: "mitigation-generator",
     label: "mitigation-generator :: selected threats",
-    prompt: SELECTED_THREATS,
+    input: SELECTED_THREATS,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {
       assertContainsAll(r.text, [/yield/i, /effort/i], "expected Yield & Effort fields");
@@ -114,6 +118,12 @@ const CASES: AgentCase[] = [
 
 for (const c of CASES) {
   Deno.test(c.label, async () => {
-    await runChecked(c.label, c.prompt, { agent: c.agent, timeoutMs: c.timeoutMs }, c.check);
+    const prompt = await workerDispatchPrompt(c.worker, c.input);
+    await runChecked(
+      c.label,
+      prompt,
+      { allowedTools: READ_ONLY_TOOLS, timeoutMs: c.timeoutMs },
+      c.check,
+    );
   });
 }

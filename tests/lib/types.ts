@@ -5,9 +5,7 @@
  */
 
 export interface RunOptions {
-  /** Run the whole session AS this subagent (`--agent <name>`). */
-  agent?: string;
-  /** Plugin dir to load (skill + agents + hooks). Defaults to repo root. */
+  /** Plugin dir to load (skills + hooks). Defaults to repo root. */
   pluginDir?: string;
   /** Use `--output-format stream-json`; populates `events`. */
   streamJson?: boolean;

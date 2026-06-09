@@ -6,9 +6,9 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { assertAgentDispatched, assertContainsAny, assertOrder } from "../lib/matchers.ts";
+import { assertContainsAny, assertOrder, assertWorkerDispatched } from "../lib/matchers.ts";
 import {
-  dispatchedAgents,
+  dispatchedWorkers,
   ORCHESTRATION_MAX_TURNS,
   ORCHESTRATION_TIMEOUT_MS,
 } from "../lib/claudeRunner.ts";
@@ -26,12 +26,12 @@ Deno.test({
       `Here is my implementation plan, ready to build. Run the security review:\n\n${MAJOR_PLAN}`,
       { streamJson: true, maxTurns: ORCHESTRATION_MAX_TURNS, timeoutMs: ORCHESTRATION_TIMEOUT_MS },
       (r) => {
-        const order = dispatchedAgents(r.events);
+        const order = dispatchedWorkers(r.events);
         const trace = order.join(" -> ");
 
-        assertAgentDispatched(r.events, "relevance-triage");
-        assertAgentDispatched(r.events, "threat-generator");
-        assertAgentDispatched(r.events, "risk-scorer");
+        assertWorkerDispatched(r.events, "relevance-triage");
+        assertWorkerDispatched(r.events, "threat-generator");
+        assertWorkerDispatched(r.events, "risk-scorer");
 
         assertOrder(trace, "relevance-triage", "threat-generator", "triage before threats");
         assertOrder(trace, "threat-generator", "risk-scorer", "threats frozen before scoring");

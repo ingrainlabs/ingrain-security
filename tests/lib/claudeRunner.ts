@@ -70,15 +70,62 @@ export const streamText = (events: StreamEvent[]): string => {
   return parts.join("\n");
 };
 
-/** Subagent types dispatched via the Task tool, in order of appearance. */
-export const dispatchedAgents = (events: StreamEvent[]): string[] => {
-  const agents: string[] = [];
+/** The six worker skills the orchestrator dispatches. */
+export const WORKERS = [
+  "relevance-triage",
+  "threat-generator",
+  "threat-critic",
+  "risk-scorer",
+  "mitigation-generator",
+  "mitigation-critic",
+] as const;
+
+/**
+ * Workers dispatched by the orchestrator, in order of appearance.
+ *
+ * Workers are flat skills now, not platform-native agents, so dispatch no longer
+ * shows up as a `Task.subagent_type`. The orchestrator dispatches a generic
+ * subagent told to read `skills/<name>/SKILL.md`, so we recover the worker from
+ * the Task prompt. The sequential in-context fallback reads the same skill via
+ * the Skill tool, so we count that too.
+ */
+export const dispatchedWorkers = (events: StreamEvent[]): string[] => {
+  const workers: string[] = [];
   for (const block of toolUses(events)) {
-    if (block.name === "Task" && typeof block.input?.subagent_type === "string") {
-      agents.push(block.input.subagent_type);
+    if (block.name === "Task" && typeof block.input?.prompt === "string") {
+      const m = block.input.prompt.match(/skills\/([a-z-]+)\/SKILL\.md/);
+      if (m && (WORKERS as readonly string[]).includes(m[1])) {
+        workers.push(m[1]);
+        continue;
+      }
+    }
+    if (block.name === "Skill" && typeof block.input?.skill === "string") {
+      const skill = block.input.skill.split(":").pop() ?? "";
+      if ((WORKERS as readonly string[]).includes(skill)) workers.push(skill);
     }
   }
-  return agents;
+  return workers;
+};
+
+/**
+ * Build the dispatch prompt for a single worker skill, mirroring what the
+ * orchestrator sends: the worker's own SKILL.md body (frontmatter stripped) as
+ * the system prompt, then the INPUT. Lets a live test exercise one worker in
+ * isolation without a platform-native agent definition.
+ */
+export const workerDispatchPrompt = async (name: string, input: string): Promise<string> => {
+  const md = await Deno.readTextFile(`${PLUGIN_DIR}/skills/${name}/SKILL.md`);
+  const body = md.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
+  return [
+    `You have been dispatched as the \`${name}\` worker of the ingrain-security`,
+    `review. Follow the instructions below as your system prompt, act on the`,
+    `INPUT, and return only what the Output section specifies.`,
+    "",
+    body,
+    "",
+    "INPUT:",
+    input,
+  ].join("\n");
 };
 
 /** Names of all tools the model invoked, in order. */
@@ -89,7 +136,6 @@ export const toolNames = (events: StreamEvent[]): string[] =>
 export const runClaude = async (prompt: string, opts: RunOptions = {}): Promise<RunResult> => {
   const args = ["--print", "--dangerously-skip-permissions"];
   args.push("--plugin-dir", opts.pluginDir ?? PLUGIN_DIR);
-  if (opts.agent) args.push("--agent", opts.agent);
   if (opts.streamJson) args.push("--output-format", "stream-json", "--verbose");
   if (opts.maxTurns !== undefined) args.push("--max-turns", String(opts.maxTurns));
   if (opts.allowedTools?.length) args.push("--allowed-tools", opts.allowedTools.join(","));

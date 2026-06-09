@@ -6,7 +6,7 @@
 
 import { assertEquals } from "@std/assert";
 import { assertContainsAny, assertReviewStarted } from "../lib/matchers.ts";
-import { dispatchedAgents, SESSION_MAX_TURNS, SESSION_TIMEOUT_MS } from "../lib/claudeRunner.ts";
+import { dispatchedWorkers, SESSION_MAX_TURNS, SESSION_TIMEOUT_MS } from "../lib/claudeRunner.ts";
 import { runChecked } from "../lib/reporter.ts";
 import { MAJOR_PLAN, MINOR_PLAN } from "../lib/sampleInputs.ts";
 
@@ -29,7 +29,7 @@ Deno.test("trigger: trivial plan stops at triage (minor)", async () => {
       // stops there. (The exact instructed phrase is checked in static/skill.test.ts.)
       assertContainsAny(r.text, [/\bminor\b/i], "expected a 'minor' triage outcome");
       assertEquals(
-        dispatchedAgents(r.events).includes("threat-generator"),
+        dispatchedWorkers(r.events).includes("threat-generator"),
         false,
         "minor changes must not reach threat-generator",
       );

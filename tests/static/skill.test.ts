@@ -47,6 +47,23 @@ Deno.test("SKILL.md: contains the announce and minor-stop phrases", async () => 
   assertStringIncludes(md, "no security review needed — minor change");
 });
 
+Deno.test("SKILL.md: documents the read-skill dispatch mechanism", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  // Generic-subagent dispatch reads each worker's skill by path.
+  assertStringIncludes(md, "Read skills/<name>/SKILL.md");
+  // Cross-platform mapping lives in the reference doc.
+  assertStringIncludes(md, "references/platform-dispatch.md");
+  // The read-only constraint is restated for the dispatched subagents.
+  assertStringIncludes(md.toLowerCase(), "read-only");
+});
+
+Deno.test("platform-dispatch.md: covers Claude, other CLIs, and the fallback", async () => {
+  const ref = `${ROOT}skills/ingrain-security/references/platform-dispatch.md`;
+  const md = await Deno.readTextFile(ref);
+  assertStringIncludes(md, "Task tool");
+  assertStringIncludes(md.toLowerCase(), "fallback");
+});
+
 Deno.test("hook.json: valid JSON configuring a SessionStart hook", async () => {
   const hook = JSON.parse(await Deno.readTextFile(HOOK_JSON));
   const serialized = JSON.stringify(hook);

@@ -1,8 +1,9 @@
 # Tests
 
-Test suite for the `ingrain-security` plugin — the `ingrain-security` skill and its six read-only
-subagents. Built on Deno's test runner; it drives the `claude` CLI in headless mode and can exercise
-each subagent in isolation via `claude --agent`.
+Test suite for the `ingrain-security` plugin — the `ingrain-security` orchestrator skill and its six
+read-only worker skills. Built on Deno's test runner; it drives the `claude` CLI in headless mode
+and can exercise each worker in isolation by dispatching it the way the orchestrator does (its
+`skills/<name>/SKILL.md` body as the system prompt, restricted to read-only tools).
 
 ## Requirements
 
@@ -17,8 +18,8 @@ Run all commands from this `tests/` directory.
 
 ```
 lib/      claudeRunner.ts (spawn helper) · matchers.ts (assertions) · sampleInputs.ts (canned plans) · reporter.ts (input/output printer)
-static/   offline lint of agent frontmatter + skill/hook structure (no model calls)
-agents/   agents.test.ts — table-driven live tests, one case per subagent (`claude --agent <name>`)
+static/   offline lint of worker-skill frontmatter + advisory ROLE + skill/hook structure (no model calls)
+agents/   agents.test.ts — table-driven live tests, one case per worker (dispatched as its skill)
 skill/    trigger.test.ts (review starts / minor stops) · orchestration.test.ts (gated)
 ```
 
@@ -43,12 +44,14 @@ This is always on for the live tiers — Deno streams each test's output live (w
 
 ## How the tests work
 
-- **static/** — pure file reads. Asserts each agent's frontmatter (name, model, non-empty
-  description) and that every agent stays **read-only** (`Read, Grep, Glob` only), plus the skill's
-  step ordering, announce/stop phrases, and a valid SessionStart hook.
-- **agents/** — `claude -p "<input>" --agent <name> --plugin-dir <repo>` runs the session _as_ that
-  one subagent; the test asserts the output's _shape_ (a verdict keyword, a 0–100 score, a preserved
-  `T1` tag, required fields). Assertions are loose because live output varies.
+- **static/** — pure file reads. Asserts each worker skill's frontmatter (name, anti-trigger
+  description) and the advisory **read-only** ROLE header (`Read, Grep, Glob` only, no edits,
+  recommended model), plus the orchestrator's step ordering, announce/stop phrases, the read-skill
+  dispatch mechanism, and a valid SessionStart hook.
+- **agents/** — dispatches one worker per case the way the orchestrator does: its
+  `skills/<name>/SKILL.md` body as the system prompt with `--allowed-tools Read,Grep,Glob`. The test
+  asserts the output's _shape_ (a verdict keyword, a 0–100 score, a preserved `T1` tag, required
+  fields). Assertions are loose because live output varies.
 - **skill/** — a full session (skill + agents + hook). `trigger.test.ts` checks a security-relevant
   plan starts the review and a trivial one stops at triage. `orchestration.test.ts`
   (integration-gated) checks the workers fire in order through risk scoring and the run halts at
@@ -62,7 +65,7 @@ deno task test               # static + 6 live agents + skill trigger (default t
 deno task test:agents        # just the 6 live per-agent tests
 deno task test:integration   # everything, incl. full orchestration (slow)
 
-# one agent only:
+# one worker only:
 deno test --allow-run=claude --allow-read --allow-env agents/ --filter relevance-triage
 ```
 
@@ -80,7 +83,8 @@ deno test --allow-run=claude --allow-read --allow-env agents/ --filter relevance
 
 - Live tests call the model, so an occasional flake is possible; re-run a single test with
   `--filter`. Assertions check shape, not exact wording, to minimize this.
-- `--agent <name>` uses the bare agent name (e.g. `relevance-triage`); the plugin is loaded via
-  `--plugin-dir` pointing at the repo root (computed automatically in `lib/claudeRunner.ts`).
+- Each worker is dispatched by inlining its `skills/<name>/SKILL.md` body (via
+  `workerDispatchPrompt` in `lib/claudeRunner.ts`) and restricting tools to `Read,Grep,Glob`; the
+  plugin is loaded via `--plugin-dir` pointing at the repo root (computed automatically).
 - The orchestration test deliberately does **not** answer the interactive Gate 1/Gate 2 prompts —
   headless mode has no human — so it asserts the run _reaches_ Gate 1 and stops.

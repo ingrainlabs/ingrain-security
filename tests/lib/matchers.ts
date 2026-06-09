@@ -8,7 +8,7 @@
 
 import { AssertionError } from "@std/assert";
 import { extractYaml, test as hasFrontmatter } from "@std/front-matter";
-import { dispatchedAgents } from "./claudeRunner.ts";
+import { dispatchedWorkers } from "./claudeRunner.ts";
 import type { RunResult, StreamEvent } from "./types.ts";
 
 type Pattern = string | RegExp;
@@ -87,7 +87,7 @@ export const assertHasScore0to100 = (text: string, msg?: string): void => {
 /** The orchestrator started the security review (announce / triage dispatch / Skill). */
 export const assertReviewStarted = (result: RunResult, msg?: string): void => {
   const announced = /using ingrain-security/i.test(result.text);
-  const triaged = dispatchedAgents(result.events).includes("relevance-triage");
+  const triaged = dispatchedWorkers(result.events).includes("relevance-triage");
   const skillFired = result.events.some((ev) => usesSkill(ev, "ingrain-security"));
   if (announced || triaged || skillFired) return;
   throw new AssertionError(
@@ -96,9 +96,9 @@ export const assertReviewStarted = (result: RunResult, msg?: string): void => {
   );
 };
 
-/** Assert a given subagent was dispatched via the Task tool. */
-export const assertAgentDispatched = (events: StreamEvent[], name: string): void => {
-  const got = dispatchedAgents(events);
+/** Assert a given worker was dispatched by the orchestrator. */
+export const assertWorkerDispatched = (events: StreamEvent[], name: string): void => {
+  const got = dispatchedWorkers(events);
   if (!got.includes(name)) {
     throw new AssertionError(`Expected '${name}' dispatched; saw: [${got.join(", ")}]`);
   }

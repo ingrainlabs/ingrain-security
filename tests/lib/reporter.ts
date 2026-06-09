@@ -7,7 +7,7 @@
  * its own `----- output -----` markers), so these blocks appear as tests run.
  */
 
-import { dispatchedAgents, runClaude } from "./claudeRunner.ts";
+import { dispatchedWorkers, runClaude } from "./claudeRunner.ts";
 import type { RunOptions, RunResult } from "./types.ts";
 
 const indent = (text: string, pad = "    "): string => {
@@ -41,7 +41,7 @@ export const runChecked = async (
     indent(r.text),
   ];
 
-  const dispatched = dispatchedAgents(r.events);
+  const dispatched = dispatchedWorkers(r.events);
   if (dispatched.length) lines.push(`DISPATCHED: [${dispatched.join(", ")}]`);
 
   try {

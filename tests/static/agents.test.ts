@@ -1,59 +1,63 @@
 /**
- * Static lint of the 6 subagent definitions. No model calls, no auth, no
- * network — pure file reads. Catches frontmatter drift and (critically) any
- * agent that gains write access, which would break the "read-only review"
- * invariant the skill promises.
+ * Static lint of the 6 worker skills. No model calls, no auth, no network — pure
+ * file reads.
+ *
+ * Workers are flat skills now (skills/<name>/SKILL.md), so the read-only
+ * guarantee is advisory prose in the ROLE header rather than a platform-enforced
+ * `tools:` frontmatter list. These checks guard that advisory contract: every
+ * worker still declares itself read-only (Read/Grep/Glob, no edits), carries a
+ * recommended model, and an anti-trigger description so it isn't fired directly
+ * outside the orchestrator.
  */
 
-import { assertEquals, assertExists } from "@std/assert";
+import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 import { parseFrontmatter } from "../lib/matchers.ts";
 
-const AGENTS_DIR = fromFileUrl(new URL("../../agents/", import.meta.url));
+const SKILLS_DIR = fromFileUrl(new URL("../../skills/", import.meta.url));
 
-const EXPECTED = {
-  "relevance-triage": "haiku",
-  "threat-generator": "haiku",
-  "threat-critic": "haiku",
-  "risk-scorer": "haiku",
-  "mitigation-generator": "haiku",
-  "mitigation-critic": "haiku",
-} as const;
+const WORKERS = [
+  "relevance-triage",
+  "threat-generator",
+  "threat-critic",
+  "risk-scorer",
+  "mitigation-generator",
+  "mitigation-critic",
+] as const;
 
-const READ_ONLY_TOOLS = new Set(["Read", "Grep", "Glob"]);
+const splitFrontmatter = (md: string): string => md.replace(/^---\n[\s\S]*?\n---\n/, "");
 
-for (const [name, model] of Object.entries(EXPECTED)) {
-  Deno.test(`agent ${name}: frontmatter is well-formed and read-only`, async (t) => {
-    const md = await Deno.readTextFile(`${AGENTS_DIR}${name}.md`);
+for (const name of WORKERS) {
+  Deno.test(`worker skill ${name}: frontmatter and advisory read-only ROLE`, async (t) => {
+    const md = await Deno.readTextFile(`${SKILLS_DIR}${name}/SKILL.md`);
     const fm = parseFrontmatter(md);
+    const body = splitFrontmatter(md);
 
-    await t.step("name matches filename", () => {
+    await t.step("name matches directory", () => {
       assertEquals(fm.name, name);
     });
 
-    await t.step("description is non-empty", () => {
+    await t.step("description is non-empty and anti-trigger", () => {
       assertExists(fm.description);
-      assertEquals(typeof fm.description, "string");
-      assertEquals((fm.description as string).trim().length > 0, true);
+      const description = String(fm.description);
+      assertEquals(description.trim().length > 0, true);
+      // Must steer the model away from invoking the worker directly.
+      assertStringIncludes(description, "INTERNAL");
+      assertStringIncludes(description.toLowerCase(), "do not invoke directly");
     });
 
-    await t.step("model is the expected tier", () => {
-      assertEquals(fm.model, model);
+    await t.step("ROLE header declares read-only with the allowed tools", () => {
+      assertStringIncludes(body.toLowerCase(), "read-only");
+      assertStringIncludes(body, "Read, Grep, and Glob");
+      assertStringIncludes(body.toLowerCase(), "make no edits");
     });
 
-    await t.step("tools are read-only (Read/Grep/Glob only)", () => {
-      const tools = String(fm.tools)
-        .split(",")
-        .map((tool) => tool.trim())
-        .filter(Boolean);
-      assertEquals(tools.length > 0, true, "tools must be declared");
-      for (const tool of tools) {
-        assertEquals(
-          READ_ONLY_TOOLS.has(tool),
-          true,
-          `agent ${name} declares non-read-only tool '${tool}'`,
-        );
-      }
+    await t.step("ROLE header carries a recommended model", () => {
+      assertStringIncludes(body, "Recommended model:");
+    });
+
+    await t.step("ROLE header tells the worker not to run the orchestration", () => {
+      assertStringIncludes(body, "do not run the orchestration");
     });
   });
 }
