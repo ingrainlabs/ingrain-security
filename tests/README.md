@@ -1,8 +1,8 @@
 # Tests
 
-Test suite for the `ingrain-security` plugin — the `ingrain-security` skill and its six
-read-only subagents. Built on Deno's test runner; it drives the `claude` CLI in headless mode and
-can exercise each subagent in isolation via `claude --agent`.
+Test suite for the `ingrain-security` plugin — the `ingrain-security` skill and its six read-only
+subagents. Built on Deno's test runner; it drives the `claude` CLI in headless mode and can exercise
+each subagent in isolation via `claude --agent`.
 
 ## Requirements
 
@@ -18,7 +18,7 @@ Run all commands from this `tests/` directory.
 ```
 lib/      claude.ts (spawn helper) · assert.ts (matchers) · fixtures.ts (canned plans)
 static/   offline lint of agent frontmatter + skill/hook structure (no model calls)
-agents/   one live test per subagent, run in isolation via `claude --agent <name>`
+agents/   agents.test.ts — table-driven live tests, one case per subagent (`claude --agent <name>`)
 skill/    trigger.test.ts (review starts / minor stops) · orchestration.test.ts (gated)
 ```
 

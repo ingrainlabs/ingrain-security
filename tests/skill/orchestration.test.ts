@@ -7,7 +7,11 @@
 
 import { assertEquals } from "@std/assert";
 import { assertAgentDispatched, assertContainsAny, assertOrder } from "../lib/assert.ts";
-import { dispatchedAgents } from "../lib/claude.ts";
+import {
+  dispatchedAgents,
+  ORCHESTRATION_MAX_TURNS,
+  ORCHESTRATION_TIMEOUT_MS,
+} from "../lib/claude.ts";
 import { runChecked } from "../lib/report.ts";
 import { MAJOR_PLAN } from "../lib/fixtures.ts";
 
@@ -20,7 +24,7 @@ Deno.test({
     await runChecked(
       "orchestration :: major plan",
       `Here is my implementation plan, ready to build. Run the security review:\n\n${MAJOR_PLAN}`,
-      { streamJson: true, maxTurns: 30, timeoutMs: 600_000 },
+      { streamJson: true, maxTurns: ORCHESTRATION_MAX_TURNS, timeoutMs: ORCHESTRATION_TIMEOUT_MS },
       (r) => {
         const order = dispatchedAgents(r.events);
         const trace = order.join(" -> ");

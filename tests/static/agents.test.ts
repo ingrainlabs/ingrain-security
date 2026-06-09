@@ -13,11 +13,11 @@ const AGENTS_DIR = fromFileUrl(new URL("../../agents/", import.meta.url));
 
 const EXPECTED = {
   "relevance-triage": "haiku",
-  "threat-generator": "sonnet",
-  "threat-critic": "sonnet",
-  "risk-scorer": "sonnet",
-  "mitigation-generator": "sonnet",
-  "mitigation-critic": "sonnet",
+  "threat-generator": "haiku",
+  "threat-critic": "haiku",
+  "risk-scorer": "haiku",
+  "mitigation-generator": "haiku",
+  "mitigation-critic": "haiku",
 } as const;
 
 const READ_ONLY_TOOLS = new Set(["Read", "Grep", "Glob"]);

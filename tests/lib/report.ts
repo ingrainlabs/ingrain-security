@@ -7,13 +7,14 @@
  * its own `----- output -----` markers), so these blocks appear as tests run.
  */
 
-import { dispatchedAgents, runClaude, type RunOptions, type RunResult } from "./claude.ts";
+import { dispatchedAgents, runClaude } from "./claude.ts";
+import type { RunOptions, RunResult } from "./types.ts";
 
-function indent(text: string, pad = "    "): string {
+const indent = (text: string, pad = "    "): string => {
   const body = text.trimEnd();
   if (!body) return `${pad}(empty)`;
   return body.split("\n").map((line) => pad + line).join("\n");
-}
+};
 
 /**
  * Run a prompt, print an INPUT/OUTPUT/VERDICT block, then run `check`.
@@ -21,12 +22,12 @@ function indent(text: string, pad = "    "): string {
  * assertion fails; `check` failures are reported and re-thrown so Deno still
  * fails the test.
  */
-export async function runChecked(
+export const runChecked = async (
   label: string,
   prompt: string,
   opts: RunOptions,
   check: (r: RunResult) => void,
-): Promise<RunResult> {
+): Promise<RunResult> => {
   const started = performance.now();
   const r = await runClaude(prompt, opts);
   const secs = ((performance.now() - started) / 1000).toFixed(1);
@@ -54,4 +55,4 @@ export async function runChecked(
     console.log(lines.join("\n"));
     throw e;
   }
-}
+};

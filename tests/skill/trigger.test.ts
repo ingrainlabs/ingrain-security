@@ -6,7 +6,7 @@
 
 import { assertEquals } from "@std/assert";
 import { assertContainsAny, assertReviewStarted } from "../lib/assert.ts";
-import { dispatchedAgents } from "../lib/claude.ts";
+import { dispatchedAgents, SESSION_MAX_TURNS, SESSION_TIMEOUT_MS } from "../lib/claude.ts";
 import { runChecked } from "../lib/report.ts";
 import { MAJOR_PLAN, MINOR_PLAN } from "../lib/fixtures.ts";
 
@@ -14,7 +14,7 @@ Deno.test("trigger: security-relevant plan starts the review", async () => {
   await runChecked(
     "skill trigger :: major plan",
     `Here is my implementation plan, ready to build:\n\n${MAJOR_PLAN}`,
-    { streamJson: true, maxTurns: 4, timeoutMs: 180_000 },
+    { streamJson: true, maxTurns: SESSION_MAX_TURNS, timeoutMs: SESSION_TIMEOUT_MS },
     (r) => assertReviewStarted(r),
   );
 });
@@ -23,7 +23,7 @@ Deno.test("trigger: trivial plan stops at triage (minor)", async () => {
   await runChecked(
     "skill trigger :: minor plan",
     `Here is my implementation plan, ready to build:\n\n${MINOR_PLAN}`,
-    { streamJson: true, maxTurns: 4, timeoutMs: 180_000 },
+    { streamJson: true, maxTurns: SESSION_MAX_TURNS, timeoutMs: SESSION_TIMEOUT_MS },
     (r) => {
       // Behavioral outcome, not exact prose: triage lands on `minor` and the cycle
       // stops there. (The exact instructed phrase is checked in static/skill.test.ts.)
