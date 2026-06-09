@@ -85,6 +85,23 @@ digraph security_review {
    0–100 (likelihood × impact) plus an overall plan score and criticality band.
 4. **Ask user — incorporate findings (Gate 1).** Present the scored threats and
    ask, via AskUserQuestion, which findings to add into the implementation plan.
+   The user is deciding whether a threat is worth acting on, so each option must
+   let them understand the threat without re-reading the plan. For every threat,
+   write the option `label` as the risk band + short title (e.g. `T3 · high —
+   unauthenticated token refresh`) and the option `description` so it answers
+   three things, in plain language:
+   - **What can go wrong** — the concrete failure, drawn from the threat's
+     Vector/Description (not a generic category).
+   - **Why it matters** — the consequence if realized, grounded in the
+     risk-scorer's impact and 0–100 score (e.g. what an attacker gains, what data
+     or guarantee is lost).
+   - **Local impact in the plan** — which specific part of *this* change the
+     threat lands on (the component, file, or step from the plan), so the user
+     sees where in their own work it bites.
+
+   Order the options by risk score (highest first) and keep this set faithful to
+   the frozen threats and scores — don't invent, soften, or re-score. Use
+   `multiSelect: true` so the user can pick several.
    **Incorporate the accepted findings into the plan.** The selected threats then
    proceed to mitigation.
 5. **Mitigate** — invoke `mitigation-generator` with the selected threats.
