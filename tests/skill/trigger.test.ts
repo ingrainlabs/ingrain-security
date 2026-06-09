@@ -5,10 +5,10 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { assertContainsAny, assertReviewStarted } from "../lib/assert.ts";
-import { dispatchedAgents, SESSION_MAX_TURNS, SESSION_TIMEOUT_MS } from "../lib/claude.ts";
-import { runChecked } from "../lib/report.ts";
-import { MAJOR_PLAN, MINOR_PLAN } from "../lib/fixtures.ts";
+import { assertContainsAny, assertReviewStarted } from "../lib/matchers.ts";
+import { dispatchedAgents, SESSION_MAX_TURNS, SESSION_TIMEOUT_MS } from "../lib/claudeRunner.ts";
+import { runChecked } from "../lib/reporter.ts";
+import { MAJOR_PLAN, MINOR_PLAN } from "../lib/sampleInputs.ts";
 
 Deno.test("trigger: security-relevant plan starts the review", async () => {
   await runChecked(

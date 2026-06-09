@@ -1,6 +1,6 @@
 /**
- * Shared types for the test harness — the public shape of the `claude` spawn
- * helper (`lib/claude.ts`), consumed across `assert.ts`, `report.ts`, and the
+ * Shared types for the test harness — the public shape of the `claudeRunner`
+ * spawn helper (`lib/claudeRunner.ts`), consumed across `matchers.ts`, `reporter.ts`, and the
  * test files. Kept type-only so importers can use `import type`.
  */
 

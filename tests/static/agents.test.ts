@@ -7,7 +7,7 @@
 
 import { assertEquals, assertExists } from "@std/assert";
 import { fromFileUrl } from "@std/path";
-import { parseFrontmatter } from "../lib/assert.ts";
+import { parseFrontmatter } from "../lib/matchers.ts";
 
 const AGENTS_DIR = fromFileUrl(new URL("../../agents/", import.meta.url));
 

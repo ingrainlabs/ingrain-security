@@ -6,14 +6,14 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { assertAgentDispatched, assertContainsAny, assertOrder } from "../lib/assert.ts";
+import { assertAgentDispatched, assertContainsAny, assertOrder } from "../lib/matchers.ts";
 import {
   dispatchedAgents,
   ORCHESTRATION_MAX_TURNS,
   ORCHESTRATION_TIMEOUT_MS,
-} from "../lib/claude.ts";
-import { runChecked } from "../lib/report.ts";
-import { MAJOR_PLAN } from "../lib/fixtures.ts";
+} from "../lib/claudeRunner.ts";
+import { runChecked } from "../lib/reporter.ts";
+import { MAJOR_PLAN } from "../lib/sampleInputs.ts";
 
 const INTEGRATION = Boolean(Deno.env.get("INTEGRATION"));
 

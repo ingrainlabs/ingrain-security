@@ -7,7 +7,7 @@
  * its own `----- output -----` markers), so these blocks appear as tests run.
  */
 
-import { dispatchedAgents, runClaude } from "./claude.ts";
+import { dispatchedAgents, runClaude } from "./claudeRunner.ts";
 import type { RunOptions, RunResult } from "./types.ts";
 
 const indent = (text: string, pad = "    "): string => {

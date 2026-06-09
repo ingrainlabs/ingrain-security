@@ -1,5 +1,5 @@
 /**
- * Spawn helper around the `claude` CLI in headless (`--print`) mode.
+ * Runner for the `claude` CLI in headless (`--print`) mode.
  *
  * Returns structured data and parses `--output-format stream-json` into events
  * so tests can assert on tool calls (skill triggering, subagent dispatch)
@@ -9,7 +9,7 @@
 import { fromFileUrl } from "@std/path";
 import type { RunOptions, RunResult, StreamEvent } from "./types.ts";
 
-/** Repo root = two levels up from this file (tests/lib/claude.ts). */
+/** Repo root = two levels up from this file (tests/lib/claudeRunner.ts). */
 export const PLUGIN_DIR = fromFileUrl(new URL("../..", import.meta.url));
 
 /** Per-call timeouts (ms). */

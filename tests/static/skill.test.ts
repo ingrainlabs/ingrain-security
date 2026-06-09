@@ -7,7 +7,7 @@
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
-import { assertOrder, parseFrontmatter } from "../lib/assert.ts";
+import { assertOrder, parseFrontmatter } from "../lib/matchers.ts";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;

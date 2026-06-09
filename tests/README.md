@@ -16,7 +16,7 @@ Run all commands from this `tests/` directory.
 ## Layout
 
 ```
-lib/      claude.ts (spawn helper) · assert.ts (matchers) · fixtures.ts (canned plans)
+lib/      claudeRunner.ts (spawn helper) · matchers.ts (assertions) · sampleInputs.ts (canned plans) · reporter.ts (input/output printer)
 static/   offline lint of agent frontmatter + skill/hook structure (no model calls)
 agents/   agents.test.ts — table-driven live tests, one case per subagent (`claude --agent <name>`)
 skill/    trigger.test.ts (review starts / minor stops) · orchestration.test.ts (gated)
@@ -81,6 +81,6 @@ deno test --allow-run=claude --allow-read --allow-env agents/ --filter relevance
 - Live tests call the model, so an occasional flake is possible; re-run a single test with
   `--filter`. Assertions check shape, not exact wording, to minimize this.
 - `--agent <name>` uses the bare agent name (e.g. `relevance-triage`); the plugin is loaded via
-  `--plugin-dir` pointing at the repo root (computed automatically in `lib/claude.ts`).
+  `--plugin-dir` pointing at the repo root (computed automatically in `lib/claudeRunner.ts`).
 - The orchestration test deliberately does **not** answer the interactive Gate 1/Gate 2 prompts —
   headless mode has no human — so it asserts the run _reaches_ Gate 1 and stops.

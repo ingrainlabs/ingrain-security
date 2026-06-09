@@ -1,5 +1,5 @@
 /**
- * Canned inputs for the live tests. Plans are deliberately unambiguous so the
+ * Sample inputs for the live tests. Plans are deliberately unambiguous so the
  * loose, shape-based assertions stay stable across model runs.
  */
 

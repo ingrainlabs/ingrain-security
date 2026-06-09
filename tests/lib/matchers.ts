@@ -8,7 +8,7 @@
 
 import { AssertionError } from "@std/assert";
 import { extractYaml, test as hasFrontmatter } from "@std/front-matter";
-import { dispatchedAgents } from "./claude.ts";
+import { dispatchedAgents } from "./claudeRunner.ts";
 import type { RunResult, StreamEvent } from "./types.ts";
 
 type Pattern = string | RegExp;

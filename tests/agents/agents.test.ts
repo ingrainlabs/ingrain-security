@@ -9,10 +9,10 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { assertContainsAll, assertContainsAny, assertHasScore0to100 } from "../lib/assert.ts";
-import { AGENT_TIMEOUT_MS, TRIAGE_TIMEOUT_MS } from "../lib/claude.ts";
+import { assertContainsAll, assertContainsAny, assertHasScore0to100 } from "../lib/matchers.ts";
+import { AGENT_TIMEOUT_MS, TRIAGE_TIMEOUT_MS } from "../lib/claudeRunner.ts";
 import type { RunResult } from "../lib/types.ts";
-import { runChecked } from "../lib/report.ts";
+import { runChecked } from "../lib/reporter.ts";
 import {
   MAJOR_PLAN,
   MINOR_PLAN,
@@ -20,7 +20,7 @@ import {
   TASK_AND_FROZEN_THREATS,
   TASK_AND_WEAK_MODEL,
   THREAT_AND_MITIGATIONS,
-} from "../lib/fixtures.ts";
+} from "../lib/sampleInputs.ts";
 
 interface AgentCase {
   /** Subagent to run the session as (`--agent`). */
