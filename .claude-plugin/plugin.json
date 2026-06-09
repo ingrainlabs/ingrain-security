@@ -1,9 +1,0 @@
-{
-  "name": "ingrain-security",
-  "version": "0.1.0",
-  "description": "Security review gate: triages an implementation plan and, for security-relevant changes, runs threats → risk score → mitigations through read-only subagents before any code is written.",
-  "author": {
-    "name": "Ingrain Labs"
-  },
-  "hooks": "./hooks/hook.json"
-}
