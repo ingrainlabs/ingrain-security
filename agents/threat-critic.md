@@ -22,15 +22,16 @@ Judge how well the list captures the threats actually present in the task. Look 
 
 ## Output
 
-1. **Score (0–100)** — how well the model captures the task's threats (0 = very poor, 100 = exceptional), with a one-paragraph justification.
-2. **Feedback** — an itemized list, each item tagged to its target so the generator can act on exactly the right threat:
+1. Justification how well does the model captures the task's threats. 
+2. **Score (0–100)** — how well the model captures the task's threats (0 = very poor, 100 = exceptional).
+3. **Feedback** — an itemized list, each item tagged to its target so the generator can act on exactly the right threat:
    ```
    - [T2] vector is vague — name the specific endpoint and input
    - [MISSING] no SSRF threat for the new outbound webhook fetch
    - [T4] out of scope for this change — drop it
    - [T5] assumption is wrong — auth is enforced at the gateway, not here
    ```
-3. **Verdict** — `approved` or `needs-revision`.
+4. **Verdict** — `approved` or `needs-revision`.
 
 ## Verdict guidance
 
