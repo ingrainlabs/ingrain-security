@@ -1,5 +1,6 @@
 .worktrees/
 .private-journal/
 .claude/
+.github/
 .DS_Store
 node_modules/

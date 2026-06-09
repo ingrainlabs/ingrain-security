@@ -74,8 +74,10 @@ digraph security_review {
 0. **Triage** — invoke `relevance-triage` with the plan.
    - If the verdict is `minor`: state "no security review needed — minor change"
      and **stop here**. Do not invoke any other worker; proceed with implementation.
-   - If the verdict is `major`: continue to Step 1 and run the full cycle.
-1. **Threats** — invoke `threat-generator` with the plan → threat list (`T1…`).
+   - If the verdict is `major`: keep its **Surfaces** notes — you forward them to
+     the generator in Step 1 — and continue to run the full cycle.
+1. **Threats** — invoke `threat-generator` with the plan **and the triage Surfaces
+   notes** (its starting points, not a ceiling) → threat list (`T1…`).
 2. **Critique threats** *(loop, max 3)* — invoke `threat-critic`. On
    `needs-revision`, re-invoke `threat-generator` with the prior list + critique
    and repeat. Then **freeze** the threats.
