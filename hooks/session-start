@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SessionStart hook for the ingrain-security plugin.
 #
-# Injects the ingrain-security-review skill into the session context so the
+# Injects the ingrain-security skill into the session context so the
 # agent knows to run the security review loop the moment an implementation
 # plan is ready (and before writing any code).
 
@@ -11,9 +11,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Read the ingrain-security-review skill content
-skill_path="${PLUGIN_ROOT}/skills/ingrain-security-review/SKILL.md"
-review_skill_content=$(cat "$skill_path" 2>&1 || echo "Error reading ingrain-security-review skill at ${skill_path}")
+# Read the ingrain-security skill content
+skill_path="${PLUGIN_ROOT}/skills/ingrain-security/SKILL.md"
+review_skill_content=$(cat "$skill_path" 2>&1 || echo "Error reading ingrain-security skill at ${skill_path}")
 
 # Escape string for JSON embedding using bash parameter substitution.
 # Each ${s//old/new} is a single C-level pass - orders of magnitude
@@ -29,7 +29,7 @@ escape_for_json() {
 }
 
 review_skill_escaped=$(escape_for_json "$review_skill_content")
-session_context="<EXTREMELY_IMPORTANT>\nThis project enforces a security review gate. **The moment an implementation plan is ready, and before you write any code, you MUST run the 'ingrain-security-review' skill.** Invoke it via the Skill tool. Its full content is reproduced below so you know what it does:\n\n${review_skill_escaped}\n</EXTREMELY_IMPORTANT>"
+session_context="<EXTREMELY_IMPORTANT>\nThis project enforces a security review gate. **The moment an implementation plan is ready, and before you write any code, you MUST run the 'ingrain-security' skill.** Invoke it via the Skill tool. Its full content is reproduced below so you know what it does:\n\n${review_skill_escaped}\n</EXTREMELY_IMPORTANT>"
 
 # Output context injection as JSON in the Claude Code shape
 # (hookSpecificOutput.additionalContext).

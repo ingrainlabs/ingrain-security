@@ -4,7 +4,7 @@ description: >-
   Proposes mitigations for the user-selected threats, each annotated with yield
   (value over the current baseline) and effort. On revision rounds, incorporates
   the mitigation-critic's feedback. Read-only; driven by the
-  ingrain-security-review orchestrator, not for direct/proactive use.
+  ingrain-security orchestrator, not for direct/proactive use.
 tools: Read, Grep, Glob
 model: haiku
 ---

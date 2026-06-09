@@ -3,7 +3,7 @@ name: risk-scorer
 description: >-
   Scores the frozen threat list: assigns each threat a 0–100 risk score
   (likelihood × impact) and computes an overall plan score with a criticality
-  band. Read-only; driven by the ingrain-security-review orchestrator, not for
+  band. Read-only; driven by the ingrain-security orchestrator, not for
   direct/proactive use.
 tools: Read, Grep, Glob
 model: haiku

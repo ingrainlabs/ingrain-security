@@ -3,7 +3,7 @@ name: mitigation-critic
 description: >-
   Critiques proposed mitigations: scores how well they cover the threat (0–100)
   and returns a verdict (`approved` or `needs-revision`) with actionable
-  feedback. Read-only; driven by the ingrain-security-review orchestrator, not
+  feedback. Read-only; driven by the ingrain-security orchestrator, not
   for direct/proactive use.
 tools: Read, Grep, Glob
 model: haiku

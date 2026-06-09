@@ -3,7 +3,7 @@ name: threat-generator
 description: >-
   Produces a scoped threat list (T1, T2, …) for an implementation plan. On
   revision rounds, incorporates the threat-critic's feedback into a revised list.
-  Read-only; driven by the ingrain-security-review orchestrator, not for
+  Read-only; driven by the ingrain-security orchestrator, not for
   direct/proactive use.
 tools: Read, Grep, Glob
 model: haiku

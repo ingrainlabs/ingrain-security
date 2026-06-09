@@ -4,7 +4,7 @@ description: >-
   Lightweight pre-screening classifier for the security review pipeline. Given a
   task title and description, decides whether the change has ANY potential
   security implications that warrant a thorough threat analysis. Read-only; not
-  for direct/proactive use — driven by the ingrain-security-review orchestrator.
+  for direct/proactive use — driven by the ingrain-security orchestrator.
 tools: Read, Grep, Glob
 model: haiku
 ---

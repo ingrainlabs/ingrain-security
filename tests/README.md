@@ -1,6 +1,6 @@
 # Tests
 
-Test suite for the `ingrain-security` plugin — the `ingrain-security-review` skill and its six
+Test suite for the `ingrain-security` plugin — the `ingrain-security` skill and its six
 read-only subagents. Built on Deno's test runner; it drives the `claude` CLI in headless mode and
 can exercise each subagent in isolation via `claude --agent`.
 

@@ -10,7 +10,7 @@ import { fromFileUrl } from "@std/path";
 import { assertOrder, parseFrontmatter } from "../lib/assert.ts";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
-const SKILL = `${ROOT}skills/ingrain-security-review/SKILL.md`;
+const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
 const HOOK_JSON = `${ROOT}hooks/hook.json`;
 
 const WORKERS = [
@@ -22,9 +22,9 @@ const WORKERS = [
   "mitigation-critic",
 ];
 
-Deno.test("SKILL.md: frontmatter name is ingrain-security-review", async () => {
+Deno.test("SKILL.md: frontmatter name is ingrain-security", async () => {
   const fm = parseFrontmatter(await Deno.readTextFile(SKILL));
-  assertEquals(fm.name, "ingrain-security-review");
+  assertEquals(fm.name, "ingrain-security");
 });
 
 Deno.test("SKILL.md: references all six workers", async () => {
@@ -43,7 +43,7 @@ Deno.test("SKILL.md: workflow steps are in the required order", async () => {
 
 Deno.test("SKILL.md: contains the announce and minor-stop phrases", async () => {
   const md = await Deno.readTextFile(SKILL);
-  assertStringIncludes(md, "Using ingrain-security-review to assess this plan.");
+  assertStringIncludes(md, "Using ingrain-security to assess this plan.");
   assertStringIncludes(md, "no security review needed — minor change");
 });
 

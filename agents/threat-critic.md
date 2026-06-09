@@ -3,7 +3,7 @@ name: threat-critic
 description: >-
   Critiques a threat model: scores how well it captures the threats present in
   the task (0–100) and returns a verdict (`approved` or `needs-revision`) with
-  actionable feedback. Read-only; driven by the ingrain-security-review
+  actionable feedback. Read-only; driven by the ingrain-security
   orchestrator, not for direct/proactive use.
 tools: Read, Grep, Glob
 model: haiku

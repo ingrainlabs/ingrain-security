@@ -1,5 +1,5 @@
 ---
-name: ingrain-security-review
+name: ingrain-security
 description: >-
   Use this WHENEVER an implementation plan is ready, before writing any code. It
   first triages the change and only runs the full review for security-relevant
@@ -23,7 +23,7 @@ major, you do not pre-judge it away.
 
 # Security review loop
 
-**Announce:** open with "Using ingrain-security-review to assess this plan."
+**Announce:** open with "Using ingrain-security to assess this plan."
 
 You orchestrate **read-only** worker subagents from the main session
 (`relevance-triage`, `threat-generator`, `threat-critic`, `risk-scorer`,
