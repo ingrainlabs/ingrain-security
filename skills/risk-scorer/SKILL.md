@@ -25,7 +25,15 @@ You are a Professional Security Analyst scoring a **frozen** threat list. The th
 ## Inputs
 
 - The **task** (implementation plan).
-- The frozen threat list — each threat tagged `T1`, `T2`, … with Component / Vector / Description / Assumptions.
+- The frozen threat list — each threat tagged `T1`, `T2`, … with the shape the `threat-generator` produces:
+
+  ```
+  ### T1 — <short title>
+  - **Component:** <the part of the change this targets>
+  - **Vector:** <how the threat is realized — be specific to this task>
+  - **Description:** <1–2 sentences on the threat>
+  - **Assumptions:** <what must be true for this to apply>
+  ```
 
 ## Task
 

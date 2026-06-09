@@ -51,10 +51,18 @@ Describe threats; do **not** score likelihood or impact — that's the `risk-sco
 
 ## On a revision round
 
-Return the revised list (same tags, resolving the feedback), then a short **Changes from last round** section so the critic can confirm its points were handled rather than re-deriving the diff:
+Treat each revision round as a **fresh, complete threat-modeling pass** — not a patch of the previous list. You are dispatched with clean context, so re-derive the full set of threats for the task as if modeling it for the first time; the prior list and the critic's feedback are **inputs to reconcile against, not a baseline to minimally edit**. A fresh pass routinely surfaces or retires threats the critic never mentioned — that is the point of running another round rather than just touching the flagged items.
+
+Then reconcile that fresh model against what came before:
+
+- **Re-examine the whole task**, not only the flagged threats.
+- **Keep tags stable** for any threat that carries over — a threat that is still the same threat keeps its original tag (never renumber), so the critic and scorer can line up against it. Genuinely new threats take the next free tag.
+- **Account for every critique item** — fold the valid ones into the fresh model; for any you reject, say so and why.
+
+Close with a short **Reconciling the critique** section so the critic can confirm its points were handled rather than re-deriving the diff:
 
 ```
-## Changes from last round
+## Reconciling the critique
 - [T2] addressed: <what you changed>
 - [MISSING] added T7: <new threat, one line>
 - [T4] rejected: <why it stays as-is / out of scope>
