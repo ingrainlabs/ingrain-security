@@ -3,8 +3,8 @@ name: ingrain-security
 description: >-
   Use this WHENEVER an implementation plan is ready, before writing any code. It
   first triages the change and only runs the full review for security-relevant
-  ("major") changes: threats → 0-100 risk score → user accepts or rejects the
-  findings → mitigations → user accepts or rejects the findings, with
+  ("major") changes: threats → 0-100 risk score → user selects which threats to
+  address (0–N) → mitigations → user selects which mitigations to adopt, with
   critic-driven improvement loops, via dedicated read-only subagents.
 ---
 
@@ -59,24 +59,26 @@ Branch on the keyword the worker leads its output with (`minor`/`major`,
 `approved`/`needs-revision`). Thread each worker's result into the next dispatch
 yourself; the subagents share no state.
 
-## How to ask the user (the user-choice prompt)
+## How to ask the user (the selection prompt)
 
-Gate 1 and Gate 2 require the user to accept or reject the findings **as one
-set** — a single decision, not a per-finding pick list. Always do this in **two
-distinct steps, in this order**:
+Gate 1 and Gate 2 are **per-finding selection gates** — the user includes or
+excludes each finding individually and may select any subset, **including
+none**. Always do this in **two distinct steps, in this order**:
 
 1. **Display the information first.** Before asking anything, present the full
    findings to the user as a **Markdown table** — one row per finding, with the
    columns the gate step specifies. The table is where the detail lives, so the
    user can read and compare every finding in one place before deciding.
-2. **Then show the choice prompt.** Only after the table is displayed, present
-   the **user-choice prompt** as a single binary decision covering **all** the
-   findings together: one option to **accept all** of them, one option to
-   **reject all** of them. This is a generic primitive — use whatever structured
-   single-select mechanism the host provides; do not assume any one platform's
-   tool. See `references/platform-dispatch.md` for the per-platform mapping.
-   **Never offer per-finding options or multiple selections** — the user must
-   either accept the whole set or reject it.
+2. **Then show the selection prompt.** Only after the table is displayed,
+   present a **selection prompt** offering **one include/exclude choice per
+   finding**, each labeled by its tag + short title (e.g. `T3 — unauthenticated
+   token refresh`). Mark findings the `ingrain-risk-scorer` banded **high or
+   critical** as recommended. This is a generic primitive — use whatever
+   structured multi-select mechanism the host provides; do not assume any one
+   platform's tool. See `references/platform-dispatch.md` for the per-platform
+   mapping, including how to split when the host caps options per prompt and
+   how to keep zero-selection reachable. **Never collapse the gate into a
+   single yes/no over the whole set** — the user decides per finding.
 
 Never fold the information into the prompt options alone — the table comes first,
 the prompt second. The prompt's options reference the table (by finding tags)
@@ -97,18 +99,18 @@ flowchart TD
     threatsOk -->|approved| freezeThreats[Freeze threats]
 
     freezeThreats --> riskScorer[ingrain-risk-scorer]
-    riskScorer --> gate1{Gate 1: accept all threats?}
-    gate1 -->|reject all| done([Done — proceed to implementation])
-    gate1 -->|accept all| mitGen[ingrain-mitigation-generator]
+    riskScorer --> gate1{Gate 1: select threats 0–N}
+    gate1 -->|none selected| done([Done — proceed to implementation])
+    gate1 -->|1+ selected| mitGen[ingrain-mitigation-generator]
 
     mitGen --> mitCritic[ingrain-mitigation-critic]
     mitCritic --> mitsOk{mitigations ok?}
     mitsOk -->|needs-revision max 3| mitGen
     mitsOk -->|approved| freezeMits[Freeze mitigations]
 
-    freezeMits --> gate2{Gate 2: accept all mitigations?}
-    gate2 -->|accept all| done
-    gate2 -->|reject all| done
+    freezeMits --> gate2{Gate 2: select mitigations 0–N}
+    gate2 -->|1+ selected → incorporate| done
+    gate2 -->|none selected| done
 ```
 
 ## Steps — in strict order
@@ -125,10 +127,10 @@ flowchart TD
    and repeat. Then **freeze** the threats.
 3. **Risk score** — dispatch the `ingrain-risk-scorer` worker with the frozen threats →
    per-threat 0–100 (likelihood × impact) plus an overall plan score and criticality band.
-4. **Ask user — accept or reject the threats (Gate 1).** Follow the two-step
+4. **Ask user — select which threats to address (Gate 1).** Follow the two-step
    display-then-ask pattern (see **How to ask the user**). The user is deciding
-   whether the threat set as a whole is worth acting on, so they must understand
-   each threat without re-reading the plan.
+   per threat whether it is worth acting on, so they must understand each
+   threat without re-reading the plan.
 
    **First, display the scored threats as a Markdown table** — one row per threat,
    ordered by risk score (highest first), with these columns:
@@ -142,25 +144,28 @@ flowchart TD
    | **Local impact in the plan** | which specific part of *this* change the threat lands on (the component, file, or step from the plan) |
 
    Keep the table faithful to the frozen threats and scores — don't invent,
-   soften, or re-score.
+   soften, or re-score. Flag rows whose risk band is high or critical (e.g.
+   `⚑ high · 78` in the Risk column) — these are the ones you mark recommended
+   in the selection prompt, so the table and the prompt tell the same story.
 
-   **Then show the user-choice prompt** asking whether to add the threats into
-   the plan, as a single binary decision over the whole set: one **accept all**
-   option and one **reject all** option. Each option's `label` names the decision
-   and references the table by tags (e.g. `Accept all threats (T1–T5)` /
-   `Reject all threats`); do not offer per-threat options.
+   **Then show the selection prompt** asking which threats to address, with one
+   include/exclude choice per threat. Each option's `label` is the threat's tag
+   + short title (e.g. `T3 — unauthenticated token refresh`); mark high/critical
+   threats as recommended. The user may include any subset, including none.
 
-   - **Accept all** — incorporate every frozen threat into the plan; all of them
-     proceed to mitigation.
-   - **Reject all** — incorporate nothing, skip Steps 5–7, state "threats
-     rejected — no mitigations" and close with a one-line verdict, then proceed
-     to implementation.
-5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the accepted threats.
+   - **1–N selected** — incorporate the selected threats into the plan; only
+     they proceed to mitigation. Name the excluded ones in one line (e.g. "T2,
+     T5 excluded — risk accepted").
+   - **None selected** — incorporate nothing, skip Steps 5–7, state "no threats
+     selected — review closed" and close with a one-line verdict naming the
+     threats as accepted risk, then proceed to implementation.
+5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the
+   user-selected threats — only those; excluded threats are out of scope.
 6. **Critique mitigations** *(loop, max 3)* — dispatch the `ingrain-mitigation-critic`
    worker; re-dispatch `ingrain-mitigation-generator` on `needs-revision`. Then **freeze**
    the mitigations.
-7. **Ask user — accept or reject the mitigations (Gate 2).** Follow the two-step
-   display-then-ask pattern (see **How to ask the user**).
+7. **Ask user — select which mitigations to adopt (Gate 2).** Follow the
+   two-step display-then-ask pattern (see **How to ask the user**).
 
    **First, display the frozen mitigations as a Markdown table** — one row per
    mitigation, with these columns:
@@ -175,13 +180,16 @@ flowchart TD
 
    Keep the table faithful to the frozen mitigations — don't invent or re-scope.
 
-   **Then show the user-choice prompt** asking whether to add the mitigations
-   into the plan, as a single binary decision over the whole set: one **accept
-   all** option and one **reject all** option, referencing the table by
-   mitigation titles and threat tags; do not offer per-mitigation options.
+   **Then show the selection prompt** asking which mitigations to adopt, with
+   one include/exclude choice per mitigation, each option labeled by the
+   mitigation's short title + the threat tag(s) it addresses. The user may
+   include any subset, including none.
 
-   - **Accept all** — incorporate every frozen mitigation into the plan.
-   - **Reject all** — incorporate nothing.
+   - **1–N selected** — incorporate exactly the selected mitigations into the
+     plan. If the selection leaves a selected threat with no covering
+     mitigation, say so in the closing verdict — never silently.
+   - **None selected** — incorporate nothing; note that the selected threats
+     remain unmitigated.
 
    This is the last step — close with a one-line verdict, then proceed to
    implementation.
@@ -193,12 +201,13 @@ flowchart TD
 | "This change is obviously trivial, skip triage" | Triage decides minor/major, not you. Run it. |
 | "I'll start coding while the review runs" | No implementation until the review finishes. |
 | "Let me score risk before the threats are settled" | Never score before threats are frozen. |
-| "I'll write mitigations even though the user rejected the threats" | A Gate 1 reject ends the review — nothing proceeds to mitigation. |
-| "I'll let the user cherry-pick individual findings" | Each gate is one accept-all-or-reject-all decision — never a per-finding pick list. |
+| "I'll write mitigations even though the user selected zero threats" | Zero threats selected at Gate 1 ends the review — nothing proceeds to mitigation. |
+| "I'll make the gate one yes/no over the whole set" | Each gate is a per-finding selection — the user includes or excludes each finding individually (zero is allowed). |
+| "The user excluded T2, but it's important — I'll mitigate it anyway" | Excluded findings are out of scope. Record them as accepted risk and move on. |
 | "The critic flagged issues but it's good enough" | Re-run the generator with the feedback (up to 3 rounds). |
 | "This loop could keep improving forever" | Cap each critic loop at 3 rounds; surface what's unresolved. |
 | "I'll just answer the worker's job myself instead of dispatching" | Each worker runs in its own read-only subagent — dispatch it, don't inline it. |
-| "I'll put all the detail in the prompt options and skip the table" | Display the findings as a table first, then show the choice prompt — never the prompt alone. |
+| "I'll put all the detail in the prompt options and skip the table" | Display the findings as a table first, then show the selection prompt — never the prompt alone. |
 
 ## Rules
 
@@ -206,11 +215,11 @@ flowchart TD
   read-only subagents (Read/Grep/Glob only) and make no code changes — restate
   that constraint in every dispatch, since without tool-level enforcement it is
   advisory. The process
-  writes in exactly two places: **incorporating the accepted finding set into the
-  implementation plan** at Gate 1 and Gate 2 (the plan file when in plan mode).
-  Each gate is all-or-nothing: an accept incorporates every frozen finding, a
-  reject incorporates none — never unreviewed or rejected findings, and never a
-  partial subset.
+  writes in exactly two places: **incorporating the user-selected finding set
+  into the implementation plan** at Gate 1 and Gate 2 (the plan file when in
+  plan mode). Each gate incorporates exactly the selected subset — never an
+  unselected or unreviewed finding. Zero selections at Gate 1 end the review;
+  zero selections at Gate 2 incorporate nothing.
 - **Triage first.** Run the full cycle only when `ingrain-relevance-triage` returns
   `major`; bias to `major` when uncertain.
 - **No skipping / no reordering.** Never score before threats are frozen, never

@@ -32,17 +32,23 @@ isolation, and the main session is write-capable — so:
 - The two plan-file writes still happen only at Gate 1 and Gate 2, never inside a
   worker step.
 
-## User-choice prompt (Gate 1 and Gate 2)
+## Selection prompt (Gate 1 and Gate 2)
 
-At each gate, present a single binary decision covering the whole finding set:
-one **accept all** option and one **reject all** option. The primitive is
-generic; only the mechanism changes per host:
+At each gate, present a per-finding selection: one include/exclude choice per
+finding, labeled by tag + short title, with high/critical findings marked
+recommended. The user may select any subset, **including none**. The primitive
+is generic; only the mechanism changes per host:
 
-- **Host with a structured-choice primitive** — use the host's built-in
-  choice prompt in single-select mode, with exactly the two options.
-- **No choice primitive — fallback** — ask the user to reply `accept` or
-  `reject`.
+- **Host with a structured multi-select primitive** — use it with one option
+  per finding. Where the host caps options per prompt, split into consecutive
+  prompts in table order (highest risk first) — e.g. T1–T4, then T5–T8 — and
+  merge the selections. If the host requires at least one selection, add an
+  explicit **"None — include no findings"** option so zero-selection stays
+  reachable.
+- **No multi-select primitive — fallback** — ask the user to reply with the
+  tags to include (e.g. `T1 T3`) or `none`.
 
-Whatever the mechanism, never offer per-finding options or multiple selections,
-keep the option labels faithful to the frozen findings, and incorporate either
-the entire set (accept) or nothing (reject).
+Whatever the mechanism, never collapse the gate into a single yes/no over the
+whole set, keep the option labels faithful to the frozen findings, and
+incorporate exactly the selected subset — selecting none incorporates nothing
+(and at Gate 1 ends the review).
