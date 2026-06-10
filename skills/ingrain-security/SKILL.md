@@ -70,39 +70,29 @@ multiple selections so the user can accept several findings at once.
 
 ## Flow
 
-```dot
-digraph security_review {
-    "Plan ready" [shape=doublecircle];
-    "relevance-triage" [shape=box];
-    "major?" [shape=diamond];
-    "Stop — no review needed" [shape=doublecircle];
-    "threat-generator" [shape=box];
-    "threat-critic" [shape=box];
-    "threats ok?" [shape=diamond];
-    "Freeze threats" [shape=box];
-    "risk-scorer" [shape=box];
-    "Gate 1: user incorporates threats" [shape=box];
-    "mitigation-generator" [shape=box];
-    "mitigation-critic" [shape=box];
-    "mitigations ok?" [shape=diamond];
-    "Freeze mitigations" [shape=box];
-    "Gate 2: user incorporates mitigations" [shape=box];
-    "Done — proceed to implementation" [shape=doublecircle];
+```mermaid
+flowchart TD
+    planReady([Plan ready]) --> triage[relevance-triage]
+    triage --> majorQ{major?}
+    majorQ -->|minor| stop([Stop — no review needed])
+    majorQ -->|major| threatGen[threat-generator]
 
-    "Plan ready" -> "relevance-triage" -> "major?";
-    "major?" -> "Stop — no review needed" [label="minor"];
-    "major?" -> "threat-generator" [label="major"];
-    "threat-generator" -> "threat-critic" -> "threats ok?";
-    "threats ok?" -> "threat-generator" [label="needs-revision (max 3)"];
-    "threats ok?" -> "Freeze threats" [label="approved"];
-    "Freeze threats" -> "risk-scorer" -> "Gate 1: user incorporates threats";
-    "Gate 1: user incorporates threats" -> "mitigation-generator";
-    "mitigation-generator" -> "mitigation-critic" -> "mitigations ok?";
-    "mitigations ok?" -> "mitigation-generator" [label="needs-revision (max 3)"];
-    "mitigations ok?" -> "Freeze mitigations" [label="approved"];
-    "Freeze mitigations" -> "Gate 2: user incorporates mitigations";
-    "Gate 2: user incorporates mitigations" -> "Done — proceed to implementation";
-}
+    threatGen --> threatCritic[threat-critic]
+    threatCritic --> threatsOk{threats ok?}
+    threatsOk -->|needs-revision max 3| threatGen
+    threatsOk -->|approved| freezeThreats[Freeze threats]
+
+    freezeThreats --> riskScorer[risk-scorer]
+    riskScorer --> gate1[Gate 1: user incorporates threats]
+    gate1 --> mitGen[mitigation-generator]
+
+    mitGen --> mitCritic[mitigation-critic]
+    mitCritic --> mitsOk{mitigations ok?}
+    mitsOk -->|needs-revision max 3| mitGen
+    mitsOk -->|approved| freezeMits[Freeze mitigations]
+
+    freezeMits --> gate2[Gate 2: user incorporates mitigations]
+    gate2 --> done([Done — proceed to implementation])
 ```
 
 ## Steps — in strict order
