@@ -5,8 +5,7 @@ Each worker is dispatched as a **fresh read-only subagent** told to read
 each host. The dispatch *prompt* is always the same; only the *mechanism* below
 changes.
 
-For every mechanism, the read-only constraint is carried by the prompt, not the
-platform — so always restate "you are read-only; use only Read/Grep/Glob; make no
+Always restate "you are read-only; use only Read/Grep/Glob; make no
 edits" inline in the dispatch.
 
 ## Host with a subagent / task primitive
@@ -35,13 +34,15 @@ isolation, and the main session is write-capable — so:
 
 ## User-choice prompt (Gate 1 and Gate 2)
 
-At each gate, present labelled options and let the user select one or more. The
-primitive is generic; only the mechanism changes per host:
+At each gate, present a single binary decision covering the whole finding set:
+one **accept all** option and one **reject all** option. The primitive is
+generic; only the mechanism changes per host:
 
 - **Host with a structured-choice primitive** — use the host's built-in
-  choice / multi-select prompt, allowing multiple selections.
-- **No choice primitive — fallback** — print a numbered list of the options and
-  ask the user to reply with the numbers they accept.
+  choice prompt in single-select mode, with exactly the two options.
+- **No choice primitive — fallback** — ask the user to reply `accept` or
+  `reject`.
 
-Whatever the mechanism, allow multiple selections, keep the options faithful to
-the frozen findings, and incorporate only what the user accepts.
+Whatever the mechanism, never offer per-finding options or multiple selections,
+keep the option labels faithful to the frozen findings, and incorporate either
+the entire set (accept) or nothing (reject).
