@@ -39,11 +39,12 @@ yourself — you dispatch a **fresh read-only subagent** and tell it to become t
 worker by reading its skill. This keeps the review cross-platform: it works
 wherever a subagent primitive exists, and degrades to sequential in-context
 execution where one does not. See `references/platform-dispatch.md` for the
-per-platform mapping (Claude Code → the Task tool with `subagent_type:
-general-purpose`; other CLIs → their task primitive; no-subagent fallback).
+per-platform mapping (host with a subagent/task primitive → that primitive;
+no-subagent fallback → sequential in-context execution).
 
 Dispatch every worker with the same shape — restate the read-only constraint
-inline, because off-Claude it is the only thing enforcing it:
+inline, because on hosts without tool-level enforcement it is the only thing
+enforcing it:
 
 ```
 Read skills/<name>/SKILL.md and follow it as your system prompt.
@@ -57,6 +58,15 @@ Return only the Output section that skill specifies.
 Branch on the keyword the worker leads its output with (`minor`/`major`,
 `approved`/`needs-revision`). Thread each worker's result into the next dispatch
 yourself; the subagents share no state.
+
+## How to ask the user (the user-choice prompt)
+
+Gate 1 and Gate 2 require the user to pick which findings to incorporate. Do this
+through a **user-choice prompt**: present the labelled options to the user and let
+them select one or more. This is a generic primitive — use whatever structured
+multi-select mechanism the host provides; do not assume any one platform's tool.
+See `references/platform-dispatch.md` for the per-platform mapping. Always allow
+multiple selections so the user can accept several findings at once.
 
 ## Flow
 
@@ -110,7 +120,7 @@ digraph security_review {
 3. **Risk score** — dispatch the `risk-scorer` worker with the frozen threats →
    per-threat 0–100 (likelihood × impact) plus an overall plan score and criticality band.
 4. **Ask user — incorporate findings (Gate 1).** Present the scored threats and
-   ask, via AskUserQuestion, which findings to add into the implementation plan.
+   ask, via the user-choice prompt, which findings to add into the implementation plan.
    The user is deciding whether a threat is worth acting on, so each option must
    let them understand the threat without re-reading the plan. For every threat,
    write the option `label` as the risk band + short title (e.g. `T3 · high —
@@ -126,8 +136,8 @@ digraph security_review {
      sees where in their own work it bites.
 
    Order the options by risk score (highest first) and keep this set faithful to
-   the frozen threats and scores — don't invent, soften, or re-score. Use
-   `multiSelect: true` so the user can pick several.
+   the frozen threats and scores — don't invent, soften, or re-score. Allow
+   multiple selections so the user can pick several.
    **Incorporate the accepted findings into the plan.** The selected threats then
    proceed to mitigation.
 5. **Mitigate** — dispatch the `mitigation-generator` worker with the selected threats.
@@ -135,7 +145,7 @@ digraph security_review {
    worker; re-dispatch `mitigation-generator` on `needs-revision`. Then **freeze**
    the mitigations.
 7. **Ask user — incorporate findings (Gate 2).** Present the mitigations and ask,
-   via AskUserQuestion, which to add into the implementation plan. **Incorporate
+   via the user-choice prompt, which to add into the implementation plan. **Incorporate
    the accepted mitigations into the plan.** This is the last step — close with a
    one-line verdict, then proceed to implementation.
 
@@ -155,7 +165,8 @@ digraph security_review {
 
 - **Read-only review; writes only at the gates.** Workers are dispatched as
   read-only subagents (Read/Grep/Glob only) and make no code changes — restate
-  that constraint in every dispatch, since off-Claude it is advisory. The process
+  that constraint in every dispatch, since without tool-level enforcement it is
+  advisory. The process
   writes in exactly two places: **incorporating accepted findings into the
   implementation plan** at Gate 1 and Gate 2 (the plan file when in plan mode). It
   reflects only what the user accepted at the gates — never unreviewed or rejected

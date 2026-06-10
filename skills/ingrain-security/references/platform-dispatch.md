@@ -10,23 +10,17 @@ For every mechanism, the read-only constraint is carried by the prompt, not the
 platform — so always restate "you are read-only; use only Read/Grep/Glob; make no
 edits" inline in the dispatch.
 
-## Claude Code
+## Host with a subagent / task primitive
 
-Use the **Task tool** with `subagent_type: general-purpose` and the dispatch
-prompt as `prompt`. The general-purpose subagent runs in its own context and
-reads the worker skill from `skills/<name>/SKILL.md`. Where the host supports a
-per-subagent model, set the worker's recommended tier (advisory).
+Use the host's subagent / task primitive, passing the dispatch prompt and telling
+the subagent to read the worker skill from `skills/<name>/SKILL.md`. Dispatch one
+worker per call and read the returned text. Where the host supports a per-subagent
+model, set the worker's recommended tier; otherwise ignore it (advisory).
 
-> Note: a general-purpose subagent has write-capable tools available. The
-> read-only guarantee here is advisory — enforced by the prompt and the worker's
-> own ROLE header, not by a tool allow-list. Keep workers strictly read-only.
-
-## Other CLIs with a subagent / task primitive
-
-Codex CLI, Gemini CLI, Copilot CLI, OpenCode, Cursor, and similar hosts expose a
-task/subagent primitive. Dispatch the same prompt through that primitive, one
-worker per dispatch, and read the returned text. Map the worker's recommended
-model onto the host's model selector if it has one; otherwise ignore it.
+> Note: a general-purpose subagent typically has write-capable tools available.
+> The read-only guarantee here is advisory — enforced by the prompt and the
+> worker's own ROLE header, not by a tool allow-list. Keep workers strictly
+> read-only.
 
 ## No subagent primitive — sequential in-context fallback
 
@@ -39,6 +33,20 @@ isolation, and the main session is write-capable — so:
 - Run one worker step at a time, in the strict order the orchestrator defines.
 - The two plan-file writes still happen only at Gate 1 and Gate 2, never inside a
   worker step.
+
+## User-choice prompt (Gate 1 and Gate 2)
+
+At each gate the orchestrator presents labelled options and lets the user select
+one or more (see **How to ask the user** in the orchestrator skill). The
+primitive is generic; only the mechanism changes per host:
+
+- **Host with a structured-choice primitive** — use the host's built-in
+  choice / multi-select prompt, allowing multiple selections.
+- **No choice primitive — fallback** — print a numbered list of the options and
+  ask the user to reply with the numbers they accept.
+
+Whatever the mechanism, allow multiple selections, keep the options faithful to
+the frozen findings, and incorporate only what the user accepts.
 
 ## Branching on results
 
