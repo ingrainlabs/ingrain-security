@@ -72,12 +72,12 @@ export const streamText = (events: StreamEvent[]): string => {
 
 /** The six worker skills the orchestrator dispatches. */
 export const WORKERS = [
-  "relevance-triage",
-  "threat-generator",
-  "threat-critic",
-  "risk-scorer",
-  "mitigation-generator",
-  "mitigation-critic",
+  "ingrain-relevance-triage",
+  "ingrain-threat-generator",
+  "ingrain-threat-critic",
+  "ingrain-risk-scorer",
+  "ingrain-mitigation-generator",
+  "ingrain-mitigation-critic",
 ] as const;
 
 /**

@@ -87,11 +87,11 @@ export const assertHasScore0to100 = (text: string, msg?: string): void => {
 /** The orchestrator started the security review (announce / triage dispatch / Skill). */
 export const assertReviewStarted = (result: RunResult, msg?: string): void => {
   const announced = /using ingrain-security/i.test(result.text);
-  const triaged = dispatchedWorkers(result.events).includes("relevance-triage");
+  const triaged = dispatchedWorkers(result.events).includes("ingrain-relevance-triage");
   const skillFired = result.events.some((ev) => usesSkill(ev, "ingrain-security"));
   if (announced || triaged || skillFired) return;
   throw new AssertionError(
-    `${msg ?? "Expected the review to start"} (no announce / relevance-triage / Skill)\n` +
+    `${msg ?? "Expected the review to start"} (no announce / ingrain-relevance-triage / Skill)\n` +
       `--- text ---\n${snippet(result.text)}`,
   );
 };

@@ -27,7 +27,7 @@ export const MINOR_PLAN = `# Implementation plan: tidy up the landing page
 - In README.md, fix "recieve" -> "receive" in the intro paragraph.
 `;
 
-/** A frozen threat list with stable tags, for risk-scorer / mitigation inputs. */
+/** A frozen threat list with stable tags, for ingrain-risk-scorer / mitigation inputs. */
 export const FROZEN_THREATS = `Frozen threat list for the login feature:
 
 T1 - SQL injection: the email is concatenated into the users-table query, allowing
@@ -37,20 +37,20 @@ T2 - Plaintext password storage: passwords are stored without hashing, so a data
 T3 - Weak session tokens: predictable session tokens let an attacker hijack sessions.
 `;
 
-/** A subset the user "selected" at Gate 1, for mitigation-generator. */
+/** A subset the user "selected" at Gate 1, for ingrain-mitigation-generator. */
 export const SELECTED_THREATS = `Selected threats to mitigate:
 
 T1 - SQL injection in the users-table lookup query.
 T2 - Plaintext password storage in the users table.
 `;
 
-/** A deliberately thin threat model, to bias threat-critic toward needs-revision. */
+/** A deliberately thin threat model, to bias ingrain-threat-critic toward needs-revision. */
 export const THREAT_MODEL_WEAK = `Threat model for the login feature:
 
 T1 - Someone might guess a password.
 `;
 
-/** Sample mitigations to feed mitigation-critic. */
+/** Sample mitigations to feed ingrain-mitigation-critic. */
 export const MITIGATIONS_SAMPLE = `Proposed mitigations:
 
 - Description: Use parameterized queries / prepared statements for the users-table

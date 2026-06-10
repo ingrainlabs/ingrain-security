@@ -14,12 +14,12 @@ const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
 const HOOK_JSON = `${ROOT}hooks/hook.json`;
 
 const WORKERS = [
-  "relevance-triage",
-  "threat-generator",
-  "threat-critic",
-  "risk-scorer",
-  "mitigation-generator",
-  "mitigation-critic",
+  "ingrain-relevance-triage",
+  "ingrain-threat-generator",
+  "ingrain-threat-critic",
+  "ingrain-risk-scorer",
+  "ingrain-mitigation-generator",
+  "ingrain-mitigation-critic",
 ];
 
 Deno.test("SKILL.md: frontmatter name is ingrain-security", async () => {
@@ -34,11 +34,11 @@ Deno.test("SKILL.md: references all six workers", async () => {
 
 Deno.test("SKILL.md: workflow steps are in the required order", async () => {
   const md = await Deno.readTextFile(SKILL);
-  assertOrder(md, "relevance-triage", "threat-generator", "triage before threats");
-  assertOrder(md, "threat-generator", "threat-critic", "generate before critique");
-  assertOrder(md, "threat-critic", "risk-scorer", "critique/freeze before scoring");
-  assertOrder(md, "risk-scorer", "mitigation-generator", "score before mitigation");
-  assertOrder(md, "mitigation-generator", "mitigation-critic", "mitigate before critique");
+  assertOrder(md, "ingrain-relevance-triage", "ingrain-threat-generator", "triage before threats");
+  assertOrder(md, "ingrain-threat-generator", "ingrain-threat-critic", "generate before critique");
+  assertOrder(md, "ingrain-threat-critic", "ingrain-risk-scorer", "critique/freeze before scoring");
+  assertOrder(md, "ingrain-risk-scorer", "ingrain-mitigation-generator", "score before mitigation");
+  assertOrder(md, "ingrain-mitigation-generator", "ingrain-mitigation-critic", "mitigate before critique");
 });
 
 Deno.test("SKILL.md: contains the announce and minor-stop phrases", async () => {

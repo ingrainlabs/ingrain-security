@@ -29,9 +29,9 @@ Deno.test("trigger: trivial plan stops at triage (minor)", async () => {
       // stops there. (The exact instructed phrase is checked in static/skill.test.ts.)
       assertContainsAny(r.text, [/\bminor\b/i], "expected a 'minor' triage outcome");
       assertEquals(
-        dispatchedWorkers(r.events).includes("threat-generator"),
+        dispatchedWorkers(r.events).includes("ingrain-threat-generator"),
         false,
-        "minor changes must not reach threat-generator",
+        "minor changes must not reach ingrain-threat-generator",
       );
     },
   );

@@ -18,7 +18,7 @@ import { MAJOR_PLAN } from "../lib/sampleInputs.ts";
 const INTEGRATION = Boolean(Deno.env.get("INTEGRATION"));
 
 Deno.test({
-  name: "orchestration: triage -> threats -> critic -> risk-scorer, halts at Gate 1",
+  name: "orchestration: triage -> threats -> critic -> ingrain-risk-scorer, halts at Gate 1",
   ignore: !INTEGRATION,
   fn: async () => {
     await runChecked(
@@ -29,23 +29,23 @@ Deno.test({
         const order = dispatchedWorkers(r.events);
         const trace = order.join(" -> ");
 
-        assertWorkerDispatched(r.events, "relevance-triage");
-        assertWorkerDispatched(r.events, "threat-generator");
-        assertWorkerDispatched(r.events, "risk-scorer");
+        assertWorkerDispatched(r.events, "ingrain-relevance-triage");
+        assertWorkerDispatched(r.events, "ingrain-threat-generator");
+        assertWorkerDispatched(r.events, "ingrain-risk-scorer");
 
-        assertOrder(trace, "relevance-triage", "threat-generator", "triage before threats");
-        assertOrder(trace, "threat-generator", "risk-scorer", "threats frozen before scoring");
+        assertOrder(trace, "ingrain-relevance-triage", "ingrain-threat-generator", "triage before threats");
+        assertOrder(trace, "ingrain-threat-generator", "ingrain-risk-scorer", "threats frozen before scoring");
 
         // Scored output: a criticality band should be present.
         assertContainsAny(
           r.text,
           [/\b(low|medium|high|critical)\b/i],
-          "expected a criticality band from risk-scorer",
+          "expected a criticality band from ingrain-risk-scorer",
         );
 
         // Gate 1 is a hard stop: mitigation must not begin before the user selects.
         assertEquals(
-          order.includes("mitigation-generator"),
+          order.includes("ingrain-mitigation-generator"),
           false,
           `mitigation started before Gate 1 — trace: ${trace}`,
         );

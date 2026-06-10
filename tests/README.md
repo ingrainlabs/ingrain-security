@@ -29,12 +29,12 @@ Every **live** test prints a block as it runs, so you can validate the model's a
 eye alongside the automated verdict:
 
 ```
-===== relevance-triage :: major plan =====
+===== ingrain-relevance-triage :: major plan =====
 INPUT:
     <the exact prompt sent>
 OUTPUT:
     <the model's full response>
-DISPATCHED: [relevance-triage]        # skill/orchestration tests only
+DISPATCHED: [ingrain-relevance-triage]        # skill/orchestration tests only
 VERDICT: ok  (exit 0, 3.1s)
 ```
 
@@ -66,7 +66,7 @@ deno task test:agents        # just the 6 live per-agent tests
 deno task test:integration   # everything, incl. full orchestration (slow)
 
 # one worker only:
-deno test --allow-run=claude --allow-read --allow-env agents/ --filter relevance-triage
+deno test --allow-run=claude --allow-read --allow-env agents/ --filter ingrain-relevance-triage
 ```
 
 `deno task fmt` / `deno task lint` format and lint the suite.

@@ -1,10 +1,9 @@
 # Platform dispatch reference
 
-The `ingrain-security` orchestrator dispatches each worker as a **fresh read-only
-subagent** told to read `skills/<name>/SKILL.md` and follow it. That abstraction
-maps differently onto each host. The dispatch *prompt* is always the same (see
-**How to dispatch a worker** in the orchestrator skill); only the *mechanism*
-below changes.
+Each worker is dispatched as a **fresh read-only subagent** told to read
+`skills/<name>/SKILL.md` and follow it. That abstraction maps differently onto
+each host. The dispatch *prompt* is always the same; only the *mechanism* below
+changes.
 
 For every mechanism, the read-only constraint is carried by the prompt, not the
 platform — so always restate "you are read-only; use only Read/Grep/Glob; make no
@@ -30,14 +29,13 @@ the output, then move to the next step. This is the weakest mode — there is no
 isolation, and the main session is write-capable — so:
 
 - Keep workers read-only by discipline: do not let a worker step perform edits.
-- Run one worker step at a time, in the strict order the orchestrator defines.
+- Run one worker step at a time, in strict order — never reorder or parallelize.
 - The two plan-file writes still happen only at Gate 1 and Gate 2, never inside a
   worker step.
 
 ## User-choice prompt (Gate 1 and Gate 2)
 
-At each gate the orchestrator presents labelled options and lets the user select
-one or more (see **How to ask the user** in the orchestrator skill). The
+At each gate, present labelled options and let the user select one or more. The
 primitive is generic; only the mechanism changes per host:
 
 - **Host with a structured-choice primitive** — use the host's built-in
@@ -47,10 +45,3 @@ primitive is generic; only the mechanism changes per host:
 
 Whatever the mechanism, allow multiple selections, keep the options faithful to
 the frozen findings, and incorporate only what the user accepts.
-
-## Branching on results
-
-Whatever the mechanism, the orchestrator branches on the keyword each worker
-leads its output with (`minor`/`major` for triage, `approved`/`needs-revision`
-for the critics) and threads each worker's output into the next dispatch. State
-lives in the orchestrator, never in the workers.

@@ -41,24 +41,24 @@ interface AgentCase {
 
 const CASES: AgentCase[] = [
   {
-    // relevance-triage (haiku): classifies a plan as `major` or `minor`.
-    worker: "relevance-triage",
-    label: "relevance-triage :: major plan",
+    // ingrain-relevance-triage (haiku): classifies a plan as `major` or `minor`.
+    worker: "ingrain-relevance-triage",
+    label: "ingrain-relevance-triage :: major plan",
     input: MAJOR_PLAN,
     timeoutMs: TRIAGE_TIMEOUT_MS,
     check: (r) => assertContainsAny(r.text, [/\bmajor\b/i], "expected a 'major' verdict"),
   },
   {
-    worker: "relevance-triage",
-    label: "relevance-triage :: minor plan",
+    worker: "ingrain-relevance-triage",
+    label: "ingrain-relevance-triage :: minor plan",
     input: MINOR_PLAN,
     timeoutMs: TRIAGE_TIMEOUT_MS,
     check: (r) => assertContainsAny(r.text, [/\bminor\b/i], "expected a 'minor' verdict"),
   },
   {
-    // threat-generator (sonnet): produces a threat list with stable tags T1, T2, …
-    worker: "threat-generator",
-    label: "threat-generator :: major plan",
+    // ingrain-threat-generator (sonnet): produces a threat list with stable tags T1, T2, …
+    worker: "ingrain-threat-generator",
+    label: "ingrain-threat-generator :: major plan",
     input: MAJOR_PLAN,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {
@@ -67,10 +67,10 @@ const CASES: AgentCase[] = [
     },
   },
   {
-    // risk-scorer (sonnet): scores each threat likelihood x impact (0-100), with
+    // ingrain-risk-scorer (sonnet): scores each threat likelihood x impact (0-100), with
     // an overall criticality band, and preserves the tags.
-    worker: "risk-scorer",
-    label: "risk-scorer :: frozen threats",
+    worker: "ingrain-risk-scorer",
+    label: "ingrain-risk-scorer :: frozen threats",
     input: TASK_AND_FROZEN_THREATS,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {
@@ -80,10 +80,10 @@ const CASES: AgentCase[] = [
     },
   },
   {
-    // threat-critic (sonnet): scores a threat model 0-100 and returns a verdict.
+    // ingrain-threat-critic (sonnet): scores a threat model 0-100 and returns a verdict.
     // The weak fixture biases toward needs-revision but we assert only the shape.
-    worker: "threat-critic",
-    label: "threat-critic :: weak model",
+    worker: "ingrain-threat-critic",
+    label: "ingrain-threat-critic :: weak model",
     input: TASK_AND_WEAK_MODEL,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {
@@ -92,9 +92,9 @@ const CASES: AgentCase[] = [
     },
   },
   {
-    // mitigation-critic (sonnet): scores mitigation coverage 0-100 + a verdict.
-    worker: "mitigation-critic",
-    label: "mitigation-critic :: sample mitigations",
+    // ingrain-mitigation-critic (sonnet): scores mitigation coverage 0-100 + a verdict.
+    worker: "ingrain-mitigation-critic",
+    label: "ingrain-mitigation-critic :: sample mitigations",
     input: THREAT_AND_MITIGATIONS,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {
@@ -103,10 +103,10 @@ const CASES: AgentCase[] = [
     },
   },
   {
-    // mitigation-generator (sonnet): proposes mitigations for the selected threats,
+    // ingrain-mitigation-generator (sonnet): proposes mitigations for the selected threats,
     // each with Yield / Effort / threatTags fields.
-    worker: "mitigation-generator",
-    label: "mitigation-generator :: selected threats",
+    worker: "ingrain-mitigation-generator",
+    label: "ingrain-mitigation-generator :: selected threats",
     input: SELECTED_THREATS,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {

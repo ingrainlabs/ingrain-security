@@ -9,8 +9,8 @@ description: >-
 ---
 
 <SUBAGENT-STOP>
-If you were dispatched as a worker subagent (relevance-triage, threat-generator,
-threat-critic, risk-scorer, mitigation-generator, mitigation-critic), do the one
+If you were dispatched as a worker subagent (ingrain-relevance-triage, ingrain-threat-generator,
+ingrain-threat-critic, ingrain-risk-scorer, ingrain-mitigation-generator, ingrain-mitigation-critic), do the one
 job you were given and return. Do NOT run this orchestration — you are part of it.
 </SUBAGENT-STOP>
 
@@ -26,8 +26,8 @@ major, you do not pre-judge it away.
 **Announce:** open with "Using ingrain-security to assess this plan."
 
 You orchestrate six **read-only** worker skills, each at `skills/<name>/SKILL.md`
-(`relevance-triage`, `threat-generator`, `threat-critic`, `risk-scorer`,
-`mitigation-generator`, `mitigation-critic`). You dispatch each one as a fresh
+(`ingrain-relevance-triage`, `ingrain-threat-generator`, `ingrain-threat-critic`, `ingrain-risk-scorer`,
+`ingrain-mitigation-generator`, `ingrain-mitigation-critic`). You dispatch each one as a fresh
 subagent (see **How to dispatch a worker**), in order, holding the state between
 steps yourself — workers cannot call each other or you. On revision rounds you
 pass the worker its prior draft plus the critic's issues to address.
@@ -83,21 +83,21 @@ restating their full detail.
 
 ```mermaid
 flowchart TD
-    planReady([Plan ready]) --> triage[relevance-triage]
+    planReady([Plan ready]) --> triage[ingrain-relevance-triage]
     triage --> majorQ{major?}
     majorQ -->|minor| stop([Stop — no review needed])
-    majorQ -->|major| threatGen[threat-generator]
+    majorQ -->|major| threatGen[ingrain-threat-generator]
 
-    threatGen --> threatCritic[threat-critic]
+    threatGen --> threatCritic[ingrain-threat-critic]
     threatCritic --> threatsOk{threats ok?}
     threatsOk -->|needs-revision max 3| threatGen
     threatsOk -->|approved| freezeThreats[Freeze threats]
 
-    freezeThreats --> riskScorer[risk-scorer]
+    freezeThreats --> riskScorer[ingrain-risk-scorer]
     riskScorer --> gate1[Gate 1: user incorporates threats]
-    gate1 --> mitGen[mitigation-generator]
+    gate1 --> mitGen[ingrain-mitigation-generator]
 
-    mitGen --> mitCritic[mitigation-critic]
+    mitGen --> mitCritic[ingrain-mitigation-critic]
     mitCritic --> mitsOk{mitigations ok?}
     mitsOk -->|needs-revision max 3| mitGen
     mitsOk -->|approved| freezeMits[Freeze mitigations]
@@ -108,17 +108,17 @@ flowchart TD
 
 ## Steps — in strict order
 
-0. **Triage** — dispatch the `relevance-triage` worker with the plan.
+0. **Triage** — dispatch the `ingrain-relevance-triage` worker with the plan.
    - If the verdict is `minor`: state "no security review needed — minor change"
      and **stop here**. Do not dispatch any other worker; proceed with implementation.
    - If the verdict is `major`: keep its **Surfaces** notes — you forward them to
      the generator in Step 1 — and continue to run the full cycle.
-1. **Threats** — dispatch the `threat-generator` worker with the plan **and the
+1. **Threats** — dispatch the `ingrain-threat-generator` worker with the plan **and the
    triage Surfaces notes** (its starting points, not a ceiling) → threat list (`T1…`).
-2. **Critique threats** *(loop, max 3)* — dispatch the `threat-critic` worker. On
-   `needs-revision`, re-dispatch `threat-generator` with the prior list + critique
+2. **Critique threats** *(loop, max 3)* — dispatch the `ingrain-threat-critic` worker. On
+   `needs-revision`, re-dispatch `ingrain-threat-generator` with the prior list + critique
    and repeat. Then **freeze** the threats.
-3. **Risk score** — dispatch the `risk-scorer` worker with the frozen threats →
+3. **Risk score** — dispatch the `ingrain-risk-scorer` worker with the frozen threats →
    per-threat 0–100 (likelihood × impact) plus an overall plan score and criticality band.
 4. **Ask user — incorporate findings (Gate 1).** Follow the two-step display-then-ask
    pattern (see **How to ask the user**). The user is deciding whether a threat is
@@ -132,7 +132,7 @@ flowchart TD
    | **Threat** | tag + short title (e.g. `T3 — unauthenticated token refresh`) |
    | **Risk** | risk band + 0–100 score (e.g. `high · 78`) |
    | **What can go wrong** | the concrete failure, drawn from the threat's Vector/Description (not a generic category) |
-   | **Why it matters** | the consequence if realized, grounded in the risk-scorer's impact and score (what an attacker gains, what data or guarantee is lost) |
+   | **Why it matters** | the consequence if realized, grounded in the ingrain-risk-scorer's impact and score (what an attacker gains, what data or guarantee is lost) |
    | **Local impact in the plan** | which specific part of *this* change the threat lands on (the component, file, or step from the plan) |
 
    Keep the table faithful to the frozen threats and scores — don't invent,
@@ -147,9 +147,9 @@ flowchart TD
 
    **Incorporate the accepted findings into the plan.** The selected threats then
    proceed to mitigation.
-5. **Mitigate** — dispatch the `mitigation-generator` worker with the selected threats.
-6. **Critique mitigations** *(loop, max 3)* — dispatch the `mitigation-critic`
-   worker; re-dispatch `mitigation-generator` on `needs-revision`. Then **freeze**
+5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the selected threats.
+6. **Critique mitigations** *(loop, max 3)* — dispatch the `ingrain-mitigation-critic`
+   worker; re-dispatch `ingrain-mitigation-generator` on `needs-revision`. Then **freeze**
    the mitigations.
 7. **Ask user — incorporate findings (Gate 2).** Follow the two-step
    display-then-ask pattern (see **How to ask the user**).
@@ -197,7 +197,7 @@ flowchart TD
   implementation plan** at Gate 1 and Gate 2 (the plan file when in plan mode). It
   reflects only what the user accepted at the gates — never unreviewed or rejected
   findings.
-- **Triage first.** Run the full cycle only when `relevance-triage` returns
+- **Triage first.** Run the full cycle only when `ingrain-relevance-triage` returns
   `major`; bias to `major` when uncertain.
 - **No skipping / no reordering.** Never score before threats are frozen, never
   mitigate before Gate 1, never present mitigations before they are frozen.

@@ -17,12 +17,12 @@ import { parseFrontmatter } from "../lib/matchers.ts";
 const SKILLS_DIR = fromFileUrl(new URL("../../skills/", import.meta.url));
 
 const WORKERS = [
-  "relevance-triage",
-  "threat-generator",
-  "threat-critic",
-  "risk-scorer",
-  "mitigation-generator",
-  "mitigation-critic",
+  "ingrain-relevance-triage",
+  "ingrain-threat-generator",
+  "ingrain-threat-critic",
+  "ingrain-risk-scorer",
+  "ingrain-mitigation-generator",
+  "ingrain-mitigation-critic",
 ] as const;
 
 const splitFrontmatter = (md: string): string => md.replace(/^---\n[\s\S]*?\n---\n/, "");
