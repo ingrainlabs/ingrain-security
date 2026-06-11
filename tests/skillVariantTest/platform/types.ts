@@ -10,8 +10,10 @@
 
 /** One variant's window: its label and the launch.sh to run in it. */
 export interface TTerminalJob {
-  /** Variant label, used as the window title (e.g. `baseline`, `SKILL1`). */
+  /** Variant·mode label, used in the window title (e.g. `baseline·plan`, `SKILL2·normal`). */
   label: string;
+  /** Source SKILL file the window exercises (e.g. `SKILL.md`, `SKILL2.md`), shown in the title. */
+  skillFile: string;
   /** Absolute path to the launch.sh that runs this variant's claude session. */
   launchPath: string;
 }

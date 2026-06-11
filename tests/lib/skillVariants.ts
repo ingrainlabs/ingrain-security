@@ -37,12 +37,9 @@ export interface TVariant {
 export const discoverVariants = async (skillName: string): Promise<TVariant[]> => {
   const skillDir = join(PLUGIN_DIR, "skills", skillName);
 
-  let entries: Deno.DirEntry[];
-  try {
-    entries = await Array.fromAsync(Deno.readDir(skillDir));
-  } catch {
+  const entries = await Array.fromAsync(Deno.readDir(skillDir)).catch(() => {
     throw new Error(`No such skill folder: skills/${skillName} (looked in ${skillDir})`);
-  }
+  });
 
   const baselinePath = join(skillDir, "SKILL.md");
   if (!entries.some((e) => e.isFile && e.name === "SKILL.md")) {

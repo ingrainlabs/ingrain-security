@@ -36,9 +36,11 @@ const buildAppleScript = (jobs: TTerminalJob[]): string => {
   const lines = ['tell application "Terminal"', "  activate"];
   jobs.forEach((job, i) => {
     const cmd = `bash ${shQuote(job.launchPath)}`;
+    // e.g. "variant: baseline·plan · SKILL.md" — names both the mode and the skill file under test.
+    const title = `variant: ${job.label} · ${job.skillFile}`;
     // JSON.stringify yields a valid AppleScript double-quoted string literal.
     lines.push(`  set t${i} to do script ${JSON.stringify(cmd)}`);
-    lines.push(`  set custom title of t${i} to ${JSON.stringify(`variant: ${job.label}`)}`);
+    lines.push(`  set custom title of t${i} to ${JSON.stringify(title)}`);
   });
   lines.push("end tell");
   return lines.join("\n");

@@ -1,5 +1,6 @@
 {
   "lock": false,
+  "workspace": [],
   "tasks": {
     "test": "deno test --allow-run=claude --allow-read --allow-env static/ agents/ skill/trigger.test.ts",
     "test:integration": "INTEGRATION=1 deno test --allow-run=claude --allow-read --allow-env --allow-write .",

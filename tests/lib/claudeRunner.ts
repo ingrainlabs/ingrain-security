@@ -149,15 +149,12 @@ export const runClaude = async (prompt: string, opts: RunOptions = {}): Promise<
     signal,
   });
 
-  let out: Deno.CommandOutput;
-  try {
-    out = await cmd.output();
-  } catch (e) {
+  const out = await cmd.output().catch((e) => {
     if (e instanceof DOMException && e.name === "TimeoutError") {
       throw new Error(`claude timed out after ${opts.timeoutMs ?? AGENT_TIMEOUT_MS}ms`);
     }
     throw e;
-  }
+  });
 
   const stdout = new TextDecoder().decode(out.stdout);
   const stderr = new TextDecoder().decode(out.stderr);

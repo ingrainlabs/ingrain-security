@@ -83,20 +83,29 @@ _whether_, _at what point_, and _with what wording_ each variant triggers its re
 2. Run a task from `lib/taskPrompts.ts` across every variant:
 
    ```bash
-   deno task variants login-endpoint                    # default skill: ingrain-security
+   deno task variants login-endpoint                    # default skill: ingrain-security, normal mode
    deno task variants file-upload --skill ingrain-security
+   deno task variants login-endpoint --plan             # run the variants in plan mode
    ```
 
    (`deno task variants` with no id lists the available task ids.)
-3. One Terminal window opens per variant (titled `variant: baseline`, `variant: SKILL1`, …), each a
-   real interactive `claude` session preloaded with the task. Drive the Gate 1 / Gate 2 prompts
-   yourself and compare what each variant shows.
+3. A run launches **one window per SKILL variant**, all in the **single mode you pick** with `--plan`
+   or `--normal` (default `normal`; the two are mutually exclusive). `--plan` starts each `claude`
+   with `--permission-mode plan` (gated, read-only until a plan is approved), which also exercises
+   the `PostToolUse:ExitPlanMode` hook path; `--normal` omits the flag and exercises only the
+   `SessionStart` injection. Run once per mode to compare the variants under each condition.
+4. Each window is titled `variant: <label>·<mode> · <SKILLfile>` (e.g. `variant: baseline·normal ·
+   SKILL.md`, `variant: SKILL2·plan · SKILL2.md`), so the header names both the mode and the skill
+   file under test. Each is a real interactive `claude` session preloaded with the task — drive the
+   Gate 1 / Gate 2 prompts yourself and compare what each window shows.
 
 Each variant runs against a **staged throwaway plugin dir** (the variant swapped in as the target
 `SKILL.md`, so both the `SessionStart` hook injection and the skill description come from it).
-Everything lands under `tests/.variant-runs/<taskId>/<label>/` (git-ignored): `plugin/` (staged),
-`prompt.txt`, `workspace/` (the session's cwd), and `session.log` (the captured transcript —
-`less -R session.log` to read it with its ANSI colors).
+Everything lands under `tests/.variant-runs/<taskId>/<variantLabel>/` (git-ignored): `plugin/`
+(staged once per variant), then a per-mode subdir (`plan/` or `normal/`) holding `prompt.txt`,
+`launch.sh`, `workspace/` (the session's cwd), and `session.log` (the captured transcript — `less -R
+session.log` to read it with its ANSI colors). Running the other mode later keeps the earlier mode's
+transcript in its own subdir.
 
 > **macOS-only today.** Opening terminal windows and capturing the session are the only OS-specific
 > bits; they live behind `ITerminalLauncher` in `tests/skillVariantTest/platform/` (`macos.ts` is the
