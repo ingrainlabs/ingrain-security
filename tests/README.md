@@ -71,6 +71,39 @@ deno test --allow-run=claude --allow-read --allow-env agents/ --filter ingrain-r
 
 `deno task fmt` / `deno task lint` format and lint the suite.
 
+## Comparing skill variants (trigger-comparison harness)
+
+To iterate on a skill's wording, drop **alternative variants** alongside its `SKILL.md` and watch
+them all run the **same task in parallel**, one macOS Terminal window each — so you can see
+_whether_, _at what point_, and _with what wording_ each variant triggers its review.
+
+1. In the skill folder (default `skills/ingrain-security/`), add alternates named `SKILL1.md`,
+   `SKILL2.md`, … `SKILLN.md` (case-sensitive, same casing as `SKILL.md`). The canonical `SKILL.md`
+   is the **baseline**. These alternates are git-ignored scratch files — never committed.
+2. Run a task from `lib/taskPrompts.ts` across every variant:
+
+   ```bash
+   deno task variants login-endpoint                    # default skill: ingrain-security
+   deno task variants file-upload --skill ingrain-security
+   ```
+
+   (`deno task variants` with no id lists the available task ids.)
+3. One Terminal window opens per variant (titled `variant: baseline`, `variant: SKILL1`, …), each a
+   real interactive `claude` session preloaded with the task. Drive the Gate 1 / Gate 2 prompts
+   yourself and compare what each variant shows.
+
+Each variant runs against a **staged throwaway plugin dir** (the variant swapped in as the target
+`SKILL.md`, so both the `SessionStart` hook injection and the skill description come from it).
+Everything lands under `tests/.variant-runs/<taskId>/<label>/` (git-ignored): `plugin/` (staged),
+`prompt.txt`, `workspace/` (the session's cwd), and `session.log` (the captured transcript —
+`less -R session.log` to read it with its ANSI colors).
+
+> **macOS-only today.** Opening terminal windows and capturing the session are the only OS-specific
+> bits; they live behind `ITerminalLauncher` in `tests/variants/platform/` (`macos.ts` is the sole
+> implementation, picked by the factory in `platform/index.ts`). `variants/run.ts` itself is
+> platform-neutral. On any other OS the runner exits with a clear message naming the file to add
+> (`platform/linux.ts`) — that's where Linux support would go.
+
 ## Tiers & rough cost
 
 | Command            | Model calls            | Time      | Auth |

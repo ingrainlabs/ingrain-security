@@ -4,3 +4,8 @@
 .github/
 .DS_Store
 node_modules/
+
+# Variant trigger-comparison harness (dev-only)
+tests/.variant-runs/
+# Scratch skill variants exercised by the harness — never commit these
+skills/*/SKILL[0-9]*.md

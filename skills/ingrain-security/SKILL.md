@@ -67,6 +67,13 @@ Branch on the keyword the worker leads its output with (`minor`/`major`,
 `approved`/`needs-revision`). Thread each worker's result into the next dispatch
 yourself; the subagents share no state.
 
+## Model tiers
+
+Dispatch every worker on a **cheap model** — they are narrow, mechanical,
+read-only jobs that don't need a frontier model. You (the orchestrator) stay on
+the session model. This applies only where the host supports per-subagent model
+selection; otherwise ignore it.
+
 ## How to ask the user (the selection prompt)
 
 Gate 1 and Gate 2 are **per-finding selection gates** — the user includes or

@@ -14,7 +14,7 @@ description: >-
 > - **Read-only.** Use only Read, Grep, and Glob. Make no edits and run no
 >   mutating commands. This is advisory: the dispatching platform may not enforce
 >   it, so honor it yourself.
-> - **Recommended model:** haiku (advisory — applied only where the platform
+> - **Recommended model:** a cheap, basic model (advisory — applied only where the platform
 >   supports per-subagent model selection).
 > - **Return contract:** lead your output with the decisive keyword the Output
 >   section defines (here, `minor` or `major`) so the orchestrator can branch on
