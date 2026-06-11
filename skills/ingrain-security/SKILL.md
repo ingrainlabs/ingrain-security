@@ -74,7 +74,7 @@ read-only jobs that don't need a frontier model. You (the orchestrator) stay on
 the session model. This applies only where the host supports per-subagent model
 selection; otherwise ignore it.
 
-## How to ask the user (the selection prompt)
+## How to ask the user (the selection windows)
 
 Gate 1 and Gate 2 are **per-finding selection gates** — the user includes or
 excludes each finding individually and may select any subset, **including
@@ -84,19 +84,25 @@ none**. Always do this in **two distinct steps, in this order**:
    findings to the user as a **Markdown table** — one row per finding, with the
    columns the gate step specifies. The table is where the detail lives, so the
    user can read and compare every finding in one place before deciding.
-2. **Then show the selection prompt.** Only after the table is displayed,
-   present a **selection prompt** offering **one include/exclude choice per
-   finding**, each labeled by its tag + short title (e.g. `T3 — unauthenticated
-   token refresh`). Mark findings the `ingrain-risk-scorer` banded **high or
-   critical** as recommended. This is a generic primitive — use whatever
-   structured multi-select mechanism the host provides; do not assume any one
-   platform's tool. See `references/platform-dispatch.md` for the per-platform
-   mapping, including how to split when the host caps options per prompt and
-   how to keep zero-selection reachable. **Never collapse the gate into a
-   single yes/no over the whole set** — the user decides per finding.
+2. **Then present the selection windows.** Only after the table is displayed,
+   present the findings as **multiple single-choice windows — one window per
+   finding** — each a single **include/exclude** decision labeled by its tag +
+   short title (e.g. `T3 — unauthenticated token refresh`). One window, one
+   finding, one binary choice keeps every decision isolated and deliberate, so
+   findings never blur together the way they do in a single multi-toggle list.
+   Mark findings the `ingrain-risk-scorer` banded **high or critical** as
+   recommended. Where the host caps how many windows it can show at once,
+   present them in **consecutive batches in table order (highest risk first)**
+   and merge the choices. Because each window is its own include/exclude
+   decision, **selecting none is always reachable** — the user simply excludes
+   every window. This is a generic primitive; do not assume any one platform's
+   tool. See `references/platform-dispatch.md` for the per-platform mapping.
+   **Never collapse the gate into a single yes/no over the whole set, and never
+   fold all findings into one combined list** — one window per finding, and the
+   user decides each one.
 
-Never fold the information into the prompt options alone — the table comes first,
-the prompt second. The prompt's options reference the table (by finding tags)
+Never fold the information into the window options alone — the table comes first,
+the windows second. Each window's options reference the table (by finding tag)
 rather than restating its full detail.
 
 ## Flow
@@ -162,12 +168,14 @@ flowchart TD
    Keep the table faithful to the frozen threats and scores — don't invent,
    soften, or re-score. Flag rows whose risk band is high or critical (e.g.
    `⚑ high · 78` in the Risk column) — these are the ones you mark recommended
-   in the selection prompt, so the table and the prompt tell the same story.
+   in the selection windows, so the table and the windows tell the same story.
 
-   **Then show the selection prompt** asking which threats to address, with one
-   include/exclude choice per threat. Each option's `label` is the threat's tag
-   + short title (e.g. `T3 — unauthenticated token refresh`); mark high/critical
-   threats as recommended. The user may include any subset, including none.
+   **Then present one single-choice window per threat** asking which threats to
+   address — each window a single include/exclude decision for that threat,
+   labeled by its tag + short title (e.g. `T3 — unauthenticated token refresh`);
+   mark high/critical threats as recommended. Where the host caps how many
+   windows show at once, batch them in table order (highest risk first). The
+   user may include any subset, including none (exclude every window).
 
    - **1–N selected** — incorporate the selected threats into the plan; only
      they proceed to mitigation. Name the excluded ones in one line (e.g. "T2,
@@ -196,10 +204,11 @@ flowchart TD
 
    Keep the table faithful to the frozen mitigations — don't invent or re-scope.
 
-   **Then show the selection prompt** asking which mitigations to adopt, with
-   one include/exclude choice per mitigation, each option labeled by the
-   mitigation's short title + the threat tag(s) it addresses. The user may
-   include any subset, including none.
+   **Then present one single-choice window per mitigation** asking which
+   mitigations to adopt — each window a single include/exclude decision for that
+   mitigation, labeled by its short title + the threat tag(s) it addresses.
+   Where the host caps how many windows show at once, batch them in table order.
+   The user may include any subset, including none (exclude every window).
 
    - **1–N selected** — incorporate exactly the selected mitigations into the
      plan. If the selection leaves a selected threat with no covering
@@ -221,12 +230,12 @@ flowchart TD
 | "The review found things, but I'll keep them out of the plan" | The selected threats and adopted mitigations belong in the plan you present — incorporate them, don't sideline them. |
 | "Let me score risk before the threats are settled" | Never score before threats are frozen. |
 | "I'll write mitigations even though the user selected zero threats" | Zero threats selected at Gate 1 ends the review — nothing proceeds to mitigation. |
-| "I'll make the gate one yes/no over the whole set" | Each gate is a per-finding selection — the user includes or excludes each finding individually (zero is allowed). |
+| "I'll make the gate one yes/no over the whole set" | Each gate is a per-finding selection — one single-choice include/exclude window per finding; the user decides each individually (zero is allowed). |
 | "The user excluded T2, but it's important — I'll mitigate it anyway" | Excluded findings are out of scope. Record them as accepted risk and move on. |
 | "The critic flagged issues but it's good enough" | Re-run the generator with the feedback (up to 3 rounds). |
 | "This loop could keep improving forever" | Cap each critic loop at 3 rounds; surface what's unresolved. |
 | "I'll just answer the worker's job myself instead of dispatching" | Each worker runs in its own read-only subagent — dispatch it, don't inline it. |
-| "I'll put all the detail in the prompt options and skip the table" | Display the findings as a table first, then show the selection prompt — never the prompt alone. |
+| "I'll put all the detail in the window options and skip the table" | Display the findings as a table first, then present the single-choice windows — never the windows alone. |
 
 ## Rules
 
