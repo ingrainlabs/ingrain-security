@@ -11,7 +11,7 @@ import { assertOrder, parseFrontmatter } from "../lib/matchers.ts";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
-const HOOK_JSON = `${ROOT}hooks/hook.json`;
+const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 
 const WORKERS = [
   "ingrain-relevance-triage",
