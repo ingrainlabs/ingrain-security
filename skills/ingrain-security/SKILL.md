@@ -1,11 +1,15 @@
 ---
 name: ingrain-security
 description: >-
-  Use this WHENEVER an implementation plan is ready, before writing any code. It
-  first triages the change and only runs the full review for security-relevant
-  ("major") changes: threats → 0-100 risk score → user selects which threats to
-  address (0–N) → mitigations → user selects which mitigations to adopt, with
-  critic-driven improvement loops, via dedicated read-only subagents.
+  Use this AS THE FINAL STEP of building an implementation plan — run it once your
+  plan is comprehensive and detailed (affected files, concrete implementations,
+  tests) but before you present it or write code. It takes the finished plan as
+  input and folds security back into it. It first triages the change and
+  only runs the full review for security-relevant ("major") changes: threats →
+  0-100 risk score → user selects which threats to address (0–N) → mitigations →
+  user selects which mitigations to adopt, with critic-driven improvement loops,
+  via dedicated read-only subagents. The selected threats and adopted mitigations
+  become part of the plan you produce.
 ---
 
 <SUBAGENT-STOP>
@@ -15,10 +19,14 @@ job you were given and return. Do NOT run this orchestration — you are part of
 </SUBAGENT-STOP>
 
 <EXTREMELY-IMPORTANT>
-The moment an implementation plan is ready, and BEFORE you write any code, you
-MUST run this review. Do not begin implementation until it finishes. If there is
-even a 1% chance the change touches security, run it — triage decides minor vs.
-major, you do not pre-judge it away.
+Security analysis is the FINAL step of planning, not a separate phase after it.
+First build your implementation plan in full — the affected files, the concrete
+implementations, the tests. Once that plan is comprehensive and detailed, and
+before you present it or write any code, run this review with the finished plan
+as its input, then fold its results back into the plan. It still belongs to
+planning: the plan you hand back already reflects it. If there is even a 1%
+chance the change touches security, run it — triage decides minor vs. major, you
+do not pre-judge it away.
 </EXTREMELY-IMPORTANT>
 
 # Security review loop
@@ -50,8 +58,8 @@ enforcing it:
 Read skills/<name>/SKILL.md and follow it as your system prompt.
 You are read-only — use only Read/Grep/Glob and make no edits.
 INPUT:
-<the worker's inputs — the plan; on revision rounds, the prior draft + the
-critic's itemized feedback>
+<the worker's inputs — the finished, detailed implementation plan; on revision
+rounds, the prior draft + the critic's itemized feedback>
 Return only the Output section that skill specifies.
 ```
 
@@ -88,9 +96,9 @@ rather than restating its full detail.
 
 ```mermaid
 flowchart TD
-    planReady([Plan ready]) --> triage[ingrain-relevance-triage]
+    planning([Plan is comprehensive & detailed — final planning step]) --> triage[ingrain-relevance-triage]
     triage --> majorQ{major?}
-    majorQ -->|minor| stop([Stop — no review needed])
+    majorQ -->|minor| stop([Stop — nothing to fold in; keep planning])
     majorQ -->|major| threatGen[ingrain-threat-generator]
 
     threatGen --> threatCritic[ingrain-threat-critic]
@@ -100,7 +108,7 @@ flowchart TD
 
     freezeThreats --> riskScorer[ingrain-risk-scorer]
     riskScorer --> gate1{Gate 1: select threats 0–N}
-    gate1 -->|none selected| done([Done — proceed to implementation])
+    gate1 -->|none selected| done([Fold results into the plan; keep planning])
     gate1 -->|1+ selected| mitGen[ingrain-mitigation-generator]
 
     mitGen --> mitCritic[ingrain-mitigation-critic]
@@ -117,7 +125,8 @@ flowchart TD
 
 0. **Triage** — dispatch the `ingrain-relevance-triage` worker with the plan.
    - If the verdict is `minor`: state "no security review needed — minor change"
-     and **stop here**. Do not dispatch any other worker; proceed with implementation.
+     and **stop here**. Do not dispatch any other worker; there is nothing to fold
+     into the plan — carry on building it.
    - If the verdict is `major`: keep its **Surfaces** notes — you forward them to
      the generator in Step 1 — and continue to run the full cycle.
 1. **Threats** — dispatch the `ingrain-threat-generator` worker with the plan **and the
@@ -158,7 +167,7 @@ flowchart TD
      T5 excluded — risk accepted").
    - **None selected** — incorporate nothing, skip Steps 5–7, state "no threats
      selected — review closed" and close with a one-line verdict naming the
-     threats as accepted risk, then proceed to implementation.
+     threats as accepted risk, then continue building the plan.
 5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the
    user-selected threats — only those; excluded threats are out of scope.
 6. **Critique mitigations** *(loop, max 3)* — dispatch the `ingrain-mitigation-critic`
@@ -191,15 +200,18 @@ flowchart TD
    - **None selected** — incorporate nothing; note that the selected threats
      remain unmitigated.
 
-   This is the last step — close with a one-line verdict, then proceed to
-   implementation.
+   This is the last step — close with a one-line verdict. The adopted mitigations
+   (and the threats they cover) are now part of the implementation plan; fold them
+   into the plan you present and continue planning.
 
 ## Red flags — stop if you catch yourself thinking…
 
 | Thought | Reality |
 |---------|---------|
 | "This change is obviously trivial, skip triage" | Triage decides minor/major, not you. Run it. |
-| "I'll start coding while the review runs" | No implementation until the review finishes. |
+| "The plan's done — I'll present it and run security after" | The review is the final planning step: run it on the finished plan, before you present it or write code, and fold the results in. |
+| "I'll run the review on a rough sketch to save a step" | Run it on the comprehensive, detailed plan — vague input yields vague threats. Finish the plan first. |
+| "The review found things, but I'll keep them out of the plan" | The selected threats and adopted mitigations belong in the plan you present — incorporate them, don't sideline them. |
 | "Let me score risk before the threats are settled" | Never score before threats are frozen. |
 | "I'll write mitigations even though the user selected zero threats" | Zero threats selected at Gate 1 ends the review — nothing proceeds to mitigation. |
 | "I'll make the gate one yes/no over the whole set" | Each gate is a per-finding selection — the user includes or excludes each finding individually (zero is allowed). |
@@ -211,15 +223,19 @@ flowchart TD
 
 ## Rules
 
-- **Read-only review; writes only at the gates.** Workers are dispatched as
+- **The final planning step, not a coding step.** This runs *after your
+  implementation plan is comprehensive and detailed but before you present it or
+  write code* — it takes the finished plan as input and folds security back into
+  it. Its only product is content folded into the plan you produce; it writes no
+  code.
+- **Read-only review; the plan is the only output.** Workers are dispatched as
   read-only subagents (Read/Grep/Glob only) and make no code changes — restate
   that constraint in every dispatch, since without tool-level enforcement it is
-  advisory. The process
-  writes in exactly two places: **incorporating the user-selected finding set
-  into the implementation plan** at Gate 1 and Gate 2 (the plan file when in
-  plan mode). Each gate incorporates exactly the selected subset — never an
-  unselected or unreviewed finding. Zero selections at Gate 1 end the review;
-  zero selections at Gate 2 incorporate nothing.
+  advisory. The process affects exactly two things: **incorporating the
+  user-selected finding set into the plan you are building** at Gate 1 and Gate 2
+  (the plan file when in plan mode). Each gate incorporates exactly the selected
+  subset — never an unselected or unreviewed finding. Zero selections at Gate 1
+  end the review; zero selections at Gate 2 incorporate nothing.
 - **Triage first.** Run the full cycle only when `ingrain-relevance-triage` returns
   `major`; bias to `major` when uncertain.
 - **No skipping / no reordering.** Never score before threats are frozen, never

@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # PostToolUse hook for ExitPlanMode in the ingrain-security plugin.
 #
-# Fires after a plan is approved (ExitPlanMode succeeds) and injects an
-# instruction telling the agent to run the ingrain-security skill before
-# writing any code.
+# Fires after a plan is approved (ExitPlanMode succeeds) and injects a
+# simple instruction telling the agent to run the ingrain-security skill.
 
 set -euo pipefail
 
-context="<EXTREMELY_IMPORTANT>\nThe implementation plan was just approved (ExitPlanMode). Before writing ANY code, you MUST now run the 'ingrain-security' skill via the Skill tool. Do not begin implementation until the security review finishes.\n</EXTREMELY_IMPORTANT>"
+context="<EXTREMELY_IMPORTANT>\nBefore writing any code, run the 'ingrain-security' skill via the Skill tool.\n</EXTREMELY_IMPORTANT>"
 
 # Output context injection as JSON in the Claude Code shape
 # (hookSpecificOutput.additionalContext).

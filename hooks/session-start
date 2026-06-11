@@ -2,8 +2,8 @@
 # SessionStart hook for the ingrain-security plugin.
 #
 # Injects the ingrain-security skill into the session context so the
-# agent knows to run the security review loop the moment an implementation
-# plan is ready (and before writing any code).
+# agent knows to run the security review loop as a step of implementation
+# planning -- while forming the plan, folding the results into it.
 
 set -euo pipefail
 
@@ -29,7 +29,7 @@ escape_for_json() {
 }
 
 review_skill_escaped=$(escape_for_json "$review_skill_content")
-session_context="<EXTREMELY_IMPORTANT>\nThis project enforces a security review gate. **The moment an implementation plan is ready, and before you write any code, you MUST run the 'ingrain-security' skill.** Invoke it via the Skill tool. Its full content is reproduced below so you know what it does:\n\n${review_skill_escaped}\n</EXTREMELY_IMPORTANT>"
+session_context="<EXTREMELY_IMPORTANT>\nThis project treats security analysis as the final step of implementation planning. **Once your implementation plan is comprehensive and detailed — but before you present it or write any code — you MUST run the 'ingrain-security' skill on the finished plan and fold its results back into it.** Invoke it via the Skill tool. Its full content is reproduced below so you know what it does:\n\n${review_skill_escaped}\n</EXTREMELY_IMPORTANT>"
 
 # Output context injection as JSON in the Claude Code shape
 # (hookSpecificOutput.additionalContext).
