@@ -1,7 +1,7 @@
 /**
  * Platform seam for the variant runner.
  *
- * The runner (`tests/variants/run.ts`) is platform-neutral; everything that
+ * The runner (`tests/skillVariantTest/run.ts`) is platform-neutral; everything that
  * differs between operating systems lives behind `ITerminalLauncher`. Today only
  * macOS is implemented (`./macos.ts`); a Linux launcher would be a second
  * implementation registered in `./index.ts`. This file is the contract both

@@ -99,8 +99,8 @@ Everything lands under `tests/.variant-runs/<taskId>/<label>/` (git-ignored): `p
 `less -R session.log` to read it with its ANSI colors).
 
 > **macOS-only today.** Opening terminal windows and capturing the session are the only OS-specific
-> bits; they live behind `ITerminalLauncher` in `tests/variants/platform/` (`macos.ts` is the sole
-> implementation, picked by the factory in `platform/index.ts`). `variants/run.ts` itself is
+> bits; they live behind `ITerminalLauncher` in `tests/skillVariantTest/platform/` (`macos.ts` is the
+> sole implementation, picked by the factory in `platform/index.ts`). `skillVariantTest/run.ts` itself is
 > platform-neutral. On any other OS the runner exits with a clear message naming the file to add
 > (`platform/linux.ts`) — that's where Linux support would go.
 

@@ -1,6 +1,6 @@
 /**
  * Skill-variant discovery and plugin-dir staging for the trigger-comparison
- * harness (`tests/variants/run.ts`).
+ * harness (`tests/skillVariantTest/run.ts`).
  *
  * A "variant" is an alternative body for a skill's `SKILL.md`. The canonical
  * `SKILL.md` is the baseline; alternates live alongside it as `SKILL1.md …

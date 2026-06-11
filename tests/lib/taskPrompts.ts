@@ -1,5 +1,5 @@
 /**
- * Test set for the variant trigger-comparison harness (`tests/variants/run.ts`).
+ * Test set for the variant trigger-comparison harness (`tests/skillVariantTest/run.ts`).
  *
  * Each entry is a *simple implementation task* — phrased the way a user kicks off
  * coding work, NOT a finished plan. The point is to exercise the real path: the

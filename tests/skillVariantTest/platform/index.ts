@@ -26,8 +26,8 @@ export const getTerminalLauncher = (
     default:
       throw new UnsupportedPlatformError(
         `The variants harness currently supports macOS only (detected: ${os}). ` +
-          `To add support, implement ITerminalLauncher in tests/variants/platform/linux.ts ` +
-          `and register it in tests/variants/platform/index.ts.`,
+          `To add support, implement ITerminalLauncher in tests/skillVariantTest/platform/linux.ts ` +
+          `and register it in tests/skillVariantTest/platform/index.ts.`,
       );
   }
 };
