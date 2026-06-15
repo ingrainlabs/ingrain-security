@@ -1,10 +1,12 @@
 ---
 name: ingrain-security
 description: >-
-  Use this AS THE FINAL STEP of building an implementation plan — run it once your
-  plan is comprehensive and detailed (affected files, concrete implementations,
-  tests) but before you present it or write code. It takes the finished plan as
-  input and folds security back into it. It first triages the change and
+  Use this AS THE FINAL STEP of building an implementation plan — whether the plan
+  is an ad-hoc approach you sketched inline in the conversation or a formal
+  plan-mode / design-doc session. Run it once your plan is comprehensive and
+  detailed (affected files, concrete implementations, tests) but before you present
+  it or write code. It takes the finished plan as input and folds security back into
+  it. It first triages the change and
   only runs the full review for security-relevant ("major") changes: threats →
   0-100 risk score → user selects which threats to address (0–N) → mitigations →
   user selects which mitigations to adopt, with critic-driven improvement loops,
@@ -21,7 +23,11 @@ job you were given and return. Do NOT run this orchestration — you are part of
 <EXTREMELY-IMPORTANT>
 Security analysis is the FINAL step of planning, not a separate phase after it.
 First build your implementation plan in full — the affected files, the concrete
-implementations, the tests. Once that plan is comprehensive and detailed, and
+implementations, the tests. This applies to both shapes of planning: an **ad-hoc
+plan** worked out inline in the conversation (no plan mode, no plan artifact) and a
+**formal planning session** (plan mode, a design doc, a written spec). The trigger
+is the *state*, not the mode: the moment the plan is comprehensive and detailed and
+no code has been written yet — reached by either path. Once that state holds, and
 before you present it or write any code, run this review with the finished plan
 as its input, then fold its results back into the plan. It still belongs to
 planning: the plan you hand back already reflects it. If there is even a 1%
