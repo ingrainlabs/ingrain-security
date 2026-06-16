@@ -1,0 +1,12 @@
+{
+  "name": "ingrain-security",
+  "version": "0.1.0",
+  "description": "Folds security back into a finished implementation plan: triages the change, then for security-relevant changes runs threats → risk score → user-selected mitigations via read-only subagents.",
+  "author": {
+    "name": "Ingrain Labs"
+  },
+  "repository": "https://github.com/ingrainlabs/ingrain-security",
+  "license": "MIT",
+  "keywords": ["security", "threat-modeling", "code-review", "planning"],
+  "hooks": "./hooks/claude/hook.json"
+}
