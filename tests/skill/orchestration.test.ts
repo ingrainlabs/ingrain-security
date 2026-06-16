@@ -33,8 +33,18 @@ Deno.test({
         assertWorkerDispatched(r.events, "ingrain-threat-generator");
         assertWorkerDispatched(r.events, "ingrain-risk-scorer");
 
-        assertOrder(trace, "ingrain-relevance-triage", "ingrain-threat-generator", "triage before threats");
-        assertOrder(trace, "ingrain-threat-generator", "ingrain-risk-scorer", "threats frozen before scoring");
+        assertOrder(
+          trace,
+          "ingrain-relevance-triage",
+          "ingrain-threat-generator",
+          "triage before threats",
+        );
+        assertOrder(
+          trace,
+          "ingrain-threat-generator",
+          "ingrain-risk-scorer",
+          "threats frozen before scoring",
+        );
 
         // Scored output: a criticality band should be present.
         assertContainsAny(

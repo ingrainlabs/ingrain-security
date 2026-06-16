@@ -39,18 +39,20 @@ do not pre-judge it away.
 
 **Announce:** open with "Using ingrain-security to assess this plan."
 
-You orchestrate six **read-only** worker skills, each at `skills/<name>/SKILL.md`
-(`ingrain-relevance-triage`, `ingrain-threat-generator`, `ingrain-threat-critic`, `ingrain-risk-scorer`,
-`ingrain-mitigation-generator`, `ingrain-mitigation-critic`). You dispatch each one as a fresh
+You orchestrate six **read-only** worker roles, each defined by a reference file
+at `references/<name>.md` (`ingrain-relevance-triage`, `ingrain-threat-generator`,
+`ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-mitigation-generator`,
+`ingrain-mitigation-critic`). You dispatch each one as a fresh
 subagent (see **How to dispatch a worker**), in order, holding the state between
 steps yourself — workers cannot call each other or you. On revision rounds you
 pass the worker its prior draft plus the critic's issues to address.
 
 ## How to dispatch a worker
 
-A worker is a skill, not a platform-native agent. You never run a worker's logic
-yourself — you dispatch a **fresh read-only subagent** and tell it to become that
-worker by reading its skill. This keeps the review cross-platform: it works
+A worker is a role defined by a reference file, not a platform-native agent. You
+never run a worker's logic yourself — you dispatch a **fresh read-only subagent**
+and tell it to become that worker by reading its reference file. This keeps the
+review cross-platform: it works
 wherever a subagent primitive exists, and degrades to sequential in-context
 execution where one does not. See `references/platform-dispatch.md` for the
 per-platform mapping (host with a subagent/task primitive → that primitive;
@@ -61,7 +63,7 @@ inline, because on hosts without tool-level enforcement it is the only thing
 enforcing it:
 
 ```
-Read skills/<name>/SKILL.md and follow it as your system prompt.
+Read references/<name>.md and follow it as your system prompt.
 You are read-only — use only Read/Grep/Glob and make no edits.
 INPUT:
 <the worker's inputs — the finished, detailed implementation plan; on revision

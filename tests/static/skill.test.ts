@@ -38,7 +38,12 @@ Deno.test("SKILL.md: workflow steps are in the required order", async () => {
   assertOrder(md, "ingrain-threat-generator", "ingrain-threat-critic", "generate before critique");
   assertOrder(md, "ingrain-threat-critic", "ingrain-risk-scorer", "critique/freeze before scoring");
   assertOrder(md, "ingrain-risk-scorer", "ingrain-mitigation-generator", "score before mitigation");
-  assertOrder(md, "ingrain-mitigation-generator", "ingrain-mitigation-critic", "mitigate before critique");
+  assertOrder(
+    md,
+    "ingrain-mitigation-generator",
+    "ingrain-mitigation-critic",
+    "mitigate before critique",
+  );
 });
 
 Deno.test("SKILL.md: contains the announce and minor-stop phrases", async () => {
@@ -47,20 +52,20 @@ Deno.test("SKILL.md: contains the announce and minor-stop phrases", async () => 
   assertStringIncludes(md, "no security review needed — minor change");
 });
 
-Deno.test("SKILL.md: documents the read-skill dispatch mechanism", async () => {
+Deno.test("SKILL.md: documents the read-reference dispatch mechanism", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // Generic-subagent dispatch reads each worker's skill by path.
-  assertStringIncludes(md, "Read skills/<name>/SKILL.md");
+  // Generic-subagent dispatch reads each worker's reference file by path.
+  assertStringIncludes(md, "Read references/<name>.md");
   // Cross-platform mapping lives in the reference doc.
   assertStringIncludes(md, "references/platform-dispatch.md");
   // The read-only constraint is restated for the dispatched subagents.
   assertStringIncludes(md.toLowerCase(), "read-only");
 });
 
-Deno.test("platform-dispatch.md: covers Claude, other CLIs, and the fallback", async () => {
+Deno.test("platform-dispatch.md: covers the subagent primitive and the fallback", async () => {
   const ref = `${ROOT}skills/ingrain-security/references/platform-dispatch.md`;
   const md = await Deno.readTextFile(ref);
-  assertStringIncludes(md, "Task tool");
+  assertStringIncludes(md.toLowerCase(), "task primitive");
   assertStringIncludes(md.toLowerCase(), "fallback");
 });
 

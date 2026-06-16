@@ -1,9 +1,9 @@
 # Platform dispatch reference
 
-Each worker is dispatched as a **fresh read-only subagent** told to read
-`skills/<name>/SKILL.md` and follow it. That abstraction maps differently onto
-each host. The dispatch *prompt* is always the same; only the *mechanism* below
-changes.
+Each worker is dispatched as a **fresh read-only subagent** told to read its
+reference file at `references/<name>.md` and follow it. That abstraction maps
+differently onto each host. The dispatch *prompt* is always the same; only the
+*mechanism* below changes.
 
 Always restate "you are read-only; use only Read/Grep/Glob; make no
 edits" inline in the dispatch.
@@ -11,7 +11,7 @@ edits" inline in the dispatch.
 ## Host with a subagent / task primitive
 
 Use the host's subagent / task primitive, passing the dispatch prompt and telling
-the subagent to read the worker skill from `skills/<name>/SKILL.md`. Dispatch one
+the subagent to read the worker reference file from `references/<name>.md`. Dispatch one
 worker per call and read the returned text. Where the host supports a per-subagent
 model, set the worker's recommended tier; otherwise ignore it (advisory).
 
@@ -23,7 +23,7 @@ model, set the worker's recommended tier; otherwise ignore it (advisory).
 ## No subagent primitive — sequential in-context fallback
 
 On a host with no subagent mechanism, run each worker **sequentially in the main
-session**: read `skills/<name>/SKILL.md`, follow it on the current INPUT, capture
+session**: read `references/<name>.md`, follow it on the current INPUT, capture
 the output, then move to the next step. This is the weakest mode — there is no
 isolation, and the main session is write-capable — so:
 

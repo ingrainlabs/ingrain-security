@@ -83,17 +83,18 @@ export const WORKERS = [
 /**
  * Workers dispatched by the orchestrator, in order of appearance.
  *
- * Workers are flat skills now, not platform-native agents, so dispatch no longer
- * shows up as a `Task.subagent_type`. The orchestrator dispatches a generic
- * subagent told to read `skills/<name>/SKILL.md`, so we recover the worker from
- * the Task prompt. The sequential in-context fallback reads the same skill via
- * the Skill tool, so we count that too.
+ * Workers are reference files under the single ingrain-security skill now, not
+ * platform-native agents, so dispatch no longer shows up as a
+ * `Task.subagent_type`. The orchestrator dispatches a generic subagent told to
+ * read `references/<name>.md`, so we recover the worker from the Task prompt. The
+ * sequential in-context fallback reads the same reference via the Skill tool, so
+ * we count that too.
  */
 export const dispatchedWorkers = (events: StreamEvent[]): string[] => {
   const workers: string[] = [];
   for (const block of toolUses(events)) {
     if (block.name === "Task" && typeof block.input?.prompt === "string") {
-      const m = block.input.prompt.match(/skills\/([a-z-]+)\/SKILL\.md/);
+      const m = block.input.prompt.match(/references\/([a-z-]+)\.md/);
       if (m && (WORKERS as readonly string[]).includes(m[1])) {
         workers.push(m[1]);
         continue;
@@ -108,13 +109,13 @@ export const dispatchedWorkers = (events: StreamEvent[]): string[] => {
 };
 
 /**
- * Build the dispatch prompt for a single worker skill, mirroring what the
- * orchestrator sends: the worker's own SKILL.md body (frontmatter stripped) as
- * the system prompt, then the INPUT. Lets a live test exercise one worker in
+ * Build the dispatch prompt for a single worker, mirroring what the orchestrator
+ * sends: the worker's own reference-file body (frontmatter stripped) as the
+ * system prompt, then the INPUT. Lets a live test exercise one worker in
  * isolation without a platform-native agent definition.
  */
 export const workerDispatchPrompt = async (name: string, input: string): Promise<string> => {
-  const md = await Deno.readTextFile(`${PLUGIN_DIR}/skills/${name}/SKILL.md`);
+  const md = await Deno.readTextFile(`${PLUGIN_DIR}/skills/ingrain-security/references/${name}.md`);
   const body = md.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
   return [
     `You have been dispatched as the \`${name}\` worker of the ingrain-security`,
