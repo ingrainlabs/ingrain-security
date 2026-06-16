@@ -1,0 +1,2 @@
+# Staged plugin dirs, prompts, and session logs from `deno task variants` — throwaway.
+.variant-runs/

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# PostToolUse hook for ExitPlanMode in the ingrain-security plugin.
+#
+# Fires after a plan is approved (ExitPlanMode succeeds) and injects a
+# simple instruction telling the agent to run the ingrain-security skill.
+
+set -euo pipefail
+
+context="<EXTREMELY_IMPORTANT>\nBefore writing any code, run the 'ingrain-security' skill via the Skill tool.\n</EXTREMELY_IMPORTANT>"
+
+# Output context injection as JSON in the Claude Code shape
+# (hookSpecificOutput.additionalContext).
+#
+# Uses printf instead of heredoc to work around bash 5.3+ heredoc hang.
+printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "PostToolUse",\n    "additionalContext": "%s"\n  }\n}\n' "$context"
+
+exit 0

@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# SessionStart hook for the ingrain-security plugin.
+#
+# Injects the ingrain-security skill into the session context so the
+# agent knows to run the security review loop as a step of implementation
+# planning -- while forming the plan, folding the results into it.
+
+set -euo pipefail
+
+# Determine plugin root directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# Read the ingrain-security skill content
+skill_path="${PLUGIN_ROOT}/skills/ingrain-security/SKILL.md"
+review_skill_content=$(cat "$skill_path" 2>&1 || echo "Error reading ingrain-security skill at ${skill_path}")
+
+# Escape string for JSON embedding using bash parameter substitution.
+# Each ${s//old/new} is a single C-level pass - orders of magnitude
+# faster than the character-by-character loop this replaces.
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+review_skill_escaped=$(escape_for_json "$review_skill_content")
+session_context="<EXTREMELY_IMPORTANT>\nThis project treats security analysis as the final step of implementation planning. **Once your implementation plan is comprehensive and detailed — but before you present it or write any code — you MUST run the 'ingrain-security' skill on the finished plan and fold its results back into it.** Invoke it via the Skill tool. Its full content is reproduced below so you know what it does:\n\n${review_skill_escaped}\n</EXTREMELY_IMPORTANT>"
+
+# Output context injection as JSON in the Claude Code shape
+# (hookSpecificOutput.additionalContext).
+#
+# Uses printf instead of heredoc to work around bash 5.3+ heredoc hang.
+printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$session_context"
+
+exit 0
