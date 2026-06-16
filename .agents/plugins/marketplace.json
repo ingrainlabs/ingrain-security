@@ -1,0 +1,19 @@
+{
+  "name": "ingrainlabs",
+  "owner": { "name": "Ingrain Labs", "email": "markus.minkkinen@ingrainlabs.dev" },
+  "description": "Ingrain Labs Codex plugins.",
+  "plugins": [
+    {
+      "name": "ingrain-security",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/ingrainlabs/ingrain-security.git",
+        "ref": "v0.1.0"
+      },
+      "description": "Threat analysis for coding agents to identify potential security issues in code and design.",
+      "category": "Security",
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "interface": { "displayName": "Ingrain Security" }
+    }
+  ]
+}

@@ -11,10 +11,11 @@
 #   .claude-plugin/marketplace.json  .plugins[0].version
 #   .codex-plugin/plugin.json        .version
 #
-# The marketplace also pins the plugin's git source to the release tag so that
-# tags — not the default branch — drive the content users receive. This ref is
-# kept in lockstep too, as "v<version>":
-#   .claude-plugin/marketplace.json  .plugins[0].source.ref
+# Both marketplace catalogs also pin the plugin's git source to the release tag
+# so that tags — not the default branch — drive the content users receive. These
+# refs are kept in lockstep too, as "v<version>":
+#   .claude-plugin/marketplace.json  .plugins[0].source.ref  (Claude Code)
+#   .agents/plugins/marketplace.json .plugins[0].source.ref  (Codex)
 #
 # Usage:
 #   .github/release.sh <x.y.z>             Set an explicit version everywhere
@@ -40,11 +41,13 @@ TARGETS=(
     "${REPO_ROOT}/.codex-plugin/plugin.json	.version"
 )
 
-# The marketplace pins the plugin source to the release tag ("v<version>") so
-# git tags determine the content users install. Kept in lockstep with the
-# version above.
-MARKETPLACE_FILE="${REPO_ROOT}/.claude-plugin/marketplace.json"
-REF_PATH=".plugins[0].source.ref"
+# Each marketplace catalog pins the plugin source to the release tag ("v<version>")
+# so git tags determine the content users install. Kept in lockstep with the
+# version above. Each entry is "file<TAB>jq-path", mirroring TARGETS.
+REF_TARGETS=(
+    "${REPO_ROOT}/.claude-plugin/marketplace.json	.plugins[0].source.ref"
+    "${REPO_ROOT}/.agents/plugins/marketplace.json	.plugins[0].source.ref"
+)
 
 die() {
     echo "release: $*" >&2
@@ -102,22 +105,23 @@ write_version() {
     perl -i -pe 's/("version"\s*:\s*")\Q'"${old}"'\E(")/${1}'"${version}"'${2}/' "${file}"
 }
 
-# Read the pinned source ref from the marketplace file.
+# Read a pinned source ref from a file at a jq path.
 read_ref() {
-    jq -r "${REF_PATH} // empty" "${MARKETPLACE_FILE}"
+    local file="$1" path="$2"
+    jq -r "${path} // empty" "${file}"
 }
 
-# Pin the plugin source ref to "v<version>". Like write_version, this swaps only
-# the ref value so all other JSON formatting is preserved byte-for-byte.
+# Pin a source ref to "v<version>". Like write_version, this swaps only the ref
+# value so all other JSON formatting is preserved byte-for-byte.
 write_ref() {
-    local tag="v$1" old
-    old="$(read_ref)"
-    [ -n "${old}" ] || die "no source ref found at ${REF_PATH} in ${MARKETPLACE_FILE}"
+    local file="$1" path="$2" tag="v$3" old
+    old="$(read_ref "${file}" "${path}")"
+    [ -n "${old}" ] || die "no source ref found at ${path} in ${file}"
     [ "${old}" = "${tag}" ] && return 0
-    perl -i -pe 's/("ref"\s*:\s*")\Q'"${old}"'\E(")/${1}'"${tag}"'${2}/' "${MARKETPLACE_FILE}"
+    perl -i -pe 's/("ref"\s*:\s*")\Q'"${old}"'\E(")/${1}'"${tag}"'${2}/' "${file}"
 }
 
-# Set the version across every target file, and pin the source ref to the tag.
+# Set the version across every target file, and pin every source ref to the tag.
 set_all() {
     local version="$1"
     assert_semver "${version}"
@@ -127,8 +131,11 @@ set_all() {
         write_version "${file}" "${path}" "${version}"
         echo "  ${file#"${REPO_ROOT}/"} -> ${version}"
     done
-    write_ref "${version}"
-    echo "  ${MARKETPLACE_FILE#"${REPO_ROOT}/"} source.ref -> v${version}"
+    for entry in "${REF_TARGETS[@]}"; do
+        IFS=$'\t' read -r file path <<<"${entry}"
+        write_ref "${file}" "${path}" "${version}"
+        echo "  ${file#"${REPO_ROOT}/"} source.ref -> v${version}"
+    done
 }
 
 # Verify every target file matches the canonical version. Exit 1 on any drift.
@@ -144,11 +151,14 @@ check_all() {
         fi
     done
     local expected_ref="v${canonical}" actual_ref
-    actual_ref="$(read_ref)"
-    if [ "${actual_ref}" != "${expected_ref}" ]; then
-        echo "  DRIFT ${MARKETPLACE_FILE#"${REPO_ROOT}/"} source.ref: '${actual_ref}' != '${expected_ref}'" >&2
-        ok=0
-    fi
+    for entry in "${REF_TARGETS[@]}"; do
+        IFS=$'\t' read -r file path <<<"${entry}"
+        actual_ref="$(read_ref "${file}" "${path}")"
+        if [ "${actual_ref}" != "${expected_ref}" ]; then
+            echo "  DRIFT ${file#"${REPO_ROOT}/"} source.ref: '${actual_ref}' != '${expected_ref}'" >&2
+            ok=0
+        fi
+    done
     if [ "${ok}" -ne 1 ]; then
         echo "release: version drift detected (expected ${canonical})" >&2
         return 1
