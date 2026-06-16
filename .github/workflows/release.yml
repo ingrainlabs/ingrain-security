@@ -1,0 +1,43 @@
+name: release
+
+# Manual release: bumps the plugin version across all config files, commits the
+# change, and pushes a v<version> tag. The version logic lives in
+# .github/release.sh; this workflow only wraps it with the git steps.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Explicit version (x.y.z) or a bump keyword (patch | minor | major)"
+        required: true
+        default: patch
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bump version across config files
+        run: .github/release.sh "${{ github.event.inputs.version }}"
+
+      - name: Resolve resulting version
+        id: ver
+        run: echo "version=$(.github/release.sh --current)" >>"$GITHUB_OUTPUT"
+
+      - name: Verify files are in sync
+        run: .github/release.sh --check
+
+      - name: Commit, tag, and push
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release v${VERSION}"
+          git tag "v${VERSION}"
+          git push origin HEAD
+          git push origin "v${VERSION}"
