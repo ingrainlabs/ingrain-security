@@ -8,7 +8,11 @@
   "plugins": [
     {
       "name": "ingrain-security",
-      "source": "./",
+      "source": {
+        "source": "github",
+        "repo": "ingrainlabs/ingrain-security",
+        "ref": "v0.1.0"
+      },
       "description": "Threat analysis for coding agents to identify potential security issues in code and design.",
       "version": "0.1.0",
       "author": { "name": "Ingrain Labs" },

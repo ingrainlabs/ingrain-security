@@ -11,13 +11,18 @@
 #   .claude-plugin/marketplace.json  .plugins[0].version
 #   .codex-plugin/plugin.json        .version
 #
+# The marketplace also pins the plugin's git source to the release tag so that
+# tags — not the default branch — drive the content users receive. This ref is
+# kept in lockstep too, as "v<version>":
+#   .claude-plugin/marketplace.json  .plugins[0].source.ref
+#
 # Usage:
 #   .github/release.sh <x.y.z>             Set an explicit version everywhere
 #   .github/release.sh patch|minor|major   Bump the current version
 #   .github/release.sh --check             Verify all files agree (exit 1 on drift)
 #   .github/release.sh --current           Print the canonical current version
 #
-# Requires: jq
+# Requires: jq, perl
 
 set -euo pipefail
 
@@ -34,6 +39,12 @@ TARGETS=(
     "${REPO_ROOT}/.claude-plugin/marketplace.json	.plugins[0].version"
     "${REPO_ROOT}/.codex-plugin/plugin.json	.version"
 )
+
+# The marketplace pins the plugin source to the release tag ("v<version>") so
+# git tags determine the content users install. Kept in lockstep with the
+# version above.
+MARKETPLACE_FILE="${REPO_ROOT}/.claude-plugin/marketplace.json"
+REF_PATH=".plugins[0].source.ref"
 
 die() {
     echo "release: $*" >&2
@@ -91,7 +102,22 @@ write_version() {
     perl -i -pe 's/("version"\s*:\s*")\Q'"${old}"'\E(")/${1}'"${version}"'${2}/' "${file}"
 }
 
-# Set the version across every target file.
+# Read the pinned source ref from the marketplace file.
+read_ref() {
+    jq -r "${REF_PATH} // empty" "${MARKETPLACE_FILE}"
+}
+
+# Pin the plugin source ref to "v<version>". Like write_version, this swaps only
+# the ref value so all other JSON formatting is preserved byte-for-byte.
+write_ref() {
+    local tag="v$1" old
+    old="$(read_ref)"
+    [ -n "${old}" ] || die "no source ref found at ${REF_PATH} in ${MARKETPLACE_FILE}"
+    [ "${old}" = "${tag}" ] && return 0
+    perl -i -pe 's/("ref"\s*:\s*")\Q'"${old}"'\E(")/${1}'"${tag}"'${2}/' "${MARKETPLACE_FILE}"
+}
+
+# Set the version across every target file, and pin the source ref to the tag.
 set_all() {
     local version="$1"
     assert_semver "${version}"
@@ -101,6 +127,8 @@ set_all() {
         write_version "${file}" "${path}" "${version}"
         echo "  ${file#"${REPO_ROOT}/"} -> ${version}"
     done
+    write_ref "${version}"
+    echo "  ${MARKETPLACE_FILE#"${REPO_ROOT}/"} source.ref -> v${version}"
 }
 
 # Verify every target file matches the canonical version. Exit 1 on any drift.
@@ -115,6 +143,12 @@ check_all() {
             ok=0
         fi
     done
+    local expected_ref="v${canonical}" actual_ref
+    actual_ref="$(read_ref)"
+    if [ "${actual_ref}" != "${expected_ref}" ]; then
+        echo "  DRIFT ${MARKETPLACE_FILE#"${REPO_ROOT}/"} source.ref: '${actual_ref}' != '${expected_ref}'" >&2
+        ok=0
+    fi
     if [ "${ok}" -ne 1 ]; then
         echo "release: version drift detected (expected ${canonical})" >&2
         return 1
