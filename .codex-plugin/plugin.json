@@ -1,7 +1,7 @@
 {
   "name": "ingrain-security",
   "version": "0.1.0",
-  "description": "Threat analysis for coding agents to identify potential security issues in code and design.",
+  "description": "Threat assessment for coding agents when planning implementation.",
   "author": { "name": "Ingrain Labs", "email": "markus.minkkinen@ingrainlabs.dev" },
   "repository": "https://github.com/ingrainlabs/ingrain-security",
   "license": "MIT",
@@ -10,8 +10,8 @@
   "hooks": "./hooks/codex/hook.json",
   "interface": {
     "displayName": "Ingrain Security",
-    "shortDescription": "Threat analysis for coding agents.",
-    "longDescription": "Folds security back into a finished implementation plan: triages the change, then for security-relevant changes runs threats → risk score → user-selected mitigations via read-only subagents.",
+    "shortDescription": "Threat assessment for coding agents.",
+    "longDescription": "Assesses potential security risks in code and design before implementation.",
     "developerName": "Ingrain Labs",
     "category": "Security",
     "capabilities": ["Read"],

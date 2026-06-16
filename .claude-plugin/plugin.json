@@ -1,7 +1,7 @@
 {
   "name": "ingrain-security",
   "version": "0.1.0",
-  "description": "Threat analysis for coding agents to identify potential security issues in code and design.",
+  "description": "Threat assessment for coding agents when planning implementation.",
   "author": {
     "name": "Ingrain Labs"
   },
