@@ -1,0 +1,24 @@
+{
+  "name": "ingrain-security",
+  "version": "0.1.0",
+  "description": "Threat assessment for coding agents when planning implementation.",
+  "author": { "name": "Ingrain Labs", "email": "markus.minkkinen@ingrainlabs.dev" },
+  "repository": "https://github.com/ingrainlabs/ingrain-security",
+  "license": "MIT",
+  "keywords": ["security", "threat-assessment", "planning"],
+  "skills": "./skills/",
+  "hooks": "./hooks/codex/hook.json",
+  "interface": {
+    "displayName": "Ingrain Security",
+    "shortDescription": "Threat assessment for coding agents.",
+    "longDescription": "Assesses potential security risks in code and design before implementation.",
+    "developerName": "Ingrain Labs",
+    "category": "Security",
+    "capabilities": ["Read"],
+    "websiteURL": "https://github.com/ingrainlabs/ingrain-security",
+    "defaultPrompt": [
+      "Use Ingrain Security to threat-model this implementation plan before I write code.",
+      "Run Ingrain Security on the change I just designed."
+    ]
+  }
+}
