@@ -20,6 +20,7 @@
 # Usage:
 #   .github/release.sh <x.y.z>             Set an explicit version everywhere
 #   .github/release.sh patch|minor|major   Bump the current version
+#   .github/release.sh --bump <kind> <ver> Print <ver> bumped by kind (no writes)
 #   .github/release.sh --check             Verify all files agree (exit 1 on drift)
 #   .github/release.sh --current           Print the canonical current version
 #
@@ -167,10 +168,17 @@ check_all() {
 }
 
 main() {
+    # --bump is the only mode that takes extra arguments; handle it first so the
+    # single-argument guard below covers every other mode.
+    if [ "${1:-}" = "--bump" ]; then
+        [ $# -eq 3 ] || die "usage: --bump <patch|minor|major> <x.y.z>"
+        bump_version "$3" "$2"
+        return
+    fi
     [ $# -eq 1 ] || die "expected exactly one argument; run with --help"
     case "$1" in
         -h | --help)
-            sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             ;;
         --current)
             current_version

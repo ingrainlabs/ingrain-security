@@ -1,52 +1,68 @@
 name: release
 
-# Manual release: bumps the plugin version across all config files, commits the
-# change, and pushes a v<version> tag. The version logic lives in
-# .github/release.sh; this workflow only wraps it with the git steps.
+# Publishes a release when a PR is merged into the default branch. The version
+# bump itself happens earlier, on the PR branch, via the version-bump workflow —
+# so by the time we get here the merged files already carry the new version. This
+# job only tags that version and creates the GitHub Release; it never pushes a
+# commit to the default branch. Version logic lives in .github/release.sh.
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Explicit version (x.y.z) or a bump keyword (patch | minor | major)"
-        required: true
-        default: patch
+  pull_request:
+    types: [closed]
+    branches: [main]
 
 permissions:
   contents: write
 
 jobs:
   release:
+    # Only merged PRs produce a release; PRs closed without merging are ignored.
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
-      # Users fetch the marketplace catalog from the default branch, so a release
-      # committed anywhere else would never reach them. Fail fast off-branch.
-      - name: Ensure release runs on the default branch
+      - name: Resolve version and verify sync
+        id: ver
         run: |
-          if [ "${{ github.ref_name }}" != "${{ github.event.repository.default_branch }}" ]; then
-            echo "Releases must run on ${{ github.event.repository.default_branch }}, not ${{ github.ref_name }}." >&2
-            exit 1
+          git fetch --tags --quiet
+          .github/release.sh --check
+          echo "version=$(.github/release.sh --current)" >>"$GITHUB_OUTPUT"
+
+      # If the merged version is already tagged, the PR didn't change the version
+      # (e.g. a release:skip PR), so there is nothing to release.
+      - name: Skip if version already released
+        id: gate
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          if git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+            echo "v${VERSION} already exists; no version change to release."
+            echo "release=false" >>"$GITHUB_OUTPUT"
+          else
+            echo "release=true" >>"$GITHUB_OUTPUT"
           fi
 
-      - name: Bump version across config files
-        run: .github/release.sh "${{ github.event.inputs.version }}"
-
-      - name: Resolve resulting version
-        id: ver
-        run: echo "version=$(.github/release.sh --current)" >>"$GITHUB_OUTPUT"
-
-      - name: Verify files are in sync
-        run: .github/release.sh --check
-
-      - name: Commit, tag, and push
+      - name: Tag the release
+        if: steps.gate.outputs.release == 'true'
         env:
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -am "Release v${VERSION}"
           git tag "v${VERSION}"
-          git push origin HEAD
           git push origin "v${VERSION}"
+
+      - name: Create GitHub Release
+        if: steps.gate.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --target main \
+            --generate-notes

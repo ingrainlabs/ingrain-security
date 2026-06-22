@@ -1,0 +1,68 @@
+name: version-bump
+
+# Bumps the plugin version on a PR branch before it is merged into the default
+# branch, so the version change is part of the reviewed PR diff. The bump size
+# comes from a release:* label on the PR (defaults to patch); a release:skip
+# label opts the PR out entirely. The companion release workflow tags and
+# publishes the release once the PR merges. Version logic lives in
+# .github/release.sh.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Check out the PR's own branch (not the merge ref) so we can commit
+          # the bump back to it. fetch-depth 0 gives us origin/main to bump from.
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Bump version from PR label
+        env:
+          LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          # release:skip opts the PR out of versioning entirely.
+          if printf '%s' "$LABELS" | jq -e 'index("release:skip")' >/dev/null; then
+            echo "release:skip label present; not bumping the version."
+            exit 0
+          fi
+
+          # Highest matching label wins; default to patch when none is set.
+          if printf '%s' "$LABELS" | jq -e 'index("release:major")' >/dev/null; then
+            kind=major
+          elif printf '%s' "$LABELS" | jq -e 'index("release:minor")' >/dev/null; then
+            kind=minor
+          else
+            kind=patch
+          fi
+
+          # Always bump from main's current version so the result is idempotent:
+          # re-runs and label changes recompute cleanly instead of compounding.
+          git fetch origin main --quiet
+          base="$(git show origin/main:.claude-plugin/plugin.json | jq -r .version)"
+          next="$(.github/release.sh --bump "$kind" "$base")"
+          echo "Bumping to v${next} (${kind} from v${base})."
+
+          .github/release.sh "$next"
+          .github/release.sh --check
+
+          if git diff --quiet; then
+            echo "Version already at v${next}; nothing to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "Set release version to v${next}"
+          git push origin "HEAD:${HEAD_REF}"
