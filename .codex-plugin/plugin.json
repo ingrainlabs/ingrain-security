@@ -1,6 +1,6 @@
 {
   "name": "ingrain-security",
-  "version": "0.2.0",
+  "version": "0.1.1",
   "description": "Threat assessment for coding agents when planning implementation.",
   "author": { "name": "Ingrain Labs", "email": "markus.minkkinen@ingrainlabs.dev" },
   "repository": "https://github.com/ingrainlabs/ingrain-security",
