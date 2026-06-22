@@ -63,5 +63,3 @@ normal commits.
 
 To cut a release: Actions → **release** → Run workflow → enter `patch`/`minor`/`major` or an
 explicit `x.y.z`.
-
-test
