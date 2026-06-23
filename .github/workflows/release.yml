@@ -3,8 +3,10 @@ name: release
 # Publishes a release when a PR is merged into the default branch. The version
 # bump itself happens earlier, on the PR branch, via the version-bump workflow —
 # so by the time we get here the merged files already carry the new version. This
-# job only tags that version and creates the GitHub Release; it never pushes a
-# commit to the default branch. Version logic lives in .github/release.sh.
+# job tags that version, pins both marketplace catalogs to the tagged commit
+# (pushing a single follow-up commit to the default branch), and creates the
+# GitHub Release. Pushing that pin commit requires this job's actor to bypass the
+# main branch rulesets. Version logic lives in .github/release.sh.
 
 on:
   pull_request:
@@ -25,7 +27,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Resolve, gate, and tag the release
+      - name: Resolve, gate, tag, and pin the release
         id: rel
         run: .github/publish-release.sh
 
