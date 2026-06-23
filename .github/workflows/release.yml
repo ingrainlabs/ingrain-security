@@ -25,42 +25,15 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Resolve version and verify sync
-        id: ver
-        run: |
-          git fetch --tags --quiet
-          .github/release.sh --check
-          echo "version=$(.github/release.sh --current)" >>"$GITHUB_OUTPUT"
-
-      # If the merged version is already tagged, the PR didn't change the version
-      # (e.g. a release:skip PR), so there is nothing to release.
-      - name: Skip if version already released
-        id: gate
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          if git rev-parse "v${VERSION}" >/dev/null 2>&1; then
-            echo "v${VERSION} already exists; no version change to release."
-            echo "release=false" >>"$GITHUB_OUTPUT"
-          else
-            echo "release=true" >>"$GITHUB_OUTPUT"
-          fi
-
-      - name: Tag the release
-        if: steps.gate.outputs.release == 'true'
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "v${VERSION}"
-          git push origin "v${VERSION}"
+      - name: Resolve, gate, and tag the release
+        id: rel
+        run: .github/publish-release.sh
 
       - name: Create GitHub Release
-        if: steps.gate.outputs.release == 'true'
+        if: steps.rel.outputs.release == 'true'
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
         with:
-          tag_name: v${{ steps.ver.outputs.version }}
-          name: v${{ steps.ver.outputs.version }}
+          tag_name: v${{ steps.rel.outputs.version }}
+          name: v${{ steps.rel.outputs.version }}
           target_commitish: main
           generate_release_notes: true
