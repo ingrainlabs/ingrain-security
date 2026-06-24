@@ -11,8 +11,7 @@
       "source": {
         "source": "github",
         "repo": "ingrainlabs/ingrain-security",
-        "ref": "v0.1.1",
-        "sha": "8d265a64d213ec8fafce39408df20acffc44eec7"
+        "ref": "v0.1.1"
       },
       "description": "Threat analysis for coding agents to identify potential security issues in code and design.",
       "version": "0.1.1",

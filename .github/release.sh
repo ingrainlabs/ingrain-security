@@ -17,19 +17,10 @@
 #   .claude-plugin/marketplace.json  .plugins[0].source.ref  (Claude Code)
 #   .agents/plugins/marketplace.json .plugins[0].source.ref  (Codex)
 #
-# Each catalog also carries a source.sha — the immutable commit the release tag
-# points to, so a moved tag can't change the content installers receive. The sha
-# can only be known after the release commit lands on the default branch, so it
-# is set by the release workflow (--set-sha), not by a version bump. --check only
-# asserts both catalogs agree on a valid sha, not which commit it is.
-#   .claude-plugin/marketplace.json  .plugins[0].source.sha  (Claude Code)
-#   .agents/plugins/marketplace.json .plugins[0].source.sha  (Codex)
-#
 # Usage:
 #   .github/release.sh <x.y.z>             Set an explicit version everywhere
 #   .github/release.sh patch|minor|major   Bump the current version
 #   .github/release.sh --bump <kind> <ver> Print <ver> bumped by kind (no writes)
-#   .github/release.sh --set-sha <40hex>   Pin both catalogs' source.sha to a commit
 #   .github/release.sh --check             Verify all files agree (exit 1 on drift)
 #   .github/release.sh --current           Print the canonical current version
 #
@@ -59,15 +50,6 @@ REF_TARGETS=(
     "${REPO_ROOT}/.agents/plugins/marketplace.json	.plugins[0].source.ref"
 )
 
-# Each marketplace catalog also pins source.sha to the exact commit the release
-# tag points to. Unlike the version and ref, the sha is not derived from the
-# version — it is set after the release commit exists (see --set-sha). Each entry
-# is "file<TAB>jq-path", mirroring REF_TARGETS.
-SHA_TARGETS=(
-    "${REPO_ROOT}/.claude-plugin/marketplace.json	.plugins[0].source.sha"
-    "${REPO_ROOT}/.agents/plugins/marketplace.json	.plugins[0].source.sha"
-)
-
 die() {
     echo "release: $*" >&2
     exit 1
@@ -91,11 +73,6 @@ current_version() {
 # Validate a semver MAJOR.MINOR.PATCH (no pre-release/build suffixes).
 assert_semver() {
     [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "not a valid x.y.z version: '$1'"
-}
-
-# Validate a full 40-character git commit SHA (lowercase hex).
-assert_sha() {
-    [[ "$1" =~ ^[0-9a-f]{40}$ ]] || die "not a valid 40-char commit sha: '$1'"
 }
 
 # Compute the next version from a bump keyword.
@@ -145,35 +122,6 @@ write_ref() {
     perl -i -pe 's/("ref"\s*:\s*")\Q'"${old}"'\E(")/${1}'"${tag}"'${2}/' "${file}"
 }
 
-# Read a pinned source sha from a file at a jq path.
-read_sha() {
-    local file="$1" path="$2"
-    jq -r "${path} // empty" "${file}"
-}
-
-# Pin a source sha to a commit. Like write_ref, this swaps only the sha value so
-# all other JSON formatting is preserved byte-for-byte.
-write_sha() {
-    local file="$1" path="$2" sha="$3" old
-    old="$(read_sha "${file}" "${path}")"
-    [ -n "${old}" ] || die "no source sha found at ${path} in ${file}"
-    [ "${old}" = "${sha}" ] && return 0
-    perl -i -pe 's/("sha"\s*:\s*")\Q'"${old}"'\E(")/${1}'"${sha}"'${2}/' "${file}"
-}
-
-# Pin every catalog's source sha to a commit. Used by the release workflow once
-# the release commit exists; not part of a version bump (the sha isn't known yet).
-set_sha_all() {
-    local sha="$1"
-    assert_sha "${sha}"
-    local entry file path
-    for entry in "${SHA_TARGETS[@]}"; do
-        IFS=$'\t' read -r file path <<<"${entry}"
-        write_sha "${file}" "${path}" "${sha}"
-        echo "  ${file#"${REPO_ROOT}/"} source.sha -> ${sha}"
-    done
-}
-
 # Set the version across every target file, and pin every source ref to the tag.
 set_all() {
     local version="$1"
@@ -212,22 +160,6 @@ check_all() {
             ok=0
         fi
     done
-    # The sha is set after a release commit exists, so --check can't know which
-    # commit is correct. It only asserts every catalog carries the same valid sha.
-    local first_sha="" actual_sha
-    for entry in "${SHA_TARGETS[@]}"; do
-        IFS=$'\t' read -r file path <<<"${entry}"
-        actual_sha="$(read_sha "${file}" "${path}")"
-        if ! [[ "${actual_sha}" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "  DRIFT ${file#"${REPO_ROOT}/"} source.sha: '${actual_sha}' is not a 40-char sha" >&2
-            ok=0
-        elif [ -z "${first_sha}" ]; then
-            first_sha="${actual_sha}"
-        elif [ "${actual_sha}" != "${first_sha}" ]; then
-            echo "  DRIFT ${file#"${REPO_ROOT}/"} source.sha: '${actual_sha}' != '${first_sha}'" >&2
-            ok=0
-        fi
-    done
     if [ "${ok}" -ne 1 ]; then
         echo "release: version drift detected (expected ${canonical})" >&2
         return 1
@@ -243,17 +175,10 @@ main() {
         bump_version "$3" "$2"
         return
     fi
-    # --set-sha takes the commit sha as a second argument.
-    if [ "${1:-}" = "--set-sha" ]; then
-        [ $# -eq 2 ] || die "usage: --set-sha <40-char-commit-sha>"
-        echo "release: pinning source.sha to $2"
-        set_sha_all "$2"
-        return
-    fi
     [ $# -eq 1 ] || die "expected exactly one argument; run with --help"
     case "$1" in
         -h | --help)
-            sed -n '2,34p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             ;;
         --current)
             current_version

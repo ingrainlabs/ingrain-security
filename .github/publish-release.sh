@@ -1,20 +1,12 @@
 #!/usr/bin/env bash
-# Tags the merged release on the default branch and pins both catalogs to it.
+# Tags the merged release on the default branch.
 #
 # Run by .github/workflows/release.yml after a PR merges into main. Verifies the
 # config files agree on a version and — unless that version is already tagged —
-# creates and pushes the v<version> tag at the merged commit. It then records
-# that commit in both marketplace catalogs' source.sha and pushes a single
-# follow-up "Pin v<version>…" commit to main, so the tag and the pinned sha refer
-# to the same commit. (A commit can't contain its own hash, so the pin must be a
-# separate commit; with rebase merging main stays linear and one commit ahead of
-# the tag.) Emits two GitHub Actions step outputs:
+# creates and pushes the v<version> tag. Emits two GitHub Actions step outputs:
 #   version  the resolved version (without the leading v)
 #   release  "true" when a new tag was pushed, "false" when already released
 # The workflow uses `release` to decide whether to publish the GitHub Release.
-#
-# Pushing the pin commit to main requires the workflow's actor to bypass the main
-# branch rulesets.
 #
 # Requires: git and .github/release.sh (its deps: jq, perl)
 
@@ -43,17 +35,6 @@ fi
 
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
-
-# Tag the merged commit, then pin both catalogs to it so the tag and source.sha
-# refer to the same commit.
 git tag "v${version}"
 git push origin "v${version}"
-
-sha="$(git rev-parse "v${version}^{commit}")"
-"${RELEASE_SH}" --set-sha "${sha}"
-"${RELEASE_SH}" --check
-if ! git diff --quiet; then
-    git commit -am "Pin v${version} plugin source to ${sha}"
-    git push origin HEAD:main
-fi
 emit release true
