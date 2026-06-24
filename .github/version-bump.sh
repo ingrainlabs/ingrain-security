@@ -22,9 +22,11 @@ cd "${REPO_ROOT}"
 : "${LABELS:?LABELS env var is required}"
 : "${HEAD_REF:?HEAD_REF env var is required}"
 
-# release:skip opts the PR out of versioning entirely.
+# release:skip opts the PR out of versioning entirely, but still verify the
+# existing version locations agree so drift can't slip through pre-merge.
 if printf '%s' "${LABELS}" | jq -e 'index("release:skip")' >/dev/null; then
     echo "release:skip label present; not bumping the version."
+    "${RELEASE_SH}" --check
     exit 0
 fi
 

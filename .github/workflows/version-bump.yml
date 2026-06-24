@@ -17,6 +17,10 @@ permissions:
 
 jobs:
   bump:
+    # Only run for PRs from a branch in this repo. Fork PRs get a read-only
+    # token on the pull_request event, so the bump's git push would fail anyway;
+    # skipping them also closes any fork-controlled write path.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
