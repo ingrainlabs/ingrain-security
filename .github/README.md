@@ -50,16 +50,25 @@ which must stay in lockstep (each ref is the version prefixed with `v`):
 .github/release.sh patch|minor|major  # semver-bump the current version
 .github/release.sh --check         # assert all five locations agree (exit 1 on drift)
 .github/release.sh --current       # print the canonical current version
+.github/release.sh --files         # list the files it manages
 ```
 
 Setting a version also re-pins `source.ref` to `v<version>`. It edits **only** the version and ref
 values, leaving all other JSON formatting byte-for-byte intact.
 
-**`workflows/release.yml`** is a manual (`workflow_dispatch`) release that must run on the default
-branch: it runs `release.sh` with the version you supply, asserts all locations agree (`--check`),
-then commits the bump and pushes a `v<version>` tag. Because every version change goes through this
-workflow, the version and ref can only ever move together — there's no separate drift check on
-normal commits.
+The release flow is automated across two workflows — you never run `release.sh` by hand to cut a
+release:
 
-To cut a release: Actions → **release** → Run workflow → enter `patch`/`minor`/`major` or an
-explicit `x.y.z`.
+- **`workflows/version-bump.yml`** runs on each PR into the default branch. It reads the PR's
+  `release:*` label (defaults to `patch`; `release:skip` opts out), bumps from the version currently
+  on the default branch via `release.sh`, asserts all locations agree (`--check`), and commits the
+  result back to the PR branch — so the version change is part of the reviewed diff.
+- **`workflows/release.yml`** runs automatically when a PR merges into the default branch. The merged
+  files already carry the new version, so it does not bump; it asserts the locations agree, then tags
+  `v<version>` and publishes the GitHub Release.
+
+Because every version change flows through the PR bump, the version and ref can only ever move
+together — there's no separate drift check on normal commits.
+
+To cut a release: open a PR into the default branch, add the `release:*` label for the bump size you
+want (or `release:skip` to leave the version untouched), and merge.

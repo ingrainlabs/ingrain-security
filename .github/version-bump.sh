@@ -22,6 +22,14 @@ cd "${REPO_ROOT}"
 : "${LABELS:?LABELS env var is required}"
 : "${HEAD_REF:?HEAD_REF env var is required}"
 
+# The exact set of files release.sh manages. The workflow runs this script with
+# the PR checkout's .github/ scripts replaced by the trusted base-branch copies,
+# so the commit below is scoped to these paths (never `git commit -a`) to keep
+# that overlay — and any other file a PR may have tampered with — out of the
+# bump commit. Read with a bash-3.2-portable loop (no mapfile).
+VERSION_FILES=()
+while IFS= read -r file; do VERSION_FILES+=("${file}"); done < <("${RELEASE_SH}" --files)
+
 # release:skip opts the PR out of versioning entirely, but still verify the
 # existing version locations agree so drift can't slip through pre-merge.
 if printf '%s' "${LABELS}" | jq -e 'index("release:skip")' >/dev/null; then
@@ -49,12 +57,12 @@ echo "Bumping to v${next} (${kind} from v${base})."
 "${RELEASE_SH}" "${next}"
 "${RELEASE_SH}" --check
 
-if git diff --quiet; then
+if git diff --quiet -- "${VERSION_FILES[@]}"; then
     echo "Version already at v${next}; nothing to commit."
     exit 0
 fi
 
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
-git commit -am "Set release version to v${next}"
+git commit -m "Set release version to v${next}" -- "${VERSION_FILES[@]}"
 git push origin "HEAD:${HEAD_REF}"

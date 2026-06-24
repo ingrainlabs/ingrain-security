@@ -6,9 +6,16 @@ name: version-bump
 # label opts the PR out entirely. The companion release workflow tags and
 # publishes the release once the PR merges. Version logic lives in
 # .github/release.sh.
+#
+# This runs on pull_request_target, NOT pull_request, so the workflow definition
+# and its requested permissions come from the base branch — a PR cannot rewrite
+# these steps to abuse the write-capable token. The checked-out PR tree is still
+# untrusted, so before bumping we overwrite the release scripts with the trusted
+# base-branch copies (see "Restore release tooling"); the write token therefore
+# never executes PR-authored code. Fork PRs are skipped entirely (see job `if`).
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, synchronize, labeled, unlabeled]
     branches: [main]
 
@@ -17,9 +24,10 @@ permissions:
 
 jobs:
   bump:
-    # Only run for PRs from a branch in this repo. Fork PRs get a read-only
-    # token on the pull_request event, so the bump's git push would fail anyway;
-    # skipping them also closes any fork-controlled write path.
+    # Only run for PRs from a branch in this repo. pull_request_target grants a
+    # write-capable token even to fork PRs, so this same-repo guard is what keeps
+    # that token off fork-controlled branches — it is load-bearing, not just an
+    # optimization.
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
@@ -30,6 +38,15 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
           token: ${{ github.token }}
+
+      - name: Restore release tooling from the base branch
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          # Overwrite the PR's copy of the release scripts with the trusted base
+          # versions so the next step never runs PR-authored code.
+          git fetch origin "${BASE_REF}" --quiet
+          git checkout "origin/${BASE_REF}" -- .github/version-bump.sh .github/release.sh
 
       - name: Bump version from PR label
         env:

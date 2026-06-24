@@ -23,6 +23,7 @@
 #   .github/release.sh --bump <kind> <ver> Print <ver> bumped by kind (no writes)
 #   .github/release.sh --check             Verify all files agree (exit 1 on drift)
 #   .github/release.sh --current           Print the canonical current version
+#   .github/release.sh --files             List the files this script manages
 #
 # Requires: jq, perl
 
@@ -167,6 +168,17 @@ check_all() {
     echo "release: all files agree on ${canonical}"
 }
 
+# Print the repo-root-relative path of every file this script manages, deduped.
+# Callers (e.g. the version-bump workflow) stage exactly these paths when
+# committing a bump, so nothing else can slip into the commit.
+list_files() {
+    local entry file path
+    for entry in "${TARGETS[@]}" "${REF_TARGETS[@]}"; do
+        IFS=$'\t' read -r file path <<<"${entry}"
+        echo "${file#"${REPO_ROOT}/"}"
+    done | sort -u
+}
+
 main() {
     # --bump is the only mode that takes extra arguments; handle it first so the
     # single-argument guard below covers every other mode.
@@ -178,13 +190,16 @@ main() {
     [ $# -eq 1 ] || die "expected exactly one argument; run with --help"
     case "$1" in
         -h | --help)
-            sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '2,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             ;;
         --current)
             current_version
             ;;
         --check)
             check_all
+            ;;
+        --files)
+            list_files
             ;;
         patch | minor | major)
             local cur next
