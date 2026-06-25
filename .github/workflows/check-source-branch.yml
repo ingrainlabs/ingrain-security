@@ -1,0 +1,38 @@
+name: check-source-branch
+
+# Enforces that pull requests into the default branch originate only from the
+# 'development' branch of this repository — fork-originated PRs are also blocked.
+# The companion ruleset (also named check-source-branch) requires this job's
+# status check to pass, so a PR from a fork or any other source branch is blocked
+# from merging. Gating happens here because GitHub rulesets cannot inspect a PR's
+# source repo or branch on their own.
+
+on:
+  pull_request:
+    # 'edited' catches a PR being retargeted onto main after it was opened.
+    types: [opened, reopened, synchronize, edited]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # The job name is the status-check name the ruleset requires — keep them identical.
+  check-source-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify PR source repo and branch
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REPO" != "$BASE_REPO" ]; then
+            echo "::error::PRs into main must come from a branch in ${BASE_REPO}, not a fork (${HEAD_REPO})."
+            exit 1
+          fi
+          if [ "$HEAD_REF" != "development" ]; then
+            echo "::error::PRs into main must come from the 'development' branch (got '${HEAD_REF}')."
+            exit 1
+          fi
+          echo "Source '${HEAD_REPO}:${HEAD_REF}' is allowed."

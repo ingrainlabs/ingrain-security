@@ -1,0 +1,43 @@
+name: version-bump
+
+# Bumps the plugin version on a PR branch before it is merged into the default
+# branch, so the version change is part of the reviewed PR diff. The bump size
+# comes from a release:* label on the PR (defaults to patch); a release:skip
+# label opts the PR out entirely. The companion release workflow tags and
+# publishes the release once the PR merges. Version logic lives in
+# .github/release.sh.
+#
+# This runs on pull_request, NOT pull_request_target, so a fork PR receives a
+# read-only GITHUB_TOKEN and cannot push a bump commit. The write-capable token
+# is therefore only ever issued to PRs whose branch already lives in this repo —
+# authors who already have push access. The same-repo job guard below skips fork
+# PRs outright so they don't fail noisily on the push.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    # Skip fork PRs: under pull_request they only get a read-only token and could
+    # not push the bump anyway, so running would just produce a failed push.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Check out the PR's own branch (not the merge ref) so we can commit
+          # the bump back to it. fetch-depth 0 gives us origin/main to bump from.
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Bump version from PR label
+        env:
+          LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: .github/version-bump.sh
