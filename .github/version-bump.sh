@@ -22,11 +22,10 @@ cd "${REPO_ROOT}"
 : "${LABELS:?LABELS env var is required}"
 : "${HEAD_REF:?HEAD_REF env var is required}"
 
-# The exact set of files release.sh manages. The workflow runs this script with
-# the PR checkout's .github/ scripts replaced by the trusted base-branch copies,
-# so the commit below is scoped to these paths (never `git commit -a`) to keep
-# that overlay — and any other file a PR may have tampered with — out of the
-# bump commit. Read with a bash-3.2-portable loop (no mapfile).
+# The exact set of files release.sh manages. The commit below is scoped to these
+# paths (never `git commit -a`) so any other in-progress change on the PR branch
+# never rides along in the bump commit. Read with a bash-3.2-portable loop (no
+# mapfile).
 VERSION_FILES=()
 while IFS= read -r file; do VERSION_FILES+=("${file}"); done < <("${RELEASE_SH}" --files)
 
