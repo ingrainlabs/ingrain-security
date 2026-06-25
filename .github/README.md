@@ -71,4 +71,4 @@ Because every version change flows through the PR bump, the version and ref can 
 together — there's no separate drift check on normal commits.
 
 To cut a release: open a PR into the default branch, add the `release:*` label for the bump size you
-want (or `release:skip` to leave the version untouched), and merge.
+want (or `release:skip` to leave the version untouched), and merge!
