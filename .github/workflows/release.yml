@@ -1,0 +1,39 @@
+name: release
+
+# Publishes a release when a PR is merged into the default branch. The version
+# bump itself happens earlier, on the PR branch, via the version-bump workflow —
+# so by the time we get here the merged files already carry the new version. This
+# job only tags that version and creates the GitHub Release; it never pushes a
+# commit to the default branch. Version logic lives in .github/release.sh.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Only merged PRs produce a release; PRs closed without merging are ignored.
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve, gate, and tag the release
+        id: rel
+        run: .github/publish-release.sh
+
+      - name: Create GitHub Release
+        if: steps.rel.outputs.release == 'true'
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
+        with:
+          tag_name: v${{ steps.rel.outputs.version }}
+          name: v${{ steps.rel.outputs.version }}
+          target_commitish: main
+          generate_release_notes: true
