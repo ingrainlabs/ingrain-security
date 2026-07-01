@@ -98,7 +98,7 @@ none**. Always do this in **two distinct steps, in this order**:
    short title (e.g. `T3 — unauthenticated token refresh`). One window, one
    finding, one binary choice keeps every decision isolated and deliberate, so
    findings never blur together the way they do in a single multi-toggle list.
-   Mark findings the `ingrain-risk-scorer` banded **high or critical** as
+   Mark findings the `ingrain-risk-scorer` scored **high or critical** as
    recommended. Where the host caps how many windows it can show at once,
    present them in **consecutive batches in table order (highest risk first)**
    and merge the choices. Because each window is its own include/exclude
@@ -156,7 +156,7 @@ flowchart TD
    `needs-revision`, re-dispatch `ingrain-threat-generator` with the prior list + critique
    and repeat. Then **freeze** the threats.
 3. **Risk score** — dispatch the `ingrain-risk-scorer` worker with the frozen threats →
-   per-threat 0–100 (likelihood × impact) plus an overall plan score and criticality band.
+   per-threat 0–100 (likelihood × impact) plus an overall plan score and criticality.
 4. **Ask user — select which threats to address (Gate 1).** Follow the two-step
    display-then-ask pattern (see **How to ask the user**). The user is deciding
    per threat whether it is worth acting on, so they must understand each
@@ -168,13 +168,13 @@ flowchart TD
    | Column | Contents |
    |--------|----------|
    | **Threat** | tag + short title (e.g. `T3 — unauthenticated token refresh`) |
-   | **Risk** | risk band + 0–100 score (e.g. `high · 78`) |
+   | **Risk** | risk criticality + 0–100 score (e.g. `high · 78`) |
    | **What can go wrong** | the concrete failure, drawn from the threat's Vector/Description (not a generic category) |
    | **Why it matters** | the consequence if realized, grounded in the ingrain-risk-scorer's impact and score (what an attacker gains, what data or guarantee is lost) |
    | **Local impact in the plan** | which specific part of *this* change the threat lands on (the component, file, or step from the plan) |
 
    Keep the table faithful to the frozen threats and scores — don't invent,
-   soften, or re-score. Flag rows whose risk band is high or critical (e.g.
+   soften, or re-score. Flag rows whose risk criticality is high or critical (e.g.
    `⚑ high · 78` in the Risk column) — these are the ones you mark recommended
    in the selection windows, so the table and the windows tell the same story.
 
