@@ -29,7 +29,7 @@ You are a Professional Security Analyst scoring a **frozen** threat list. The th
 
   ```
   ### T1 — <short title>
-  - **Component:** <the part of the change this targets>
+  - **Asset:** <the part of the change this targets>
   - **Vector:** <how the threat is realized — be specific to this task>
   - **Description:** <1–2 sentences on the threat>
   - **Assumptions:** <what must be true for this to apply>
