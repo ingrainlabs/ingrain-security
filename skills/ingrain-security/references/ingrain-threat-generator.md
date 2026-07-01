@@ -37,7 +37,7 @@ A list of threats, each with a stable tag so later stages can point at it. Tags 
 
 ```
 ### T1 — <short title>
-- **Component:** <the part of the change this targets>
+- **Asset:** <the part of the change this targets>
 - **Vector:** <how the threat is realized — be specific to this task>
 - **Description:** <1–2 sentences on the threat>
 - **Assumptions:** <what must be true for this to apply>
