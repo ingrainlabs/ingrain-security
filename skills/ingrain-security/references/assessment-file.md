@@ -2,9 +2,8 @@
 
 Defines the local analysis artifact the `ingrain-security` review persists and hands
 off through. The orchestrator creates and finalizes it; each worker writes its own
-named section. Follow this schema
-exactly — it is the on-disk projection of the canonical ingrain analysis schema
-so the two never drift.
+named section. Follow this structure exactly so every stage reads and writes the same
+shape.
 
 ## Nature
 
@@ -53,7 +52,7 @@ so the two never drift.
   always mirrors the current frozen state — critic-loop revisions and re-selection
   overwrite the prior contents of that section.
 
-## Schema
+## Sections and fields
 
 Every field below is **required** unless marked optional, and every enumerated field
 must use **exactly one** of the listed values (lower-case, verbatim).
@@ -67,51 +66,51 @@ must use **exactly one** of the listed values (lower-case, verbatim).
 - **Security relevant** — `true` | `false`.
 - **Surfaces** — bullet list (present when `major`).
 
-### `## Threats` — a Markdown table, **at most 20 rows** (`PThreatModelSchema.max(20)`)
+### `## Threats` — a Markdown table, **at most 20 rows**
 
-One row per threat; one column per `PThreatSchema` field:
+One row per threat, with these columns:
 
-| Column | Field | Constraint |
-|--------|-------|------------|
-| **Tag** | `tag` | `T<n>` (e.g. `T1`) |
-| **Title** | `title` | string |
-| **Asset** | `asset` | string |
-| **Vector** | `vector` | string |
-| **Description** | `description` | string |
-| **Assumptions** | `assumptions` | string |
-| **Impact** | `impact` | `critical` \| `high` \| `medium` \| `low` |
-| **Likelihood** | `likelihood` | `very high` \| `high` \| `medium` \| `low` |
-| **Risk score** | `risk.score` | integer `0`–`100` |
-| **Criticality** | `risk.criticality` | `low` \| `medium` \| `high` \| `critical` |
-| **Justification** | `justification` | string, **≤ 256 characters** |
-| **Acceptance** | `userFeedback.acceptance` | `accepted` \| `rejected` \| `uncertain` (optional until Gate 1) |
+| Column | Constraint |
+|--------|------------|
+| **Tag** | `T<n>` (e.g. `T1`) |
+| **Title** | string |
+| **Asset** | string |
+| **Vector** | string |
+| **Description** | string |
+| **Assumptions** | string |
+| **Impact** | `critical` \| `high` \| `medium` \| `low` |
+| **Likelihood** | `very high` \| `high` \| `medium` \| `low` |
+| **Risk score** | integer `0`–`100` |
+| **Criticality** | `low` \| `medium` \| `high` \| `critical` |
+| **Justification** | string, **≤ 256 characters** |
+| **Acceptance** | `accepted` \| `rejected` \| `uncertain` (optional until Gate 1) |
 
 **Gate 1 → Acceptance.** When the user decides at Gate 1, record each threat's
-`userFeedback.acceptance`: include → `accepted`, exclude → `rejected`. Use
+**Acceptance**: include → `accepted`, exclude → `rejected`. Use
 `uncertain` only if the user is explicitly unsure. Before Gate 1 the column is empty.
 
-### `## Risk score` — plan-level residual risk, from `PRiskSchema`
+### `## Risk score` — plan-level residual risk
 - **Score** — integer `0`–`100`.
 - **Criticality** — `low` | `medium` | `high` | `critical`.
 
-### `## Mitigations` — a Markdown table, one column per `PMitigationSchema` field
+### `## Mitigations` — a Markdown table, one row per mitigation, with these columns:
 
-| Column | Field | Constraint |
-|--------|-------|------------|
-| **Tag** | `tag` | `M<n>` (e.g. `M1`) |
-| **Title** | `title` | string |
-| **Description** | `description` | string |
-| **Yield** | `yield` | `high` \| `medium` \| `low` |
-| **Effort** | `effort` | `high` \| `medium` \| `low` |
-| **Threat tags** | `threatTags` | **≥ 1** threat tag (e.g. `T1, T3`) |
-| **Acceptance** | `userFeedback.acceptance` | `accepted` \| `rejected` \| `uncertain` (optional until Gate 2) |
+| Column | Constraint |
+|--------|------------|
+| **Tag** | `M<n>` (e.g. `M1`) |
+| **Title** | string |
+| **Description** | string |
+| **Yield** | `high` \| `medium` \| `low` |
+| **Effort** | `high` \| `medium` \| `low` |
+| **Threat tags** | **≥ 1** threat tag (e.g. `T1, T3`) |
+| **Acceptance** | `accepted` \| `rejected` \| `uncertain` (optional until Gate 2) |
 
-**Gate 2 → Acceptance.** Record each mitigation's `userFeedback.acceptance`:
+**Gate 2 → Acceptance.** Record each mitigation's **Acceptance**:
 adopt → `accepted`, decline → `rejected`; `uncertain` only if the user is unsure.
 
 ### `## Coverage / open items`
-- Any threat with `acceptance = accepted` that has no mitigation with
-  `acceptance = accepted` covering it (via `threatTags`).
+- Any threat whose **Acceptance** is `accepted` that has no mitigation with
+  **Acceptance** `accepted` covering it (via its **Threat tags**).
 
 ### `## Maintenance (for the implementing agent)`
 - Instruction to keep the file in sync as the implementation evolves.

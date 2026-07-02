@@ -74,20 +74,16 @@ Deno.test("SKILL.md: documents the assessment file, its path, and living-documen
   assertStringIncludes(md, "references/assessment-file.md");
 });
 
-Deno.test("assessment-file.md: defines the strict schema mirroring the canonical Zod schema", async () => {
+Deno.test("assessment-file.md: defines the strict on-disk format and its allowed values", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
   // The concrete artifact path.
   assertStringIncludes(md, ".claude/.temp/assessment-");
-  // Anchored to the canonical ingrain analysis schema.
-  for (const s of ["PThreatSchema", "PMitigationSchema", "PRiskSchema"]) {
-    assertStringIncludes(md, s);
-  }
   // Enumerated fields carry their exact allowed values.
   assertStringIncludes(md, "very high"); // likelihood
   for (const v of ["accepted", "rejected", "uncertain"]) {
     assertStringIncludes(md, v); // acceptance status
   }
-  // Key constraints from the schema are stated.
+  // Key constraints from the format are stated.
   assertStringIncludes(md, "256"); // justification max length
   assertStringIncludes(md, "20"); // max threats
 });

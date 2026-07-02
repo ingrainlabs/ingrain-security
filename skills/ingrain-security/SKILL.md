@@ -155,12 +155,10 @@ worker writes its own named section, the orchestrator frames and finalizes it, a
 plan you produce links it and carries the **Maintenance** instruction for the
 implementing agent.
 
-Its **schema, section layout, and content template are defined in
-`references/assessment-file.md`** — follow that reference exactly. The schema mirrors
-the canonical ingrain analysis schema (`PThreatSchema`, `PMitigationSchema`,
-`PRiskSchema`, `PAcceptanceStatusSchema`), so every enumerated field (`impact`,
-`likelihood`, `criticality`, `yield`, `effort`, and the Gate acceptance
-`accepted`/`rejected`/`uncertain`) must use exactly the values it lists.
+Its **section layout and content template are defined in
+`references/assessment-file.md`** — follow that reference exactly, so every enumerated
+field (`impact`, `likelihood`, `criticality`, `yield`, `effort`, and the Gate
+acceptance `accepted`/`rejected`/`uncertain`) uses exactly the values it lists.
 
 ## The plan file
 
