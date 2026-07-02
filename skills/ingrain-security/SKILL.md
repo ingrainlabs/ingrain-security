@@ -246,7 +246,9 @@ the sections it needs — the file is the shared state, so your own context stay
      selected — review closed" and close with a one-line verdict naming the
      threats as accepted risk. Still **fold the assessment link + maintenance
      instruction into the plan** (the `## Threats` section, with every threat marked
-     excluded/accepted, is the preserved context), then continue building the plan.
+     excluded/accepted, is the preserved context) **and persist a durable snapshot
+     via the fixed, argument-less `run-hook.cmd save-assessment` helper** (see
+     Step 7), then continue building the plan.
 5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the
    user-selected threats — only those; excluded threats are out of scope. It writes the
    mitigations into the `## Mitigations` section and returns a pointer.
@@ -285,11 +287,23 @@ the sections it needs — the file is the shared state, so your own context stay
    **Finalize the assessment file:** record each mitigation's `Acceptance` in the
    `## Mitigations` table (adopt → `accepted`, decline → `rejected`), and fill
    `## Coverage / open items` with any `accepted` threat left without an `accepted`
-   covering mitigation — per the `references/assessment-file.md` schema. Then **fold
-   two things into the plan you produce**: (1) a link to
-   `.claude/.temp/assessment.md`, and (2) the maintenance instruction —
-   tell the implementing agent to keep that file in sync as the implementation
-   changes across iteration loops.
+   covering mitigation — per the `references/assessment-file.md` schema.
+
+   **Persist a durable snapshot:** as your last action, invoke the vetted helper
+   `"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" save-assessment` (on Codex,
+   `${PLUGIN_ROOT}`) — a **fixed, argument-less command**. It copies the finalized
+   `.claude/.temp/assessment.md` into the durable `ingrain-securityAssessment/`
+   folder as a timestamped snapshot. **Do not compose the `cp`/`mkdir` yourself and
+   do not pass the task title as an argument** — the helper reads the title from the
+   assessment file so untrusted, repo-derived text never reaches the command line.
+
+   Then **fold two things into the plan you produce**: (1) a link to
+   `.claude/.temp/assessment.md` (the living working copy the maintenance
+   instruction tracks) — noting the durable snapshot now saved under
+   `ingrain-securityAssessment/`, which is git-ignored by default (share one with
+   `git add -f <file>`); and (2) the maintenance instruction — tell the implementing
+   agent to keep that file in sync as the implementation changes across iteration
+   loops.
 
    This is the last step — close with a one-line verdict. The adopted mitigations
    (and the threats they cover) are now part of the implementation plan; fold them

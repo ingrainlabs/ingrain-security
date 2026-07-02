@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# SessionStart hook for the ingrain-security plugin.
+#
+# Ensures the security-assessment folder exists in the USER's project (the repo
+# where Claude Code / Codex is running) so finalized analyses have a durable home
+# outside the gitignored .claude/ working tree. Creates it only when absent.
+#
+# Emits NOTHING on stdout: SessionStart stdout is injected into the session
+# context, and this hook has no context to add.
+#
+# Unlike sibling hooks this uses `set -uo pipefail` WITHOUT `-e`: a failed write
+# (a permission error, or a refused symlink target) must never abort the user's
+# session. Every write is guarded and the script always reaches `exit 0`.
+#
+# Shared by both platforms; registered in hooks/claude/hook.json and
+# hooks/codex/hook.json and dispatched through hooks/run-hook.cmd.
+
+set -uo pipefail
+
+# The user's PROJECT root — NOT the plugin root. Claude Code exports
+# CLAUDE_PROJECT_DIR (absolute project path). Codex exports no project-dir
+# variable but runs the hook with cwd = the workspace root, so PWD is the safe
+# fallback (run-hook.cmd does not change cwd). If Codex later adds one, extend to
+# ${CLAUDE_PROJECT_DIR:-${CODEX_PROJECT_DIR:-$PWD}}.
+project_root="${CLAUDE_PROJECT_DIR:-$PWD}"
+assessment_dir="${project_root}/ingrain-securityAssessment"
+
+# Never follow a pre-placed symlink at the target — a crafted repo could point it
+# outside the tree. Silent no-op; this hook must not abort the session (M4).
+if [ -L "${assessment_dir}" ]; then
+    exit 0
+fi
+
+# Create the folder on first run.
+if [ ! -d "${assessment_dir}" ]; then
+    mkdir -p "${assessment_dir}" 2>/dev/null || exit 0
+fi
+
+# Seed README.md on first creation only — never clobber a user-edited one.
+# printf (not a heredoc) — documented bash 5.3 heredoc hang.
+readme="${assessment_dir}/README.md"
+if [ ! -f "${readme}" ]; then
+    printf '%s\n' \
+        '# Security assessments' \
+        '' \
+        'Point-in-time security assessments produced by the `ingrain-security`' \
+        'plugin at the end of each security-review run.' \
+        '' \
+        'Each file is a timestamped snapshot named' \
+        '`assessment-<task-slug>-<timestamp>.md`. History is additive — each run' \
+        'adds a new file rather than overwriting an existing one.' \
+        '' \
+        'This folder is git-ignored by default (see the `.gitignore` here): an' \
+        'assessment can contain analysis of your private codebase, so it is not' \
+        'committed unless you explicitly `git add -f <file>` one to share it.' \
+        '' \
+        'The live working copy during a review is the uncommitted' \
+        '`.claude/.temp/assessment.md`; the files here are its durable snapshots.' \
+        > "${readme}" 2>/dev/null || true
+fi
+
+# Idempotently ensure the self-ignoring .gitignore (M5) so a routine
+# `git add -A` cannot sweep up the sensitive assessments. "Ensure present"
+# (not "only if new") so a folder created by an earlier version is retrofitted.
+ignore="${assessment_dir}/.gitignore"
+if [ ! -f "${ignore}" ]; then
+    printf '%s\n' \
+        '# Assessments here can contain analysis of a private codebase, so they' \
+        '# are ignored by default. Share one explicitly with: git add -f <file>' \
+        '*' \
+        '!.gitignore' \
+        > "${ignore}" 2>/dev/null || true
+fi
+
+# No stdout on purpose (see header).
+exit 0

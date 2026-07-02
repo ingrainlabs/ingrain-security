@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Finalize helper for the ingrain-security plugin.
+#
+# Copies the finalized, uncommitted working analysis
+# (.claude/.temp/assessment.md) into the durable ingrain-securityAssessment/
+# folder as a timestamped snapshot. The ingrain-security skill invokes this at
+# its finalize step as a FIXED, ARGUMENT-LESS command:
+#
+#     "${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" save-assessment
+#
+# Security (T1): the task title is model-authored free text derived from the
+# analyzed repo, so it is untrusted. It is READ FROM THE ASSESSMENT FILE here (a
+# data channel) and never passed on the command line — keeping it off argv, off
+# the Windows run-hook.cmd %2..%9 batch layer (where cmd.exe would interpret
+# metacharacters before bash runs), and out of any orchestrator string
+# interpolation. DO NOT add a positional argument to this script.
+
+set -euo pipefail
+
+project_root="${CLAUDE_PROJECT_DIR:-$PWD}"
+assessment_dir="${project_root}/ingrain-securityAssessment"
+source_file="${project_root}/.claude/.temp/assessment.md"
+
+# Nothing to sync if the working analysis is absent.
+if [ ! -f "${source_file}" ]; then
+    echo "save-assessment: no assessment at ${source_file}; nothing to sync" >&2
+    exit 0
+fi
+
+# Derive the filename from the task Title in the assessment file (M2). Read only
+# the first `Title:` line; the on-disk schema (references/assessment-file.md)
+# writes it as a single line under `## Task`. Strip the label with parameter
+# expansion — no sed/awk, no untrusted data on any command line.
+title_line="$(grep -m1 -E '^Title:' "${source_file}" 2>/dev/null || true)"
+raw_title="${title_line#Title:}"
+
+# Normalize to a slug, THEN fail-closed on an anchored allowlist (M3). The tr
+# pipeline can only emit [a-z0-9-]; the case check is the authoritative backstop
+# so a slug can never carry `/`, `..`, NUL, or a leading `-`.
+slug="$(printf '%s' "${raw_title}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | tr -s '-')"
+slug="${slug#-}"
+slug="${slug%-}"
+slug="${slug:0:80}"
+slug="${slug%-}"
+case "${slug}" in
+    "" | *[!a-z0-9-]*) slug="" ;;  # unusable -> timestamp-only fallback
+esac
+
+timestamp="$(date +%Y%m%d-%H%M%S)"
+if [ -n "${slug}" ]; then
+    dest_name="assessment-${slug}-${timestamp}.md"
+else
+    dest_name="assessment-${timestamp}.md"
+fi
+
+# Never follow a pre-placed symlink at the target — this is where the sensitive
+# assessment lands, so a planted link must not redirect it outside the repo (M4).
+if [ -L "${assessment_dir}" ]; then
+    echo "save-assessment: refusing symlinked target ${assessment_dir}" >&2
+    exit 1
+fi
+
+mkdir -p "${assessment_dir}"
+cp -- "${source_file}" "${assessment_dir}/${dest_name}"
+
+echo "save-assessment: wrote ingrain-securityAssessment/${dest_name}" >&2
+exit 0

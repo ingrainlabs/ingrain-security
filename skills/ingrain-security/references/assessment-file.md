@@ -12,6 +12,20 @@ exactly — it is the on-disk projection of the canonical ingrain analysis schem
 - **Path:** `.claude/.temp/assessment.md`, relative to the working
   project root — a **local working artifact** in Claude's own folder (`.claude/`),
   not committed. `.claude/` is git-ignored by convention; keep the file uncommitted.
+- **Committed snapshot(s).** At finalize (SKILL.md Step 7, and the Gate 1
+  none-selected close) the orchestrator invokes the vetted, argument-less helper
+  `hooks/run-hook.cmd save-assessment`, which copies this temp file into
+  `ingrain-securityAssessment/assessment-<task-slug>-<timestamp>.md` at the project
+  root. The helper — not the orchestrator — owns the copy: it reads the task
+  `Title` from this file (never off the command line), normalizes and allowlist-
+  validates the slug, and refuses a symlinked target. The folder is created by the
+  `ensure-assessment-dir` SessionStart hook. Snapshots are **additive** — each run
+  writes a new timestamped file, never overwriting an earlier one. The folder is
+  **self-ignoring** (an inner `.gitignore` of `*` + `!.gitignore`), so snapshots do
+  not appear in `git status`; sharing one is an explicit `git add -f <file>` opt-in.
+  Relationship: `.claude/.temp/assessment.md` is the single **living, uncommitted**
+  working copy that workers write and the Maintenance instruction tracks; the folder
+  holds the **frozen** snapshots of it over time.
 - **Hand-off medium.** Workers write their sections and return to the orchestrator
   only a branch keyword plus a one-line pointer. The orchestrator owns the
   title/banner and the finalize; it moves data between workers by pointer and does

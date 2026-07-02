@@ -8,6 +8,11 @@
             "type": "command",
             "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" session-start",
             "statusMessage": "Loading ingrain-security context"
+          },
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" ensure-assessment-dir",
+            "statusMessage": "Preparing security-assessment folder"
           }
         ]
       }
