@@ -55,7 +55,7 @@ if [ ! -f "${readme}" ]; then
         'committed unless you explicitly `git add -f <file>` one to share it.' \
         '' \
         'The live working copy during a review is the uncommitted' \
-        '`.claude/.temp/assessment.md`; the files here are its durable snapshots.' \
+        '`.claude/.temp/assessment-<run>.md`; the files here are its durable snapshots.' \
         > "${readme}" 2>/dev/null || true
 fi
 

@@ -2,30 +2,38 @@
 
 Defines the local analysis artifact the `ingrain-security` review persists and hands
 off through. The orchestrator creates and finalizes it; each worker writes its own
-named section (see `SKILL.md` → **How to dispatch a worker**). Follow this schema
+named section. Follow this schema
 exactly — it is the on-disk projection of the canonical ingrain analysis schema
-(`PThreatSchema`, `PMitigationSchema`, `PRiskSchema`, `PAcceptanceStatusSchema`,
-`PTaskSchema`), so the two never drift.
+so the two never drift.
 
 ## Nature
 
-- **Path:** `.claude/.temp/assessment.md`, relative to the working
-  project root — a **local working artifact** in Claude's own folder (`.claude/`),
-  not committed. `.claude/` is git-ignored by convention; keep the file uncommitted.
+- **Path (per run):** a uniquely-named file under `.claude/.temp/`, relative to the
+  working project root, so two reviews running at once never share (and clobber) one
+  file. The orchestrator mints the path once at the start of the review and uses it
+  throughout (see SKILL.md → **The assessment file**): in plan mode
+  `.claude/.temp/assessment-<plan-basename>.md` (mirroring the active
+  `.claude/plans/<plan-basename>.md`); ad-hoc
+  `.claude/.temp/assessment-<YYYYMMDD-HHMMSS>-<rand>.md`. Both keep the `assessment-`
+  prefix. It is a **local working artifact** in Claude's own folder (`.claude/`), not
+  committed. `.claude/` is git-ignored by convention; keep the file uncommitted.
 - **Committed snapshot(s).** At finalize (SKILL.md Step 7, and the Gate 1
   none-selected close) the orchestrator invokes the vetted, argument-less helper
-  `hooks/run-hook.cmd save-assessment`, which copies this temp file into
+  `hooks/run-hook.cmd save-assessment`, which copies the current review's working
+  file — **the most-recently-modified `.claude/.temp/assessment*.md`, found by globbing
+  (no path argument)** — into
   `ingrain-securityAssessment/assessment-<task-slug>-<timestamp>.md` at the project
   root. The helper — not the orchestrator — owns the copy: it reads the task
-  `Title` from this file (never off the command line), normalizes and allowlist-
-  validates the slug, and refuses a symlinked target. The folder is created by the
+  `Title` from that file (never off the command line), normalizes and allowlist-
+  validates the slug, and **refuses a symlinked source or target** so a planted link
+  can't be read or written through. The folder is created by the
   `ensure-assessment-dir` SessionStart hook. Snapshots are **additive** — each run
   writes a new timestamped file, never overwriting an earlier one. The folder is
   **self-ignoring** (an inner `.gitignore` of `*` + `!.gitignore`), so snapshots do
   not appear in `git status`; sharing one is an explicit `git add -f <file>` opt-in.
-  Relationship: `.claude/.temp/assessment.md` is the single **living, uncommitted**
-  working copy that workers write and the Maintenance instruction tracks; the folder
-  holds the **frozen** snapshots of it over time.
+  Relationship: the per-run `.claude/.temp/assessment-<run>.md` is the **living,
+  uncommitted** working copy that workers write and the Maintenance instruction tracks;
+  the folder holds the **frozen** snapshots of it over time.
 - **Hand-off medium.** Workers write their sections and return to the orchestrator
   only a branch keyword plus a one-line pointer. The orchestrator owns the
   title/banner and the finalize; it moves data between workers by pointer and does
@@ -48,10 +56,9 @@ exactly — it is the on-disk projection of the canonical ingrain analysis schem
 ## Schema
 
 Every field below is **required** unless marked optional, and every enumerated field
-must use **exactly one** of the listed values (lower-case, verbatim). This mirrors
-the Zod schema field-for-field.
+must use **exactly one** of the listed values (lower-case, verbatim).
 
-### `## Task` — from `PTaskSchema`
+### `## Task` 
 - **Title** — string.
 - **Latest stage** — one of `planning` | `development` | `review`.
 

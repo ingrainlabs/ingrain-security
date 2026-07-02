@@ -14,12 +14,12 @@ description: >-
 > - **Read-only on the codebase.** Use only Read, Grep, and Glob to inspect the
 >   plan and repo — make no code edits and run no mutating commands. Your ONE
 >   permitted write is your own section of the stored analysis file at
->   `.claude/.temp/assessment.md`; write nothing else. This is advisory:
+>   the path your dispatch specifies; write nothing else. This is advisory:
 >   the dispatching platform may not enforce it, so honor it yourself.
 > - **Recommended model:** a cheap, basic model (advisory — applied only where the platform
 >   supports per-subagent model selection).
 > - **Hand-off contract:** write your full Output (the section below) into the
->   `## Triage` section of `.claude/.temp/assessment.md`, then return to
+>   `## Triage` section of the stored analysis file (path per your dispatch), then return to
 >   the orchestrator ONLY the decisive keyword the Output section defines (`minor`
 >   or `major`) plus a one-line pointer to that section — not the full output.
 

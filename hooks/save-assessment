@@ -1,29 +1,46 @@
 #!/usr/bin/env bash
 # Finalize helper for the ingrain-security plugin.
 #
-# Copies the finalized, uncommitted working analysis
-# (.claude/.temp/assessment.md) into the durable ingrain-securityAssessment/
-# folder as a timestamped snapshot. The ingrain-security skill invokes this at
-# its finalize step as a FIXED, ARGUMENT-LESS command:
+# Copies the current review's working analysis — the most-recently-modified
+# .claude/.temp/assessment*.md (the working file is uniquely named per run) —
+# into the durable ingrain-securityAssessment/ folder as a timestamped snapshot.
+# The ingrain-security skill invokes this at its finalize step as a FIXED,
+# ARGUMENT-LESS command:
 #
 #     "${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" save-assessment
 #
-# Security (T1): the task title is model-authored free text derived from the
-# analyzed repo, so it is untrusted. It is READ FROM THE ASSESSMENT FILE here (a
-# data channel) and never passed on the command line — keeping it off argv, off
-# the Windows run-hook.cmd %2..%9 batch layer (where cmd.exe would interpret
-# metacharacters before bash runs), and out of any orchestrator string
-# interpolation. DO NOT add a positional argument to this script.
+# Security: the working file is found by globbing (NO path argument), and the
+# task title is READ FROM THAT FILE, never passed on the command line — keeping
+# untrusted / LLM-minted data off argv and off the Windows run-hook.cmd %2..%9
+# batch layer (where cmd.exe interprets metacharacters before bash runs). DO NOT
+# add a positional argument to this script. Symlinked source files are skipped so
+# a planted link can't be read or copied out of the repo (T6).
 
 set -euo pipefail
 
 project_root="${CLAUDE_PROJECT_DIR:-$PWD}"
 assessment_dir="${project_root}/ingrain-securityAssessment"
-source_file="${project_root}/.claude/.temp/assessment.md"
+temp_dir="${project_root}/.claude/.temp"
 
-# Nothing to sync if the working analysis is absent.
-if [ ! -f "${source_file}" ]; then
-    echo "save-assessment: no assessment at ${source_file}; nothing to sync" >&2
+# Locate THIS review's working analysis WITHOUT a path argument: the
+# most-recently-modified assessment*.md in the temp dir (the working file is
+# uniquely named per run — plan basename in plan mode, timestamp+random ad-hoc).
+# Argument-less on purpose — no path crosses the command line. Skip symlinks so a
+# planted symlinked source is never read or copied out of the repo (T6).
+source_file=""
+shopt -s nullglob
+for candidate in "${temp_dir}"/assessment*.md; do
+    [ -L "${candidate}" ] && continue
+    [ -f "${candidate}" ] || continue
+    if [ -z "${source_file}" ] || [ "${candidate}" -nt "${source_file}" ]; then
+        source_file="${candidate}"
+    fi
+done
+shopt -u nullglob
+
+# Nothing to sync if there is no (non-symlink) working analysis.
+if [ -z "${source_file}" ]; then
+    echo "save-assessment: no assessment*.md in ${temp_dir}; nothing to sync" >&2
     exit 0
 fi
 

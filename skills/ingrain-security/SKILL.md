@@ -69,13 +69,13 @@ rather than pasting prior output into the prompt:
 ```
 Read references/<name>.md and follow it as your system prompt.
 You do no code or repo edits — use only Read/Grep/Glob on the codebase. Your ONE
-permitted write is your own section of the stored analysis file at
-.claude/.temp/assessment.md (section: <## Section for this worker>),
+permitted write is your own section of the stored analysis file for this run at
+<the run's assessment file — e.g. .claude/.temp/assessment-<plan-basename>.md> (section: <## Section for this worker>),
 written to the schema in references/assessment-file.md — use exactly its fields and
 enum values.
 INPUT:
 <the finished, detailed implementation plan; plus POINTERS to the sections this
-worker must read — e.g. "read .claude/.temp/assessment.md § Threats and
+worker must read — e.g. "read <the run's assessment file> § Threats and
 § Threat critique" — on revision rounds, the pointer to the prior draft's section +
 the critic's itemized feedback>
 Write your full Output into your section of the assessment file, then RETURN ONLY:
@@ -110,7 +110,12 @@ none**. Always do this in **two distinct steps, in this order**:
 1. **Display the information first.** Before asking anything, present the full
    findings to the user as a **Markdown table** — one row per finding, with the
    columns the gate step specifies. The table is where the detail lives, so the
-   user can read and compare every finding in one place before deciding.
+   user can read and compare every finding in one place before deciding. In the
+   same message, **name the plan file** these decisions feed into (in plan mode,
+   the active plan-file path, e.g. `.claude/plans/<name>.md`; ad-hoc, the inline
+   plan you are building — see **The plan file**), so the user sees where the
+   selected findings will land. This is a **mention only** — nothing is written to
+   the plan file at the gates; the write happens at finalize.
 2. **Then present the selection windows.** Only after the table is displayed,
    present the findings as **multiple single-choice windows — one window per
    finding** — each a single **include/exclude** decision labeled by its tag +
@@ -134,12 +139,21 @@ rather than restating its full detail.
 
 ## The assessment file
 
-The review persists its analysis to a single local artifact —
-`.claude/.temp/assessment.md` — so the full security context survives
-past the plan into implementation. It is a **living document** and the **hand-off
-medium** between workers: each worker writes its own named section, the orchestrator
-frames and finalizes it, and the plan you produce links it and carries the
-**Maintenance** instruction for the implementing agent.
+The review persists its analysis to a single **per-run** local artifact under
+`.claude/.temp/`. **Mint its path once, at the start of the review, and use that exact
+path for every worker dispatch and at finalize** — so two reviews running at once never
+share (and clobber) one file:
+- **Plan mode:** `.claude/.temp/assessment-<plan-basename>.md`, where `<plan-basename>`
+  is the active plan file's name without `.md` (see **The plan file**) — the assessment
+  pairs 1:1 with the plan it analyzes.
+- **Ad-hoc mode (no plan file):** `.claude/.temp/assessment-<YYYYMMDD-HHMMSS>-<rand>.md`
+  (a timestamp plus a short random token, e.g. via `date` + `$RANDOM`).
+
+Keep the `assessment-` prefix either way — the finalize helper locates the file by it.
+The artifact is a **living document** and the **hand-off medium** between workers: each
+worker writes its own named section, the orchestrator frames and finalizes it, and the
+plan you produce links it and carries the **Maintenance** instruction for the
+implementing agent.
 
 Its **schema, section layout, and content template are defined in
 `references/assessment-file.md`** — follow that reference exactly. The schema mirrors
@@ -147,6 +161,20 @@ the canonical ingrain analysis schema (`PThreatSchema`, `PMitigationSchema`,
 `PRiskSchema`, `PAcceptanceStatusSchema`), so every enumerated field (`impact`,
 `likelihood`, `criticality`, `yield`, `effort`, and the Gate acceptance
 `accepted`/`rejected`/`uncertain`) must use exactly the values it lists.
+
+## The plan file
+
+The review folds its results into **the plan file** — the implementation plan the
+coding agent edits and executes downstream. This is **distinct from the assessment
+file**: the assessment file (the per-run `.claude/.temp/assessment-<run>.md`) is the security-analysis
+artifact the workers write; the plan file is the implementation plan the selected
+threats and adopted mitigations become part of.
+
+In **plan mode** it is a concrete on-disk file (e.g. `.claude/plans/<name>.md`); you
+already hold its path, since it is the file you are editing — **name it** when you
+reference it. In **ad-hoc mode** there is no file — the plan file is "the inline plan
+you are building" in the conversation. Reference the plan file at both gate displays
+(mention only — see **How to ask the user**) and write the results into it at finalize.
 
 ## Flow
 
@@ -177,9 +205,9 @@ flowchart TD
     gate2 -->|none selected| done
 ```
 
-Throughout the flow, each worker writes its own section of
-`.claude/.temp/assessment.md` and you pass the next worker a pointer to
-the sections it needs — the file is the shared state, so your own context stays lean.
+Throughout the flow, each worker writes its own section of **the run's assessment
+file** (the per-run path you minted) and you pass the next worker a pointer to the
+sections it needs — the file is the shared state, so your own context stays lean.
 
 ## Steps — in strict order
 
@@ -189,7 +217,8 @@ the sections it needs — the file is the shared state, so your own context stay
      into the plan — carry on building it.
    - If the verdict is `major`: keep its **Surfaces** notes — you forward them to
      the generator in Step 1 — and continue to run the full cycle. **Create the
-     assessment file** (`.claude/.temp/assessment.md`) with its title +
+     assessment file** at the per-run path (see **The assessment file** for how to
+     mint it) with its title +
      banner and the `## Task` section; the triage worker's `## Triage` section
      (verdict + Surfaces) is now in it. This is the hand-off medium for every step
      that follows — its schema and template live in `references/assessment-file.md`.
@@ -291,23 +320,28 @@ the sections it needs — the file is the shared state, so your own context stay
 
    **Persist a durable snapshot:** as your last action, invoke the vetted helper
    `"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" save-assessment` (on Codex,
-   `${PLUGIN_ROOT}`) — a **fixed, argument-less command**. It copies the finalized
-   `.claude/.temp/assessment.md` into the durable `ingrain-securityAssessment/`
-   folder as a timestamped snapshot. **Do not compose the `cp`/`mkdir` yourself and
-   do not pass the task title as an argument** — the helper reads the title from the
-   assessment file so untrusted, repo-derived text never reaches the command line.
+   `${PLUGIN_ROOT}`) — a **fixed, argument-less command**. It copies the current
+   review's assessment file — the newest `.claude/.temp/assessment*.md` — into the
+   durable `ingrain-securityAssessment/` folder as a timestamped snapshot. **Do not
+   compose the `cp`/`mkdir` yourself and do not pass any path or the task title as an
+   argument** — the helper finds the file by globbing and reads the title from it, so
+   no untrusted or per-run path text ever reaches the command line.
 
-   Then **fold two things into the plan you produce**: (1) a link to
-   `.claude/.temp/assessment.md` (the living working copy the maintenance
-   instruction tracks) — noting the durable snapshot now saved under
-   `ingrain-securityAssessment/`, which is git-ignored by default (share one with
-   `git add -f <file>`); and (2) the maintenance instruction — tell the implementing
-   agent to keep that file in sync as the implementation changes across iteration
-   loops.
+   Then **write the results into the plan file** (see **The plan file**) — the
+   implementation plan the coding agent edits and executes. Incorporate the selected
+   threats and adopted mitigations, and fold in two supporting things: (1) a link to
+   the run's assessment file (`.claude/.temp/assessment-<run>.md`, the living working
+   copy the maintenance instruction tracks) — noting the durable snapshot now saved
+   under `ingrain-securityAssessment/`,
+   which is git-ignored by default (share one with `git add -f <file>`); and (2) the
+   maintenance instruction — tell the implementing agent to keep that file in sync as
+   the implementation changes across iteration loops. In plan mode, **name the plan
+   file you write to** (e.g. `.claude/plans/<name>.md`); ad-hoc, this is the inline
+   plan you are building.
 
    This is the last step — close with a one-line verdict. The adopted mitigations
-   (and the threats they cover) are now part of the implementation plan; fold them
-   into the plan you present and continue planning.
+   (and the threats they cover) are now part of the plan file the coding agent
+   implements; incorporate them and continue planning.
 
 ## Red flags — stop if you catch yourself thinking…
 
@@ -337,7 +371,7 @@ the sections it needs — the file is the shared state, so your own context stay
   assessment artifact; it writes no code.
 - **Read-only on the codebase; two outputs.** Workers make **no code or repo
   edits** — Read/Grep/Glob on the codebase only — and their sole write is their own
-  section of the stored analysis file (`.claude/.temp/assessment.md`).
+  section of the stored analysis file (the per-run path the orchestrator minted).
   Restate that constraint in every dispatch, since without tool-level enforcement it
   is advisory. The process produces exactly two things: **the assessment file** (the
   hand-off medium the workers write, section by section, and you finalize) and

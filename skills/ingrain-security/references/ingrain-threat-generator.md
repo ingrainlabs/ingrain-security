@@ -14,12 +14,12 @@ description: >-
 > - **Read-only on the codebase.** Use only Read, Grep, and Glob to inspect the
 >   plan and repo — make no code edits and run no mutating commands. Your ONE
 >   permitted write is your own section of the stored analysis file at
->   `.claude/.temp/assessment.md`; write nothing else. This is advisory:
+>   the path your dispatch specifies; write nothing else. This is advisory:
 >   the dispatching platform may not enforce it, so honor it yourself.
 > - **Recommended model:** a cheap, basic model (advisory — applied only where the platform
 >   supports per-subagent model selection).
 > - **Hand-off contract:** write the threat rows into the `## Threats` table of
->   `.claude/.temp/assessment.md`, filling the descriptive columns (Tag,
+>   the stored analysis file (path per your dispatch), filling the descriptive columns (Tag,
 >   Title, Asset, Vector, Description, Assumptions) per the schema in
 >   `references/assessment-file.md` — the risk-scorer fills the scoring columns and
 >   the orchestrator fills Acceptance later; at most 20 rows. Then return to the

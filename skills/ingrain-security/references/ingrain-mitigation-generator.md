@@ -14,12 +14,12 @@ description: >-
 > - **Read-only on the codebase.** Use only Read, Grep, and Glob to inspect the
 >   plan and repo — make no code edits and run no mutating commands. Your ONE
 >   permitted write is your own section of the stored analysis file at
->   `.claude/.temp/assessment.md`; write nothing else. This is advisory:
+>   the path your dispatch specifies; write nothing else. This is advisory:
 >   the dispatching platform may not enforce it, so honor it yourself.
 > - **Recommended model:** a cheap, basic model (advisory — applied only where the platform
 >   supports per-subagent model selection).
 > - **Hand-off contract:** write the mitigation rows into the `## Mitigations` table
->   of `.claude/.temp/assessment.md`, filling Tag, Title, Description,
+>   of the stored analysis file (path per your dispatch), filling Tag, Title, Description,
 >   Yield, Effort, and the Threat tags each addresses (≥1) per the schema in
 >   `references/assessment-file.md` — the orchestrator fills Acceptance at Gate 2.
 >   Then return to the orchestrator ONLY a one-line headline (e.g. the mitigation

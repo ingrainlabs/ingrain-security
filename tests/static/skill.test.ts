@@ -67,7 +67,7 @@ Deno.test("SKILL.md: documents the assessment file, its path, and living-documen
   const md = await Deno.readTextFile(SKILL);
   // Dedicated section and the concrete local path.
   assertStringIncludes(md, "## The assessment file");
-  assertStringIncludes(md, ".claude/.temp/assessment.md");
+  assertStringIncludes(md, ".claude/.temp/assessment-");
   // It is written/updated as a living document.
   assertStringIncludes(md.toLowerCase(), "living document");
   // The file's schema/template is defined in a dedicated reference file.
@@ -77,7 +77,7 @@ Deno.test("SKILL.md: documents the assessment file, its path, and living-documen
 Deno.test("assessment-file.md: defines the strict schema mirroring the canonical Zod schema", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
   // The concrete artifact path.
-  assertStringIncludes(md, ".claude/.temp/assessment.md");
+  assertStringIncludes(md, ".claude/.temp/assessment-");
   // Anchored to the canonical ingrain analysis schema.
   for (const s of ["PThreatSchema", "PMitigationSchema", "PRiskSchema"]) {
     assertStringIncludes(md, s);

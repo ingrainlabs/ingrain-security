@@ -54,8 +54,10 @@ for (const name of WORKERS) {
       assertStringIncludes(body.toLowerCase(), "read-only");
       assertStringIncludes(body, "Read, Grep, and Glob");
       assertStringIncludes(body.toLowerCase(), "make no code edits");
-      // The sole permitted write is the worker's own section of the assessment file.
-      assertStringIncludes(body, ".claude/.temp/assessment.md");
+      // The sole permitted write is the worker's own section of the stored analysis
+      // file, located by the path the dispatch specifies (per-run, not a fixed literal).
+      assertStringIncludes(body, "stored analysis file");
+      assertStringIncludes(body, "path your dispatch specifies");
     });
 
     await t.step("ROLE header carries a recommended model", () => {

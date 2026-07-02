@@ -8,7 +8,7 @@ differently onto each host. The dispatch *prompt* is always the same; only the
 
 Always restate the constraint inline in the dispatch: "read-only on the codebase —
 use only Read/Grep/Glob and make no code edits; your only write is your own section
-of `.claude/.temp/assessment.md`."
+of the stored analysis file at the path this dispatch names."
 
 ## Host with a subagent / task primitive
 
@@ -31,7 +31,7 @@ isolation, and the main session is write-capable — so:
 
 - Keep workers off the codebase by discipline: a worker does no code or repo edits;
   its sole write is its own section of the stored analysis file
-  (`.claude/.temp/assessment.md`).
+  (at the path the dispatch specifies).
 - Run one worker step at a time, in strict order — never reorder or parallelize.
 - The orchestrator's writes — finalizing the assessment file and the two plan-file
   writes at Gate 1 and Gate 2 — happen outside worker steps. Hand off between workers

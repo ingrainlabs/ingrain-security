@@ -14,12 +14,12 @@ description: >-
 > - **Read-only on the codebase.** Use only Read, Grep, and Glob to inspect the
 >   plan and repo — make no code edits and run no mutating commands. Your ONE
 >   permitted write is your own section of the stored analysis file at
->   `.claude/.temp/assessment.md`; write nothing else. This is advisory:
+>   the path your dispatch specifies; write nothing else. This is advisory:
 >   the dispatching platform may not enforce it, so honor it yourself.
 > - **Recommended model:** a cheap, basic model (advisory — applied only where the platform
 >   supports per-subagent model selection).
 > - **Hand-off contract:** read the frozen threats from the `## Threats` section of
->   `.claude/.temp/assessment.md`, fill each threat row's scoring columns
+>   the stored analysis file (path per your dispatch), fill each threat row's scoring columns
 >   there (Impact, Likelihood, Risk score, Criticality, Justification), and write the
 >   plan-level residual risk into the `## Risk score` section — following the schema in
 >   `references/assessment-file.md` exactly. Then return to the orchestrator ONLY the
