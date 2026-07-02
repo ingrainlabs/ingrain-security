@@ -62,6 +62,32 @@ Deno.test("SKILL.md: documents the read-reference dispatch mechanism", async () 
   assertStringIncludes(md.toLowerCase(), "read-only");
 });
 
+Deno.test("SKILL.md: documents the assessment file, its path, and living-document behavior", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  // Dedicated section and the concrete local path.
+  assertStringIncludes(md, "## The assessment file");
+  assertStringIncludes(md, ".claude/ingrain-security/assessment.md");
+  // It is written/updated as a living document.
+  assertStringIncludes(md.toLowerCase(), "living document");
+});
+
+Deno.test("SKILL.md: documents the pointer-based hand-off and context-window discipline", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  // Workers hand off via pointers, not by pasting full content.
+  assertStringIncludes(md.toLowerCase(), "pointer");
+  // The orchestrator does not read the full running analysis into its context.
+  assertStringIncludes(md.toLowerCase(), "running analysis");
+});
+
+Deno.test("SKILL.md: folds the assessment link + maintenance instruction into the plan", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  // A maintenance instruction is aimed at the downstream implementing agent.
+  assertStringIncludes(md, "Maintenance");
+  assertStringIncludes(md, "implementing agent");
+  // The file is meant to stay in sync as implementation evolves.
+  assertStringIncludes(md.toLowerCase(), "in sync");
+});
+
 Deno.test("platform-dispatch.md: covers the subagent primitive and the fallback", async () => {
   const ref = `${ROOT}skills/ingrain-security/references/platform-dispatch.md`;
   const md = await Deno.readTextFile(ref);

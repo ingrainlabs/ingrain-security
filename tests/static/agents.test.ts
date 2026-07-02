@@ -6,9 +6,10 @@
  * (skills/ingrain-security/references/<name>.md), so the read-only guarantee is
  * advisory prose in the ROLE header rather than a platform-enforced `tools:`
  * frontmatter list. These checks guard that advisory contract: every worker
- * still declares itself read-only (Read/Grep/Glob, no edits), carries a
- * recommended model, and an anti-trigger description so it isn't fired directly
- * outside the orchestrator.
+ * still declares itself read-only on the codebase (Read/Grep/Glob, no code
+ * edits) with its sole write being its own section of the stored assessment
+ * file, carries a recommended model, and an anti-trigger description so it isn't
+ * fired directly outside the orchestrator.
  */
 
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
@@ -49,10 +50,12 @@ for (const name of WORKERS) {
       assertStringIncludes(description.toLowerCase(), "do not invoke directly");
     });
 
-    await t.step("ROLE header declares read-only with the allowed tools", () => {
+    await t.step("ROLE header declares codebase read-only with the allowed tools", () => {
       assertStringIncludes(body.toLowerCase(), "read-only");
       assertStringIncludes(body, "Read, Grep, and Glob");
-      assertStringIncludes(body.toLowerCase(), "make no edits");
+      assertStringIncludes(body.toLowerCase(), "make no code edits");
+      // The sole permitted write is the worker's own section of the assessment file.
+      assertStringIncludes(body, ".claude/ingrain-security/assessment.md");
     });
 
     await t.step("ROLE header carries a recommended model", () => {

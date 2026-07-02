@@ -1,12 +1,14 @@
 # Platform dispatch reference
 
-Each worker is dispatched as a **fresh read-only subagent** told to read its
-reference file at `references/<name>.md` and follow it. That abstraction maps
+Each worker is dispatched as a **fresh worker subagent** (read-only on the
+codebase; its sole write is its own section of the assessment file) told to read
+its reference file at `references/<name>.md` and follow it. That abstraction maps
 differently onto each host. The dispatch *prompt* is always the same; only the
 *mechanism* below changes.
 
-Always restate "you are read-only; use only Read/Grep/Glob; make no
-edits" inline in the dispatch.
+Always restate the constraint inline in the dispatch: "read-only on the codebase —
+use only Read/Grep/Glob and make no code edits; your only write is your own section
+of `.claude/ingrain-security/assessment.md`."
 
 ## Host with a subagent / task primitive
 
@@ -16,9 +18,9 @@ worker per call and read the returned text. Where the host supports a per-subage
 model, set the worker's recommended tier; otherwise ignore it (advisory).
 
 > Note: a general-purpose subagent typically has write-capable tools available.
-> The read-only guarantee here is advisory — enforced by the prompt and the
-> worker's own ROLE header, not by a tool allow-list. Keep workers strictly
-> read-only.
+> The constraint here is advisory — enforced by the prompt and the worker's own
+> ROLE header, not by a tool allow-list. Keep workers off the codebase (no code
+> edits); their only write is their own section of the assessment file.
 
 ## No subagent primitive — sequential in-context fallback
 
@@ -27,10 +29,15 @@ session**: read `references/<name>.md`, follow it on the current INPUT, capture
 the output, then move to the next step. This is the weakest mode — there is no
 isolation, and the main session is write-capable — so:
 
-- Keep workers read-only by discipline: do not let a worker step perform edits.
+- Keep workers off the codebase by discipline: a worker does no code or repo edits;
+  its sole write is its own section of the stored analysis file
+  (`.claude/ingrain-security/assessment.md`).
 - Run one worker step at a time, in strict order — never reorder or parallelize.
-- The two plan-file writes still happen only at Gate 1 and Gate 2, never inside a
-  worker step.
+- The orchestrator's writes — finalizing the assessment file and the two plan-file
+  writes at Gate 1 and Gate 2 — happen outside worker steps. Hand off between workers
+  by pointing them at sections of the assessment file rather than threading full
+  content; the orchestrator does not read the full running analysis into its own
+  context, only compact statuses and the bounded gate slices.
 
 ## Selection windows (Gate 1 and Gate 2)
 
