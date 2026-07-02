@@ -55,7 +55,7 @@ for (const name of WORKERS) {
       assertStringIncludes(body, "Read, Grep, and Glob");
       assertStringIncludes(body.toLowerCase(), "make no code edits");
       // The sole permitted write is the worker's own section of the assessment file.
-      assertStringIncludes(body, ".claude/ingrain-security/assessment.md");
+      assertStringIncludes(body, ".claude/.temp/assessment.md");
     });
 
     await t.step("ROLE header carries a recommended model", () => {

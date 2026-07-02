@@ -11,6 +11,7 @@ import { assertOrder, parseFrontmatter } from "../lib/matchers.ts";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
+const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/assessment-file.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 
 const WORKERS = [
@@ -66,9 +67,29 @@ Deno.test("SKILL.md: documents the assessment file, its path, and living-documen
   const md = await Deno.readTextFile(SKILL);
   // Dedicated section and the concrete local path.
   assertStringIncludes(md, "## The assessment file");
-  assertStringIncludes(md, ".claude/ingrain-security/assessment.md");
+  assertStringIncludes(md, ".claude/.temp/assessment.md");
   // It is written/updated as a living document.
   assertStringIncludes(md.toLowerCase(), "living document");
+  // The file's schema/template is defined in a dedicated reference file.
+  assertStringIncludes(md, "references/assessment-file.md");
+});
+
+Deno.test("assessment-file.md: defines the strict schema mirroring the canonical Zod schema", async () => {
+  const md = await Deno.readTextFile(ASSESSMENT_REF);
+  // The concrete artifact path.
+  assertStringIncludes(md, ".claude/.temp/assessment.md");
+  // Anchored to the canonical ingrain analysis schema.
+  for (const s of ["PThreatSchema", "PMitigationSchema", "PRiskSchema"]) {
+    assertStringIncludes(md, s);
+  }
+  // Enumerated fields carry their exact allowed values.
+  assertStringIncludes(md, "very high"); // likelihood
+  for (const v of ["accepted", "rejected", "uncertain"]) {
+    assertStringIncludes(md, v); // acceptance status
+  }
+  // Key constraints from the schema are stated.
+  assertStringIncludes(md, "256"); // justification max length
+  assertStringIncludes(md, "20"); // max threats
 });
 
 Deno.test("SKILL.md: documents the pointer-based hand-off and context-window discipline", async () => {

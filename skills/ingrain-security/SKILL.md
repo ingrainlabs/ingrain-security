@@ -70,10 +70,12 @@ rather than pasting prior output into the prompt:
 Read references/<name>.md and follow it as your system prompt.
 You do no code or repo edits — use only Read/Grep/Glob on the codebase. Your ONE
 permitted write is your own section of the stored analysis file at
-.claude/ingrain-security/assessment.md (section: <## Section for this worker>).
+.claude/.temp/assessment.md (section: <## Section for this worker>),
+written to the schema in references/assessment-file.md — use exactly its fields and
+enum values.
 INPUT:
 <the finished, detailed implementation plan; plus POINTERS to the sections this
-worker must read — e.g. "read .claude/ingrain-security/assessment.md § Threats and
+worker must read — e.g. "read .claude/.temp/assessment.md § Threats and
 § Threat critique" — on revision rounds, the pointer to the prior draft's section +
 the critic's itemized feedback>
 Write your full Output into your section of the assessment file, then RETURN ONLY:
@@ -132,56 +134,19 @@ rather than restating its full detail.
 
 ## The assessment file
 
-The review persists its analysis to a single local artifact so the full security
-context survives past the plan into implementation.
+The review persists its analysis to a single local artifact —
+`.claude/.temp/assessment.md` — so the full security context survives
+past the plan into implementation. It is a **living document** and the **hand-off
+medium** between workers: each worker writes its own named section, the orchestrator
+frames and finalizes it, and the plan you produce links it and carries the
+**Maintenance** instruction for the implementing agent.
 
-- **Path:** `.claude/ingrain-security/assessment.md`, relative to the working
-  project root. It is a **local working artifact** kept in Claude's own folder
-  (`.claude/`) — a scratch/temp file, not committed. `.claude/` is git-ignored by
-  convention; keep the file uncommitted.
-- **It is the hand-off medium between workers.** Each worker writes **its own named
-  section** of this file — `## Triage`, `## Threats`, `## Threat critique`,
-  `## Risk scores`, `## Mitigations`, `## Mitigation critique` — and returns to you
-  only its branch keyword plus a one-line pointer to the section it wrote (see **How
-  to dispatch a worker**). You own the file's framing (title/banner), the gate
-  tables, and the final finalize; workers touch only their own section and make no
-  code or repo edits.
-- **It is a living document.** Rewrite the relevant section at each commit point so
-  the file always mirrors the current frozen state — critic-loop revisions and
-  re-selection overwrite the prior contents of that section.
-
-**Content template** (Markdown):
-
-```markdown
-# Security assessment — <plan title>
-
-> Local working artifact produced by ingrain-security — keep in sync as the
-> implementation evolves (see Maintenance below). Not committed.
-
-## Triage
-Verdict: <minor|major>
-Surfaces:
-- …
-
-## Threats (frozen)
-| Tag | Title | Relevant surface | Risk (score · criticality) | Selected (Gate 1) |
-|-----|-------|------------------|----------------------------|-------------------|
-| T1  | …     | …                | high · 78                  | ✅ selected        |
-| T2  | …     | …                | medium · 40                | ⛔ excluded (accepted risk) |
-
-## Mitigations (frozen)
-| Mitigation | Addresses | Adopted (Gate 2) | Yield | Effort |
-|------------|-----------|------------------|-------|--------|
-| …          | T1        | ✅ adopted        | …     | …      |
-
-## Coverage / open items
-- <any selected threat left without an adopted mitigation>
-
-## Maintenance (for the implementing agent)
-Update this file whenever the implementation diverges from the analysis — new
-surface, a threat's status changes, or a mitigation is added, dropped, or altered.
-Keep the Selected / Adopted columns and coverage honest against the code you write.
-```
+Its **schema, section layout, and content template are defined in
+`references/assessment-file.md`** — follow that reference exactly. The schema mirrors
+the canonical ingrain analysis schema (`PThreatSchema`, `PMitigationSchema`,
+`PRiskSchema`, `PAcceptanceStatusSchema`), so every enumerated field (`impact`,
+`likelihood`, `criticality`, `yield`, `effort`, and the Gate acceptance
+`accepted`/`rejected`/`uncertain`) must use exactly the values it lists.
 
 ## Flow
 
@@ -213,7 +178,7 @@ flowchart TD
 ```
 
 Throughout the flow, each worker writes its own section of
-`.claude/ingrain-security/assessment.md` and you pass the next worker a pointer to
+`.claude/.temp/assessment.md` and you pass the next worker a pointer to
 the sections it needs — the file is the shared state, so your own context stays lean.
 
 ## Steps — in strict order
@@ -224,19 +189,22 @@ the sections it needs — the file is the shared state, so your own context stay
      into the plan — carry on building it.
    - If the verdict is `major`: keep its **Surfaces** notes — you forward them to
      the generator in Step 1 — and continue to run the full cycle. **Create the
-     assessment file** (`.claude/ingrain-security/assessment.md`) with its title +
-     banner; the triage worker's `## Triage` section (verdict + Surfaces) is now in
-     it. This is the hand-off medium for every step that follows.
+     assessment file** (`.claude/.temp/assessment.md`) with its title +
+     banner and the `## Task` section; the triage worker's `## Triage` section
+     (verdict + Surfaces) is now in it. This is the hand-off medium for every step
+     that follows — its schema and template live in `references/assessment-file.md`.
 1. **Threats** — dispatch the `ingrain-threat-generator` worker, pointing it at the plan
    **and the `## Triage` section** (Surfaces are starting points, not a ceiling). It writes
-   the threat list (`T1…`) into the `## Threats` section and returns a pointer.
+   the threat rows (descriptive columns, `T1…`, ≤20) into the `## Threats` table per the
+   `references/assessment-file.md` schema and returns a pointer.
 2. **Critique threats** *(loop, max 3)* — dispatch the `ingrain-threat-critic` worker,
    pointing it at the `## Threats` section. On `needs-revision`, re-dispatch
    `ingrain-threat-generator` with a pointer to `## Threats` + `## Threat critique` and
    repeat. Then **freeze** the threats (the frozen list lives in the `## Threats` section).
 3. **Risk score** — dispatch the `ingrain-risk-scorer` worker, pointing it at the frozen
-   `## Threats` section → per-threat 0–100 (likelihood × impact) plus an overall plan score
-   and criticality, written into `## Risk scores`.
+   `## Threats` section. It fills each row's scoring columns (Impact, Likelihood, Risk
+   score 0–100, Criticality, Justification) and writes the plan-level residual risk into
+   `## Risk score` — per the `references/assessment-file.md` schema.
 4. **Ask user — select which threats to address (Gate 1).** Follow the two-step
    display-then-ask pattern (see **How to ask the user**). The user is deciding
    per threat whether it is worth acting on, so they must understand each
@@ -265,10 +233,11 @@ the sections it needs — the file is the shared state, so your own context stay
    windows show at once, batch them in table order (highest risk first). The
    user may include any subset, including none (exclude every window).
 
-   To build the table, read only the bounded `## Threats` + `## Risk scores` slice of
-   the assessment file — not the whole running analysis. **After the user decides,
-   record each threat's outcome in the `Selected (Gate 1)` column** of the
-   `## Threats` section (✅ selected / ⛔ excluded — accepted risk).
+   To build the table, read only the bounded `## Threats` slice of the assessment
+   file — not the whole running analysis. **After the user decides, record each
+   threat's `Acceptance`** in the `## Threats` table (include → `accepted`, exclude →
+   `rejected`; `uncertain` only if the user is explicitly unsure), per the
+   `references/assessment-file.md` schema.
 
    - **1–N selected** — incorporate the selected threats into the plan; only
      they proceed to mitigation. Name the excluded ones in one line (e.g. "T2,
@@ -313,11 +282,12 @@ the sections it needs — the file is the shared state, so your own context stay
    - **None selected** — incorporate nothing; note that the selected threats
      remain unmitigated.
 
-   **Finalize the assessment file:** record each mitigation's outcome in the
-   `Adopted (Gate 2)` column of the `## Mitigations` section, and fill
-   `## Coverage / open items` with any selected threat left without an adopted
-   mitigation. Then **fold two things into the plan you produce**: (1) a link to
-   `.claude/ingrain-security/assessment.md`, and (2) the maintenance instruction —
+   **Finalize the assessment file:** record each mitigation's `Acceptance` in the
+   `## Mitigations` table (adopt → `accepted`, decline → `rejected`), and fill
+   `## Coverage / open items` with any `accepted` threat left without an `accepted`
+   covering mitigation — per the `references/assessment-file.md` schema. Then **fold
+   two things into the plan you produce**: (1) a link to
+   `.claude/.temp/assessment.md`, and (2) the maintenance instruction —
    tell the implementing agent to keep that file in sync as the implementation
    changes across iteration loops.
 
@@ -353,7 +323,7 @@ the sections it needs — the file is the shared state, so your own context stay
   assessment artifact; it writes no code.
 - **Read-only on the codebase; two outputs.** Workers make **no code or repo
   edits** — Read/Grep/Glob on the codebase only — and their sole write is their own
-  section of the stored analysis file (`.claude/ingrain-security/assessment.md`).
+  section of the stored analysis file (`.claude/.temp/assessment.md`).
   Restate that constraint in every dispatch, since without tool-level enforcement it
   is advisory. The process produces exactly two things: **the assessment file** (the
   hand-off medium the workers write, section by section, and you finalize) and

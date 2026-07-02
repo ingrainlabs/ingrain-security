@@ -1,0 +1,139 @@
+# Assessment file reference
+
+Defines the local analysis artifact the `ingrain-security` review persists and hands
+off through. The orchestrator creates and finalizes it; each worker writes its own
+named section (see `SKILL.md` → **How to dispatch a worker**). Follow this schema
+exactly — it is the on-disk projection of the canonical ingrain analysis schema
+(`PThreatSchema`, `PMitigationSchema`, `PRiskSchema`, `PAcceptanceStatusSchema`,
+`PTaskSchema`), so the two never drift.
+
+## Nature
+
+- **Path:** `.claude/.temp/assessment.md`, relative to the working
+  project root — a **local working artifact** in Claude's own folder (`.claude/`),
+  not committed. `.claude/` is git-ignored by convention; keep the file uncommitted.
+- **Hand-off medium.** Workers write their sections and return to the orchestrator
+  only a branch keyword plus a one-line pointer. The orchestrator owns the
+  title/banner and the finalize; it moves data between workers by pointer and does
+  not read the full running analysis into its own context. Section ownership:
+
+  | Section | Written by |
+  |---------|-----------|
+  | `## Task` | orchestrator (framing) |
+  | `## Triage` | `ingrain-relevance-triage` |
+  | `## Threats` | `ingrain-threat-generator` (descriptive columns) → `ingrain-risk-scorer` (scoring columns) → orchestrator (Acceptance at Gate 1) — **filled in stages** |
+  | `## Threat critique` | `ingrain-threat-critic` |
+  | `## Risk score` | `ingrain-risk-scorer` (plan-level residual) |
+  | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Acceptance at Gate 2) |
+  | `## Mitigation critique` | `ingrain-mitigation-critic` |
+  | `## Coverage / open items`, `## Maintenance` | orchestrator (finalize) |
+- **Living document.** Rewrite the relevant section at each commit point so the file
+  always mirrors the current frozen state — critic-loop revisions and re-selection
+  overwrite the prior contents of that section.
+
+## Schema
+
+Every field below is **required** unless marked optional, and every enumerated field
+must use **exactly one** of the listed values (lower-case, verbatim). This mirrors
+the Zod schema field-for-field.
+
+### `## Task` — from `PTaskSchema`
+- **Title** — string.
+- **Latest stage** — one of `planning` | `development` | `review`.
+
+### `## Triage` — the relevance-triage verdict
+- **Verdict** — `minor` | `major`.
+- **Security relevant** — `true` | `false`.
+- **Surfaces** — bullet list (present when `major`).
+
+### `## Threats` — a Markdown table, **at most 20 rows** (`PThreatModelSchema.max(20)`)
+
+One row per threat; one column per `PThreatSchema` field:
+
+| Column | Field | Constraint |
+|--------|-------|------------|
+| **Tag** | `tag` | `T<n>` (e.g. `T1`) |
+| **Title** | `title` | string |
+| **Asset** | `asset` | string |
+| **Vector** | `vector` | string |
+| **Description** | `description` | string |
+| **Assumptions** | `assumptions` | string |
+| **Impact** | `impact` | `critical` \| `high` \| `medium` \| `low` |
+| **Likelihood** | `likelihood` | `very high` \| `high` \| `medium` \| `low` |
+| **Risk score** | `risk.score` | integer `0`–`100` |
+| **Criticality** | `risk.criticality` | `low` \| `medium` \| `high` \| `critical` |
+| **Justification** | `justification` | string, **≤ 256 characters** |
+| **Acceptance** | `userFeedback.acceptance` | `accepted` \| `rejected` \| `uncertain` (optional until Gate 1) |
+
+**Gate 1 → Acceptance.** When the user decides at Gate 1, record each threat's
+`userFeedback.acceptance`: include → `accepted`, exclude → `rejected`. Use
+`uncertain` only if the user is explicitly unsure. Before Gate 1 the column is empty.
+
+### `## Risk score` — plan-level residual risk, from `PRiskSchema`
+- **Score** — integer `0`–`100`.
+- **Criticality** — `low` | `medium` | `high` | `critical`.
+
+### `## Mitigations` — a Markdown table, one column per `PMitigationSchema` field
+
+| Column | Field | Constraint |
+|--------|-------|------------|
+| **Tag** | `tag` | `M<n>` (e.g. `M1`) |
+| **Title** | `title` | string |
+| **Description** | `description` | string |
+| **Yield** | `yield` | `high` \| `medium` \| `low` |
+| **Effort** | `effort` | `high` \| `medium` \| `low` |
+| **Threat tags** | `threatTags` | **≥ 1** threat tag (e.g. `T1, T3`) |
+| **Acceptance** | `userFeedback.acceptance` | `accepted` \| `rejected` \| `uncertain` (optional until Gate 2) |
+
+**Gate 2 → Acceptance.** Record each mitigation's `userFeedback.acceptance`:
+adopt → `accepted`, decline → `rejected`; `uncertain` only if the user is unsure.
+
+### `## Coverage / open items`
+- Any threat with `acceptance = accepted` that has no mitigation with
+  `acceptance = accepted` covering it (via `threatTags`).
+
+### `## Maintenance (for the implementing agent)`
+- Instruction to keep the file in sync as the implementation evolves.
+
+## Template
+
+```markdown
+# Security assessment — <task title>
+
+> Local working artifact produced by ingrain-security — keep in sync as the
+> implementation evolves (see Maintenance below). Not committed.
+
+## Task
+Title: <task title>
+Latest stage: <planning|development|review>
+
+## Triage
+Verdict: <minor|major>
+Security relevant: <true|false>
+Surfaces:
+- …
+
+## Threats
+| Tag | Title | Asset | Vector | Description | Assumptions | Impact | Likelihood | Risk score | Criticality | Justification | Acceptance |
+|-----|-------|-------|--------|-------------|-------------|--------|------------|------------|-------------|---------------|------------|
+| T1  | …     | …     | …      | …           | …           | high   | medium     | 78         | high        | …             | accepted   |
+| T2  | …     | …     | …      | …           | …           | low    | low        | 40         | medium      | …             | rejected   |
+
+## Risk score
+Score: <0–100>
+Criticality: <low|medium|high|critical>
+
+## Mitigations
+| Tag | Title | Description | Yield | Effort | Threat tags | Acceptance |
+|-----|-------|-------------|-------|--------|-------------|------------|
+| M1  | …     | …           | high  | medium | T1          | accepted   |
+
+## Coverage / open items
+- <any accepted threat with no accepted mitigation covering it>
+
+## Maintenance (for the implementing agent)
+Update this file whenever the implementation diverges from the analysis — a new
+surface, a threat's acceptance changes, or a mitigation is added, dropped, or
+altered. Keep the Acceptance columns and coverage honest against the code you write,
+and keep every enumerated field within its allowed values.
+```

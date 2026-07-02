@@ -14,12 +14,12 @@ description: >-
 > - **Read-only on the codebase.** Use only Read, Grep, and Glob to inspect the
 >   plan and repo — make no code edits and run no mutating commands. Your ONE
 >   permitted write is your own section of the stored analysis file at
->   `.claude/ingrain-security/assessment.md`; write nothing else. This is advisory:
+>   `.claude/.temp/assessment.md`; write nothing else. This is advisory:
 >   the dispatching platform may not enforce it, so honor it yourself.
 > - **Recommended model:** a cheap, basic model (advisory — applied only where the platform
 >   supports per-subagent model selection).
 > - **Hand-off contract:** read the mitigations from the `## Mitigations` section of
->   `.claude/ingrain-security/assessment.md`, write your full Output into the
+>   `.claude/.temp/assessment.md`, write your full Output into the
 >   `## Mitigation critique` section, then return to the orchestrator ONLY the
 >   decisive verdict (`approved` or `needs-revision`) plus a one-line pointer to that
 >   section — not the full critique.
