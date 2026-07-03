@@ -161,7 +161,8 @@ share (and clobber) one file:
   is the active plan file's name without `.md` (see **The plan file**) — the assessment
   pairs 1:1 with the plan it analyzes.
 - **Ad-hoc mode (no plan file):** `.claude/.temp/assessment-<YYYYMMDD-HHMMSS>-<rand>.md`
-  (a timestamp plus a short random token, e.g. via `date` + `$RANDOM`).
+  (a timestamp plus a short random token — mint both yourself; don't shell out to
+  host-specific tooling).
 
 Keep the `assessment-` prefix either way — the finalize helper locates the file by it.
 The artifact is a **living document** and the **hand-off medium** between workers: each
@@ -354,8 +355,9 @@ sections it needs — the file is the shared state, so your own context stays le
    results and matches the schema template.
 
    **Persist a durable snapshot:** as your last action, invoke the vetted helper
-   `"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" scripts/save-assessment` (on Codex,
-   `${PLUGIN_ROOT}`) — a **fixed, argument-less command**. It copies the current
+   `"<plugin-root>/hooks/run-hook.cmd" scripts/save-assessment`, where `<plugin-root>`
+   is your host's plugin-root variable (`${CLAUDE_PLUGIN_ROOT}` on Claude Code,
+   `${PLUGIN_ROOT}` on Codex) — a **fixed, argument-less command**. It copies the current
    review's assessment file — the newest `.claude/.temp/assessment*.md` — into the
    durable `ingrain-securityAssessment/` folder as a timestamped snapshot. **Do not
    compose the `cp`/`mkdir` yourself and do not pass any path or the task title as an
