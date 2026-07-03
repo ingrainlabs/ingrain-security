@@ -20,6 +20,7 @@ Run all commands from this `tests/` directory.
 ```
 lib/      claudeRunner.ts (spawn helper) · matchers.ts (assertions) · sampleInputs.ts (canned plans) · reporter.ts (input/output printer)
 static/   offline lint of worker-reference frontmatter + advisory ROLE + skill/hook structure (no model calls)
+hooks/    assessment-hooks.test.ts — runs the assessment hook scripts under bash against a throwaway project (no model calls)
 agents/   agents.test.ts — table-driven live tests, one case per worker (dispatched via its reference file)
 skill/    trigger.test.ts (review starts / minor stops) · orchestration.test.ts (gated)
 ```
@@ -49,6 +50,12 @@ This is always on for the live tiers — Deno streams each test's output live (w
   anti-trigger description) and the advisory **read-only** ROLE header (`Read, Grep, Glob` only, no
   edits, recommended model), plus the orchestrator's step ordering, announce/stop phrases, the
   read-reference dispatch mechanism, and a valid SessionStart hook.
+- **hooks/** — offline, no model calls, but unlike `static/` it **executes** the assessment hook
+  scripts (`hooks/scripts/ensure-assessment-dir`, `hooks/scripts/save-assessment`) under `bash`
+  against a `Deno.makeTempDir()` project, asserting the folder/README/`.gitignore` are seeded, the
+  working analysis is copied to a `Title`-slugged timestamped snapshot, and the `CLAUDE_PROJECT_DIR`
+  / `$PWD` resolution behaves. Needs `bash` + coreutils (macOS/Linux); the Windows `cd && pwd`
+  normalization can't be exercised on POSIX and stays a manual check.
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
   `skills/ingrain-security/references/<name>.md` body as the system prompt with
   `--allowed-tools Read,Grep,Glob`. The test asserts the output's _shape_ (a verdict keyword, a
@@ -63,6 +70,7 @@ This is always on for the live tiers — Deno streams each test's output live (w
 
 ```bash
 deno task test:static        # offline, deterministic, ~0.3s — no auth needed
+deno task test:hooks         # offline, runs the assessment hook scripts under bash — no auth needed
 deno task test               # static + 6 live agents + skill trigger (default tier)
 deno task test:agents        # just the 6 live per-agent tests
 deno task test:integration   # everything, incl. full orchestration (slow)
@@ -123,6 +131,7 @@ earlier mode's transcript in its own subdir.
 | Command            | Model calls            | Time      | Auth |
 | ------------------ | ---------------------- | --------- | ---- |
 | `test:static`      | 0                      | < 1s      | no   |
+| `test:hooks`       | 0                      | < 1s      | no   |
 | `test`             | ~8 (6 agents + 2)      | a few min | yes  |
 | `test:integration` | + full cycle to Gate 1 | 5–20 min  | yes  |
 

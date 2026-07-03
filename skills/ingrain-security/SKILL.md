@@ -299,7 +299,7 @@ sections it needs — the file is the shared state, so your own context stays le
      instruction into the plan** (the `## Threats` section, with every threat marked
      excluded/accepted, is the preserved context), **delete the `## Threat critique`
      section (iteration scratch), and persist a durable snapshot
-     via the fixed, argument-less `run-hook.cmd save-assessment` helper** (see
+     via the fixed, argument-less `run-hook.cmd scripts/save-assessment` helper** (see
      Step 7), then continue building the plan.
 5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the
    user-selected threats — only those; excluded threats are out of scope. It writes the
@@ -354,7 +354,7 @@ sections it needs — the file is the shared state, so your own context stays le
    results and matches the schema template.
 
    **Persist a durable snapshot:** as your last action, invoke the vetted helper
-   `"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" save-assessment` (on Codex,
+   `"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" scripts/save-assessment` (on Codex,
    `${PLUGIN_ROOT}`) — a **fixed, argument-less command**. It copies the current
    review's assessment file — the newest `.claude/.temp/assessment*.md` — into the
    durable `ingrain-securityAssessment/` folder as a timestamped snapshot. **Do not

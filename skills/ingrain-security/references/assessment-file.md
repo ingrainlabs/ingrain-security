@@ -18,7 +18,7 @@ shape.
   committed. `.claude/` is git-ignored by convention; keep the file uncommitted.
 - **Committed snapshot(s).** At finalize (SKILL.md Step 7, and the Gate 1
   none-selected close) the orchestrator invokes the vetted, argument-less helper
-  `hooks/run-hook.cmd save-assessment`, which copies the current review's working
+  `hooks/run-hook.cmd scripts/save-assessment`, which copies the current review's working
   file — **the most-recently-modified `.claude/.temp/assessment*.md`, found by globbing
   (no path argument)** — into
   `ingrain-securityAssessment/assessment-<task-slug>-<timestamp>.md` at the project
@@ -26,7 +26,7 @@ shape.
   `Title` from that file (never off the command line), normalizes and allowlist-
   validates the slug, and **refuses a symlinked source or target** so a planted link
   can't be read or written through. The folder is created by the
-  `ensure-assessment-dir` SessionStart hook. Snapshots are **additive** — each run
+  `scripts/ensure-assessment-dir` SessionStart hook. Snapshots are **additive** — each run
   writes a new timestamped file, never overwriting an earlier one. The folder is
   **self-ignoring** (an inner `.gitignore` of `*` + `!.gitignore`), so snapshots do
   not appear in `git status`; sharing one is an explicit `git add -f <file>` opt-in.
