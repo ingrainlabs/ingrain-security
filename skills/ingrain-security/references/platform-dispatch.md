@@ -41,7 +41,15 @@ isolation, and the main session is write-capable — so:
 
 ## Selection windows (Gate 1 and Gate 2)
 
-At each gate, present a per-finding selection as **multiple single-choice
+At each gate, **first display the findings table in the conversation** (built
+from the bounded gate slice of the assessment file — see SKILL.md → **How to
+ask the user**), and in the same message **name the run's assessment file** (its
+`.claude/.temp/assessment-<run>.md` path) so the user can open the full analysis
+behind the table. This display step is host- and mode-independent: it happens on
+every platform, in plan mode and ad-hoc alike, before any selection mechanism
+below — the windows never substitute for it.
+
+Then present a per-finding selection as **multiple single-choice
 windows — one window per finding** — each a binary include/exclude decision
 labeled by tag + short title, with high/critical findings marked recommended.
 The user may select any subset, **including none**. The primitive is generic;

@@ -112,12 +112,24 @@ none**. Always do this in **two distinct steps, in this order**:
 1. **Display the information first.** Before asking anything, present the full
    findings to the user as a **Markdown table** — one row per finding, with the
    columns the gate step specifies. The table is where the detail lives, so the
-   user can read and compare every finding in one place before deciding. In the
+   user can read and compare every finding in one place before deciding.
+   **Displaying the table is mandatory in every mode and on every host** — plan
+   mode, ad-hoc, windowed or fallback selection alike. It is rendered as
+   **visible output in the conversation**, never only written into the plan or
+   assessment file, and never skipped as "extra output": printing it is a
+   read-only display action that no mode forbids. To build it, **read the
+   bounded gate slice of the assessment file** (`## Threats` at Gate 1,
+   `## Mitigations` at Gate 2) — this read is **required**, and it is exactly
+   the read the context-window discipline permits. If the slice is empty or
+   missing, stop and re-dispatch the worker that owns it rather than skipping
+   the table or rendering it empty. In the
    same message, **name the plan file** these decisions feed into (in plan mode,
    the active plan-file path, e.g. `.claude/plans/<name>.md`; ad-hoc, the inline
    plan you are building — see **The plan file**), so the user sees where the
-   selected findings will land. This is a **mention only** — nothing is written to
-   the plan file at the gates; the write happens at finalize.
+   selected findings will land, **and name the run's assessment file** (its
+   per-run `.claude/.temp/assessment-<run>.md` path) so the user knows the full
+   analysis backing the table lives there. These are a **mention only** — nothing is
+   written to the plan file at the gates; the write happens at finalize.
 2. **Then present the selection windows.** Only after the table is displayed,
    present the findings as **multiple single-choice windows — one window per
    finding** — each a single **include/exclude** decision labeled by its tag +
@@ -239,7 +251,8 @@ sections it needs — the file is the shared state, so your own context stays le
    per threat whether it is worth acting on, so they must understand each
    threat without re-reading the plan.
 
-   **First, display the scored threats as a Markdown table** — one row per threat,
+   **First, display the scored threats as a Markdown table in the conversation** —
+   always, in every mode (plan mode included) — one row per threat,
    ordered by risk score (highest first), with these columns:
 
    | Column | Contents |
@@ -254,6 +267,10 @@ sections it needs — the file is the shared state, so your own context stays le
    soften, or re-score. Flag rows whose risk criticality is high or critical (e.g.
    `⚑ high · 78` in the Risk column) — these are the ones you mark recommended
    in the selection windows, so the table and the windows tell the same story.
+   In the same message, **name the run's assessment file** (its
+   `.claude/.temp/assessment-<run>.md` path) so the user can open the full
+   analysis behind the table, alongside the plan file mention (see **How to ask
+   the user**).
 
    **Then present one single-choice window per threat** asking which threats to
    address — each window a single include/exclude decision for that threat,
@@ -263,7 +280,12 @@ sections it needs — the file is the shared state, so your own context stays le
    user may include any subset, including none (exclude every window).
 
    To build the table, read only the bounded `## Threats` slice of the assessment
-   file — not the whole running analysis. **After the user decides, record each
+   file — not the whole running analysis. This read is **required**, not a
+   context-discipline violation. Every table cell and every window label comes
+   from that slice; if the slice is empty or its scoring columns are unfilled,
+   stop and re-dispatch the `ingrain-risk-scorer` (or the `ingrain-threat-generator` if the
+   rows themselves are missing) rather than skipping the table or rendering it
+   empty. **After the user decides, record each
    threat's `Acceptance`** in the `## Threats` table (include → `accepted`, exclude →
    `rejected`; `uncertain` only if the user is explicitly unsure), per the
    `references/assessment-file.md` schema.
@@ -288,7 +310,8 @@ sections it needs — the file is the shared state, so your own context stays le
 7. **Ask user — select which mitigations to adopt (Gate 2).** Follow the
    two-step display-then-ask pattern (see **How to ask the user**).
 
-   **First, display the frozen mitigations as a Markdown table** — one row per
+   **First, display the frozen mitigations as a Markdown table in the
+   conversation** — always, in every mode (plan mode included) — one row per
    mitigation, with these columns:
 
    | Column | Contents |
@@ -300,6 +323,10 @@ sections it needs — the file is the shared state, so your own context stays le
    | **Effort** | how much work it takes to implement |
 
    Keep the table faithful to the frozen mitigations — don't invent or re-scope.
+   In the same message, **name the run's assessment file** (its
+   `.claude/.temp/assessment-<run>.md` path) so the user can open the full
+   analysis behind the table, alongside the plan file mention (see **How to ask
+   the user**).
 
    To build the table, read the bounded `## Mitigations` slice of the assessment
    file — not the whole running analysis. Every table cell and every window label
@@ -369,6 +396,7 @@ sections it needs — the file is the shared state, so your own context stays le
 | "I'll paste the prior worker's output into the next dispatch" | Hand off by pointer — tell the next worker which section of the assessment file to read; don't thread full content through your context. |
 | "I'll read the whole assessment file to keep track" | Don't. Hold only the compact statuses; read only the bounded gate slices. Reading the full running analysis defeats the context-window discipline. |
 | "I'll put all the detail in the window options and skip the table" | Display the findings as a table first, then present the single-choice windows — never the windows alone. |
+| "I'm in plan mode / keeping output lean, so I'll skip printing the gate table" | The gate table is mandatory visible output in every mode. Read the bounded slice of the assessment file — that read is the one the context-window discipline permits — and print the table before any window. |
 
 ## Rules
 
