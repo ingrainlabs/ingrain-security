@@ -66,7 +66,7 @@ must use **exactly one** of the listed values (lower-case, verbatim).
 - **Security relevant** — `true` | `false`.
 - **Surfaces** — bullet list (present when `major`).
 
-### `## Threats` — a Markdown table, **at most 20 rows**
+### `## Threats` — a Markdown table; most tasks warrant **3–6 rows**, **never exceed 8**
 
 One row per threat, with these columns:
 

@@ -85,7 +85,7 @@ Deno.test("assessment-file.md: defines the strict on-disk format and its allowed
   }
   // Key constraints from the format are stated.
   assertStringIncludes(md, "256"); // justification max length
-  assertStringIncludes(md, "20"); // max threats
+  assertStringIncludes(md, "never exceed 8"); // max threats (hard ceiling)
 });
 
 Deno.test("SKILL.md: documents the pointer-based hand-off and context-window discipline", async () => {

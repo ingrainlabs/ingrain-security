@@ -73,6 +73,8 @@ permitted write is your own section of the stored analysis file for this run at
 <the run's assessment file — e.g. .claude/.temp/assessment-<plan-basename>.md> (section: <## Section for this worker>),
 written to the schema in references/assessment-file.md — use exactly its fields and
 enum values.
+Scope tightly: include only findings genuinely relevant to THIS plan — if an item
+would not change how this specific change is reviewed or implemented, omit it.
 INPUT:
 <the finished, detailed implementation plan; plus POINTERS to the sections this
 worker must read — e.g. "read <the run's assessment file> § Threats and
@@ -222,7 +224,7 @@ sections it needs — the file is the shared state, so your own context stays le
      that follows — its schema and template live in `references/assessment-file.md`.
 1. **Threats** — dispatch the `ingrain-threat-generator` worker, pointing it at the plan
    **and the `## Triage` section** (Surfaces are starting points, not a ceiling). It writes
-   the threat rows (descriptive columns, `T1…`, ≤20) into the `## Threats` table per the
+   the threat rows (descriptive columns, `T1…`; most tasks warrant 3–6 rows, never exceed 8) into the `## Threats` table per the
    `references/assessment-file.md` schema and returns a pointer.
 2. **Critique threats** *(loop, max 3)* — dispatch the `ingrain-threat-critic` worker,
    pointing it at the `## Threats` section. On `needs-revision`, re-dispatch
