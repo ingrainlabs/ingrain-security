@@ -275,7 +275,8 @@ sections it needs — the file is the shared state, so your own context stays le
      selected — review closed" and close with a one-line verdict naming the
      threats as accepted risk. Still **fold the assessment link + maintenance
      instruction into the plan** (the `## Threats` section, with every threat marked
-     excluded/accepted, is the preserved context) **and persist a durable snapshot
+     excluded/accepted, is the preserved context), **delete the `## Threat critique`
+     section (iteration scratch), and persist a durable snapshot
      via the fixed, argument-less `run-hook.cmd save-assessment` helper** (see
      Step 7), then continue building the plan.
 5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the
@@ -299,7 +300,11 @@ sections it needs — the file is the shared state, so your own context stays le
    | **Effort** | how much work it takes to implement |
 
    Keep the table faithful to the frozen mitigations — don't invent or re-scope.
-   Build this table from the bounded `## Mitigations` slice only.
+
+   To build the table, read the bounded `## Mitigations` slice of the assessment
+   file — not the whole running analysis. Every table cell and every window label
+   comes from that slice; if the slice is empty or missing, stop and re-dispatch
+   the `ingrain-mitigation-generator` rather than rendering an empty table.
 
    **Then present one single-choice window per mitigation** asking which
    mitigations to adopt — each window a single include/exclude decision for that
@@ -316,7 +321,10 @@ sections it needs — the file is the shared state, so your own context stays le
    **Finalize the assessment file:** record each mitigation's `Acceptance` in the
    `## Mitigations` table (adopt → `accepted`, decline → `rejected`), and fill
    `## Coverage / open items` with any `accepted` threat left without an `accepted`
-   covering mitigation — per the `references/assessment-file.md` schema.
+   covering mitigation — per the `references/assessment-file.md` schema. Then
+   **delete the `## Threat critique` and `## Mitigation critique` sections** (heading
+   and body) — they are iteration scratch; the finalized file carries only end
+   results and matches the schema template.
 
    **Persist a durable snapshot:** as your last action, invoke the vetted helper
    `"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" save-assessment` (on Codex,

@@ -43,14 +43,18 @@ shape.
   | `## Task` | orchestrator (framing) |
   | `## Triage` | `ingrain-relevance-triage` |
   | `## Threats` | `ingrain-threat-generator` (descriptive columns) → `ingrain-risk-scorer` (scoring columns) → orchestrator (Acceptance at Gate 1) — **filled in stages** |
-  | `## Threat critique` | `ingrain-threat-critic` |
+  | `## Threat critique` | `ingrain-threat-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Risk score` | `ingrain-risk-scorer` (plan-level residual) |
   | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Acceptance at Gate 2) |
-  | `## Mitigation critique` | `ingrain-mitigation-critic` |
+  | `## Mitigation critique` | `ingrain-mitigation-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Coverage / open items`, `## Maintenance` | orchestrator (finalize) |
 - **Living document.** Rewrite the relevant section at each commit point so the file
   always mirrors the current frozen state — critic-loop revisions and re-selection
-  overwrite the prior contents of that section.
+  overwrite the prior contents of that section. The critique sections are iteration
+  scratch, not results: once their loop is done they are dead weight, and the
+  orchestrator **deletes both critique sections at finalize** — the finalized file and
+  every durable snapshot contain only end results. This is why the template below has
+  no critique sections.
 
 ## Sections and fields
 

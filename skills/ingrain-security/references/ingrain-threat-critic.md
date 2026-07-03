@@ -20,7 +20,8 @@ description: >-
 >   supports per-subagent model selection).
 > - **Hand-off contract:** read the threats from the `## Threats` section of
 >   the stored analysis file (path per your dispatch), write your full Output into the
->   `## Threat critique` section, then return to the orchestrator ONLY the decisive
+>   `## Threat critique` section (a transient section — the orchestrator deletes it
+>   at finalize), then return to the orchestrator ONLY the decisive
 >   verdict (`approved` or `needs-revision`) plus a one-line pointer to that section
 >   — not the full critique.
 
