@@ -1,5 +1,5 @@
 /**
- * Behavioral tests for the `hooks/scripts/ensure-assessment-dir` SessionStart hook.
+ * Behavioral tests for the `hooks/start/ensure-assessment-dir` SessionStart hook.
  * Unlike the static tier these actually EXECUTE the script under bash against a
  * throwaway project dir, so they need run+write permissions (see the `test:hooks`
  * task in deno.json).
@@ -22,7 +22,7 @@ import { exists } from "@std/fs";
 import { fromFileUrl } from "@std/path";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
-const HOOKS = `${ROOT}hooks/scripts`;
+const HOOKS = `${ROOT}hooks/start`;
 
 interface IHookResult {
   code: number;

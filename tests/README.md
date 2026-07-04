@@ -51,7 +51,7 @@ This is always on for the live tiers — Deno streams each test's output live (w
   edits, recommended model), plus the orchestrator's step ordering, announce/stop phrases, the
   read-reference dispatch mechanism, and a valid SessionStart hook.
 - **hooks/** — offline, no model calls, but unlike `static/` it **executes** the
-  `hooks/scripts/ensure-assessment-dir` SessionStart hook under `bash` against a
+  `hooks/start/ensure-assessment-dir` SessionStart hook under `bash` against a
   `Deno.makeTempDir()` project, asserting the durable folder/README/`.gitignore` are seeded and the
   `CLAUDE_PROJECT_DIR` / `$PWD` resolution behaves. (The finalize snapshot is now written by the
   orchestrator via its file tools, not a hook script, so it has no bash test here.) Needs `bash` +

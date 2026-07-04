@@ -7,9 +7,10 @@
 
 set -euo pipefail
 
-# Determine plugin root directory
+# Determine plugin root directory. This script lives at hooks/start/session-start,
+# so the plugin root is two levels up.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # Read the ingrain-security skill content
 skill_path="${PLUGIN_ROOT}/skills/ingrain-security/SKILL.md"

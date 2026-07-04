@@ -26,7 +26,7 @@ shape.
   It derives `<task-slug>` from the `## Task` Title — lowercased and reduced to
   `[a-z0-9-]` (dropped to a timestamp-only name when there is no usable title). The
   folder and its self-ignoring `.gitignore` are seeded by the
-  `scripts/ensure-assessment-dir` SessionStart hook. Snapshots are **additive** — each run
+  `ensure-assessment-dir` SessionStart hook. Snapshots are **additive** — each run
   writes a new timestamped file, never overwriting an earlier one. The folder is
   **self-ignoring** (an inner `.gitignore` of `*` + `!.gitignore`), so snapshots do
   not appear in `git status`; sharing one is an explicit `git add -f <file>` opt-in.
