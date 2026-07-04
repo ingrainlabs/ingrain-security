@@ -11,7 +11,7 @@
           },
           {
             "type": "command",
-            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" start/ensure-assessment-dir",
+            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" start/ensure-assessment-dir codex",
             "statusMessage": "Preparing security-assessment folder"
           }
         ]

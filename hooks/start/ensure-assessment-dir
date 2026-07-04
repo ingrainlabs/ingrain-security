@@ -18,10 +18,14 @@
 set -uo pipefail
 
 # Resolve the user's PROJECT root — NOT the plugin root — as a normalized POSIX
-# path. Claude Code exports CLAUDE_PROJECT_DIR (absolute project path). Codex
-# exports no project-dir variable but runs the hook with cwd = the workspace root,
-# so PWD is the safe fallback (run-hook.cmd does not change cwd). If Codex later
-# adds one, extend to ${CLAUDE_PROJECT_DIR:-${CODEX_PROJECT_DIR:-$PWD}}.
+# path. The host is passed as $1 by each hook.json ("claude" | "codex"):
+#   - codex: Codex exports no project-dir variable and run-hook.cmd does not
+#     change cwd, so the current directory is authoritative. We resolve from $PWD
+#     alone and deliberately IGNORE CLAUDE_PROJECT_DIR even if it leaked into the
+#     environment (e.g. a shell that also ran Claude Code) — honoring a stray
+#     Claude var would seed the folder in the wrong project.
+#   - claude (default): Claude Code exports CLAUDE_PROJECT_DIR (absolute project
+#     path); $PWD backs it up.
 #
 # The `cd && pwd` idiom (same as session-start) normalizes the value so mkdir,
 # symlink tests and the printf writes work under Git Bash on Windows, where
@@ -29,7 +33,11 @@ set -uo pipefail
 # vars. Echoes empty on failure — callers no-op rather than risk writing to the
 # filesystem root (there is no `set -e` to abort us).
 resolve_project_root() {
-    cd "${CLAUDE_PROJECT_DIR:-$PWD}" 2>/dev/null && pwd
+    if [ "${1:-}" = "codex" ]; then
+        cd "$PWD" 2>/dev/null && pwd
+    else
+        cd "${CLAUDE_PROJECT_DIR:-$PWD}" 2>/dev/null && pwd
+    fi
 }
 
 # Seed README.md on first creation only — never clobber a user-edited one.
@@ -72,8 +80,8 @@ seed_gitignore() {
 }
 
 main() {
-    local project_root assessment_dir
-    project_root="$(resolve_project_root)"
+    local host="${1:-}" project_root assessment_dir
+    project_root="$(resolve_project_root "${host}")"
     [ -n "${project_root}" ] || return 0
     assessment_dir="${project_root}/ingrain-threat-assessment"
 
@@ -91,5 +99,5 @@ main() {
 }
 
 # No stdout on purpose (see header).
-main
+main "$@"
 exit 0

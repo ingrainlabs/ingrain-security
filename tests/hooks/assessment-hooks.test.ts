@@ -33,14 +33,16 @@ interface IHookResult {
 /**
  * Run a hook script under bash with a hermetic environment. `clearEnv` keeps the
  * runner's own `CLAUDE_PROJECT_DIR` from leaking in; `PATH` is forwarded so the
- * hook's coreutils (`mkdir`, `printf`) resolve.
+ * hook's coreutils (`mkdir`, `printf`) resolve. `hostArg` is forwarded to the
+ * script as its positional host token ("claude" | "codex"), mirroring how each
+ * hook.json passes it through run-hook.cmd.
  */
 async function runHook(
   name: string,
-  opts: { projectDir?: string; cwd?: string } = {},
+  opts: { projectDir?: string; cwd?: string; hostArg?: string } = {},
 ): Promise<IHookResult> {
   const out = await new Deno.Command("bash", {
-    args: [`${HOOKS}/${name}`],
+    args: [`${HOOKS}/${name}`, ...(opts.hostArg ? [opts.hostArg] : [])],
     cwd: opts.cwd,
     clearEnv: true,
     env: {
@@ -114,5 +116,31 @@ Deno.test("ensure-assessment-dir: handles a non-canonical project dir", async ()
     const res = await runHook("ensure-assessment-dir", { projectDir: `${dir}/.` });
     assertEquals(res.code, 0);
     assertEquals(await exists(`${dir}/ingrain-threat-assessment`), true);
+  });
+});
+
+Deno.test("ensure-assessment-dir: host=codex resolves the project root from cwd", async () => {
+  await withProject(async (dir) => {
+    const res = await runHook("ensure-assessment-dir", { hostArg: "codex", cwd: dir });
+    assertEquals(res.code, 0);
+    assertEquals(await exists(`${dir}/ingrain-threat-assessment`), true);
+  });
+});
+
+Deno.test("ensure-assessment-dir: host=codex ignores a leaked CLAUDE_PROJECT_DIR", async () => {
+  // Codex must never honor CLAUDE_PROJECT_DIR: if it leaked into the environment
+  // (e.g. a shell that also ran Claude Code), the folder must still land in the
+  // real cwd, not the leaked project. `projectDir` sets CLAUDE_PROJECT_DIR here.
+  await withProject(async (realDir) => {
+    await withProject(async (leakedDir) => {
+      const res = await runHook("ensure-assessment-dir", {
+        hostArg: "codex",
+        projectDir: leakedDir,
+        cwd: realDir,
+      });
+      assertEquals(res.code, 0);
+      assertEquals(await exists(`${realDir}/ingrain-threat-assessment`), true);
+      assertEquals(await exists(`${leakedDir}/ingrain-threat-assessment`), false);
+    });
   });
 });
