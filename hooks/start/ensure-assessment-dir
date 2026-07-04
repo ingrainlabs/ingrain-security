@@ -17,8 +17,9 @@
 
 set -uo pipefail
 
-# Resolve the user's PROJECT root — NOT the plugin root — as a normalized POSIX
-# path. The host is passed as $1 by each hook.json ("claude" | "codex"):
+# Resolve the user's PROJECT root — NOT the plugin root — as a normalized
+# forward-slash path (works uniformly on unix and, under Git Bash / MSYS, on
+# Windows). The host is passed as $1 by each hook.json ("claude" | "codex"):
 #   - codex: Codex exports no project-dir variable and run-hook.cmd does not
 #     change cwd, so the current directory is authoritative. We resolve from $PWD
 #     alone and deliberately IGNORE CLAUDE_PROJECT_DIR even if it leaked into the
