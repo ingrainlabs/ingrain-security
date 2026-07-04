@@ -65,9 +65,11 @@ Deno.test("SKILL.md: documents the read-reference dispatch mechanism", async () 
 
 Deno.test("SKILL.md: documents the assessment file, its path, and living-document behavior", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // Dedicated section and the concrete local path.
+  // Dedicated section and the host-templated local path.
   assertStringIncludes(md, "## The assessment file");
-  assertStringIncludes(md, ".claude/.temp/assessment-");
+  assertStringIncludes(md, ".${coding_agent_root}/.temp/assessment-");
+  // The host-root variable is defined so the agent can substitute claude/codex.
+  assertStringIncludes(md, "${coding_agent_root}");
   // It is written/updated as a living document.
   assertStringIncludes(md.toLowerCase(), "living document");
   // The file's schema/template is defined in a dedicated reference file.
@@ -76,8 +78,8 @@ Deno.test("SKILL.md: documents the assessment file, its path, and living-documen
 
 Deno.test("assessment-file.md: defines the strict on-disk format and its allowed values", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
-  // The concrete artifact path.
-  assertStringIncludes(md, ".claude/.temp/assessment-");
+  // The host-templated artifact path.
+  assertStringIncludes(md, ".${coding_agent_root}/.temp/assessment-");
   // Enumerated fields carry their exact allowed values.
   assertStringIncludes(md, "very high"); // likelihood
   for (const v of ["accepted", "rejected", "uncertain"]) {

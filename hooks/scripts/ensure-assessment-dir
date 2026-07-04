@@ -38,9 +38,9 @@ seed_readme() {
     local readme="$1/README.md"
     [ -f "${readme}" ] && return 0
     printf '%s\n' \
-        '# Security assessments' \
+        '# Threat assessments' \
         '' \
-        'Point-in-time security assessments produced by the `ingrain-security`' \
+        'Point-in-time threat assessments produced by the `ingrain-security`' \
         'plugin at the end of each security-review run.' \
         '' \
         'Each file is a timestamped snapshot named' \
@@ -52,7 +52,8 @@ seed_readme() {
         'committed unless you explicitly `git add -f <file>` one to share it.' \
         '' \
         'The live working copy during a review is the uncommitted' \
-        '`.claude/.temp/assessment-<run>.md`; the files here are its durable snapshots.' \
+        '`.claude/.temp/assessment-<run>.md` (or `.codex/.temp/` under Codex); the' \
+        'files here are its durable snapshots.' \
         > "${readme}" 2>/dev/null || true
 }
 
@@ -74,7 +75,7 @@ main() {
     local project_root assessment_dir
     project_root="$(resolve_project_root)"
     [ -n "${project_root}" ] || return 0
-    assessment_dir="${project_root}/ingrain-securityAssessment"
+    assessment_dir="${project_root}/ingrain-threat-assessment"
 
     # Never follow a pre-placed symlink at the target — a crafted repo could point
     # it outside the tree. Silent no-op; this hook must not abort the session (M4).

@@ -50,11 +50,12 @@ This is always on for the live tiers — Deno streams each test's output live (w
   anti-trigger description) and the advisory **read-only** ROLE header (`Read, Grep, Glob` only, no
   edits, recommended model), plus the orchestrator's step ordering, announce/stop phrases, the
   read-reference dispatch mechanism, and a valid SessionStart hook.
-- **hooks/** — offline, no model calls, but unlike `static/` it **executes** the assessment hook
-  scripts (`hooks/scripts/ensure-assessment-dir`, `hooks/scripts/save-assessment`) under `bash`
-  against a `Deno.makeTempDir()` project, asserting the folder/README/`.gitignore` are seeded, the
-  working analysis is copied to a `Title`-slugged timestamped snapshot, and the `CLAUDE_PROJECT_DIR`
-  / `$PWD` resolution behaves. Needs `bash` + coreutils (macOS/Linux); the Windows `cd && pwd`
+- **hooks/** — offline, no model calls, but unlike `static/` it **executes** the
+  `hooks/scripts/ensure-assessment-dir` SessionStart hook under `bash` against a
+  `Deno.makeTempDir()` project, asserting the durable folder/README/`.gitignore` are seeded and the
+  `CLAUDE_PROJECT_DIR` / `$PWD` resolution behaves. (The finalize snapshot is now written by the
+  orchestrator via its file tools, not a hook script, so it has no bash test here.) Needs `bash` +
+  coreutils (macOS/Linux); the Windows `cd && pwd`
   normalization can't be exercised on POSIX and stays a manual check.
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
   `skills/ingrain-security/references/<name>.md` body as the system prompt with

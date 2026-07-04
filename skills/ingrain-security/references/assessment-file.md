@@ -7,30 +7,30 @@ shape.
 
 ## Nature
 
-- **Path (per run):** a uniquely-named file under `.claude/.temp/`, relative to the
-  working project root, so two reviews running at once never share (and clobber) one
-  file. The orchestrator mints the path once at the start of the review and uses it
-  throughout (see SKILL.md → **The assessment file**): in plan mode
-  `.claude/.temp/assessment-<plan-basename>.md` (mirroring the active
-  `.claude/plans/<plan-basename>.md`); ad-hoc
-  `.claude/.temp/assessment-<YYYYMMDD-HHMMSS>-<rand>.md`. Both keep the `assessment-`
-  prefix. It is a **local working artifact** in Claude's own folder (`.claude/`), not
-  committed. `.claude/` is git-ignored by convention; keep the file uncommitted.
+- **Path (per run):** a uniquely-named file under `.${coding_agent_root}/.temp/`,
+  relative to the working project root, so two reviews running at once never share
+  (and clobber) one file. `${coding_agent_root}` is the host's config dotfolder base
+  name — `claude` under Claude Code, `codex` under Codex (substitute it for your host);
+  see SKILL.md → **The assessment file**. The
+  orchestrator mints the path once at the start of the review and uses it throughout:
+  in plan mode `.${coding_agent_root}/.temp/assessment-<plan-basename>.md` (mirroring
+  the active `.${coding_agent_root}/plans/<plan-basename>.md`); ad-hoc
+  `.${coding_agent_root}/.temp/assessment-<YYYYMMDD-HHMMSS>-<rand>.md`. Both keep the
+  `assessment-` prefix. It is a **local working artifact** in the host's own config
+  folder (`.${coding_agent_root}/`), not committed — that folder is git-ignored by
+  convention; keep the file uncommitted.
 - **Committed snapshot(s).** At finalize (SKILL.md Step 7, and the Gate 1
-  none-selected close) the orchestrator invokes the vetted, argument-less helper
-  `hooks/run-hook.cmd scripts/save-assessment`, which copies the current review's working
-  file — **the most-recently-modified `.claude/.temp/assessment*.md`, found by globbing
-  (no path argument)** — into
-  `ingrain-securityAssessment/assessment-<task-slug>-<timestamp>.md` at the project
-  root. The helper — not the orchestrator — owns the copy: it reads the task
-  `Title` from that file (never off the command line), normalizes and allowlist-
-  validates the slug, and **refuses a symlinked source or target** so a planted link
-  can't be read or written through. The folder is created by the
+  none-selected close) the orchestrator copies the finalized working file itself, using
+  its file tools (no shell, so it works on every platform), into
+  `ingrain-threat-assessment/assessment-<task-slug>-<timestamp>.md` at the project root.
+  It derives `<task-slug>` from the `## Task` Title — lowercased and reduced to
+  `[a-z0-9-]` (dropped to a timestamp-only name when there is no usable title). The
+  folder and its self-ignoring `.gitignore` are seeded by the
   `scripts/ensure-assessment-dir` SessionStart hook. Snapshots are **additive** — each run
   writes a new timestamped file, never overwriting an earlier one. The folder is
   **self-ignoring** (an inner `.gitignore` of `*` + `!.gitignore`), so snapshots do
   not appear in `git status`; sharing one is an explicit `git add -f <file>` opt-in.
-  Relationship: the per-run `.claude/.temp/assessment-<run>.md` is the **living,
+  Relationship: the per-run `.${coding_agent_root}/.temp/assessment-<run>.md` is the **living,
   uncommitted** working copy that workers write and the Maintenance instruction tracks;
   the folder holds the **frozen** snapshots of it over time.
 - **Hand-off medium.** Workers write their sections and return to the orchestrator

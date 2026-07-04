@@ -70,7 +70,7 @@ rather than pasting prior output into the prompt:
 Read references/<name>.md and follow it as your system prompt.
 You do no code or repo edits — use only Read/Grep/Glob on the codebase. Your ONE
 permitted write is your own section of the stored analysis file for this run at
-<the run's assessment file — e.g. .claude/.temp/assessment-<plan-basename>.md> (section: <## Section for this worker>),
+<the run's assessment file — e.g. .${coding_agent_root}/.temp/assessment-<plan-basename>.md> (section: <## Section for this worker>),
 written to the schema in references/assessment-file.md — use exactly its fields and
 enum values.
 Scope tightly: include only findings genuinely relevant to THIS plan — if an item
@@ -124,10 +124,10 @@ none**. Always do this in **two distinct steps, in this order**:
    missing, stop and re-dispatch the worker that owns it rather than skipping
    the table or rendering it empty. In the
    same message, **name the plan file** these decisions feed into (in plan mode,
-   the active plan-file path, e.g. `.claude/plans/<name>.md`; ad-hoc, the inline
+   the active plan-file path, e.g. `.${coding_agent_root}/plans/<name>.md`; ad-hoc, the inline
    plan you are building — see **The plan file**), so the user sees where the
    selected findings will land, **and name the run's assessment file** (its
-   per-run `.claude/.temp/assessment-<run>.md` path) so the user knows the full
+   per-run `.${coding_agent_root}/.temp/assessment-<run>.md` path) so the user knows the full
    analysis backing the table lives there. These are a **mention only** — nothing is
    written to the plan file at the gates; the write happens at finalize.
 2. **Then present the selection windows.** Only after the table is displayed,
@@ -154,13 +154,15 @@ rather than restating its full detail.
 ## The assessment file
 
 The review persists its analysis to a single **per-run** local artifact under
-`.claude/.temp/`. **Mint its path once, at the start of the review, and use that exact
+`.${coding_agent_root}/.temp/`. `${coding_agent_root}` is your host's config
+dotfolder base name — substitute `claude` if you are running in Claude Code, `codex`
+if in Codex — in every path below. **Mint its path once, at the start of the review, and use that exact
 path for every worker dispatch and at finalize** — so two reviews running at once never
 share (and clobber) one file:
-- **Plan mode:** `.claude/.temp/assessment-<plan-basename>.md`, where `<plan-basename>`
+- **Plan mode:** `.${coding_agent_root}/.temp/assessment-<plan-basename>.md`, where `<plan-basename>`
   is the active plan file's name without `.md` (see **The plan file**) — the assessment
   pairs 1:1 with the plan it analyzes.
-- **Ad-hoc mode (no plan file):** `.claude/.temp/assessment-<YYYYMMDD-HHMMSS>-<rand>.md`
+- **Ad-hoc mode (no plan file):** `.${coding_agent_root}/.temp/assessment-<YYYYMMDD-HHMMSS>-<rand>.md`
   (a timestamp plus a short random token — mint both yourself; don't shell out to
   host-specific tooling).
 
@@ -179,11 +181,11 @@ acceptance `accepted`/`rejected`/`uncertain`) uses exactly the values it lists.
 
 The review folds its results into **the plan file** — the implementation plan the
 coding agent edits and executes downstream. This is **distinct from the assessment
-file**: the assessment file (the per-run `.claude/.temp/assessment-<run>.md`) is the security-analysis
+file**: the assessment file (the per-run `.${coding_agent_root}/.temp/assessment-<run>.md`) is the security-analysis
 artifact the workers write; the plan file is the implementation plan the selected
 threats and adopted mitigations become part of.
 
-In **plan mode** it is a concrete on-disk file (e.g. `.claude/plans/<name>.md`); you
+In **plan mode** it is a concrete on-disk file (e.g. `.${coding_agent_root}/plans/<name>.md`); you
 already hold its path, since it is the file you are editing — **name it** when you
 reference it. In **ad-hoc mode** there is no file — the plan file is "the inline plan
 you are building" in the conversation. Reference the plan file at both gate displays
@@ -269,7 +271,7 @@ sections it needs — the file is the shared state, so your own context stays le
    `⚑ high · 78` in the Risk column) — these are the ones you mark recommended
    in the selection windows, so the table and the windows tell the same story.
    In the same message, **name the run's assessment file** (its
-   `.claude/.temp/assessment-<run>.md` path) so the user can open the full
+   `.${coding_agent_root}/.temp/assessment-<run>.md` path) so the user can open the full
    analysis behind the table, alongside the plan file mention (see **How to ask
    the user**).
 
@@ -299,9 +301,9 @@ sections it needs — the file is the shared state, so your own context stays le
      threats as accepted risk. Still **fold the assessment link + maintenance
      instruction into the plan** (the `## Threats` section, with every threat marked
      excluded/accepted, is the preserved context), **delete the `## Threat critique`
-     section (iteration scratch), and persist a durable snapshot
-     via the fixed, argument-less `run-hook.cmd scripts/save-assessment` helper** (see
-     Step 7), then continue building the plan.
+     section (iteration scratch), and persist a durable snapshot yourself** — copy the
+     working file to `ingrain-threat-assessment/assessment-<task-slug>-<timestamp>.md`
+     (see Step 7 for the naming), then continue building the plan.
 5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the
    user-selected threats — only those; excluded threats are out of scope. It writes the
    mitigations into the `## Mitigations` section and returns a pointer.
@@ -325,7 +327,7 @@ sections it needs — the file is the shared state, so your own context stays le
 
    Keep the table faithful to the frozen mitigations — don't invent or re-scope.
    In the same message, **name the run's assessment file** (its
-   `.claude/.temp/assessment-<run>.md` path) so the user can open the full
+   `.${coding_agent_root}/.temp/assessment-<run>.md` path) so the user can open the full
    analysis behind the table, alongside the plan file mention (see **How to ask
    the user**).
 
@@ -354,26 +356,28 @@ sections it needs — the file is the shared state, so your own context stays le
    and body) — they are iteration scratch; the finalized file carries only end
    results and matches the schema template.
 
-   **Persist a durable snapshot:** as your last action, invoke the vetted helper
-   `"<plugin-root>/hooks/run-hook.cmd" scripts/save-assessment`, where `<plugin-root>`
-   is your host's plugin-root variable (`${CLAUDE_PLUGIN_ROOT}` on Claude Code,
-   `${PLUGIN_ROOT}` on Codex) — a **fixed, argument-less command**. It copies the current
-   review's assessment file — the newest `.claude/.temp/assessment*.md` — into the
-   durable `ingrain-securityAssessment/` folder as a timestamped snapshot. **Do not
-   compose the `cp`/`mkdir` yourself and do not pass any path or the task title as an
-   argument** — the helper finds the file by globbing and reads the title from it, so
-   no untrusted or per-run path text ever reaches the command line.
+   **Persist a durable snapshot:** as your last action, copy the finalized working
+   file yourself. Read the current working file at
+   `.${coding_agent_root}/.temp/assessment-<run>.md` and write its exact contents to
+   `ingrain-threat-assessment/assessment-<task-slug>-<timestamp>.md` at the project
+   root, where `<task-slug>` is the `## Task` Title lowercased and reduced to
+   `[a-z0-9-]` (collapse runs of `-`, trim leading/trailing `-`; if no usable title,
+   drop the slug and use `assessment-<timestamp>.md`) and `<timestamp>` is
+   `YYYYMMDD-HHMMSS`. Use your file tools — no shell needed, so this works on every
+   platform. Snapshots are **additive**: always write a NEW file, never overwrite an
+   earlier one. The folder and its self-ignoring `.gitignore` already exist (seeded by
+   the `ensure-assessment-dir` SessionStart hook), so the snapshot stays uncommitted.
 
    Then **write the results into the plan file** (see **The plan file**) — the
    implementation plan the coding agent edits and executes. Incorporate the selected
    threats and adopted mitigations, and fold in two supporting things: (1) a link to
-   the run's assessment file (`.claude/.temp/assessment-<run>.md`, the living working
+   the run's assessment file (`.${coding_agent_root}/.temp/assessment-<run>.md`, the living working
    copy the maintenance instruction tracks) — noting the durable snapshot now saved
-   under `ingrain-securityAssessment/`,
+   under `ingrain-threat-assessment/`,
    which is git-ignored by default (share one with `git add -f <file>`); and (2) the
    maintenance instruction — tell the implementing agent to keep that file in sync as
    the implementation changes across iteration loops. In plan mode, **name the plan
-   file you write to** (e.g. `.claude/plans/<name>.md`); ad-hoc, this is the inline
+   file you write to** (e.g. `.${coding_agent_root}/plans/<name>.md`); ad-hoc, this is the inline
    plan you are building.
 
    This is the last step — close with a one-line verdict. The adopted mitigations
