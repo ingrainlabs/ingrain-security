@@ -172,6 +172,17 @@ worker writes its own named section, the orchestrator frames and finalizes it, a
 plan you produce links it and carries the **Maintenance** instruction for the
 implementing agent.
 
+**Resolve the current branch once, at review start.** You will need it twice: to key the
+durable snapshot's filename at finalize, and to let triage find a prior analysis of the
+same task (see Step 0). Determine it with `git branch --show-current` (fallback
+`git rev-parse --abbrev-ref HEAD`) — do **not** read `.git/HEAD`, which is unreliable in a
+worktree or submodule checkout where `.git` is a file, not a directory. Slugify it to
+`<branch-slug>`: lowercase, reduce to `[a-z0-9-]`, collapse runs of `-`, trim leading and
+trailing `-`. If the command returns empty or errors (detached HEAD, or not a git repo),
+treat the branch as **unknown** — drop the `<branch-slug>-` segment from the snapshot name
+and tell triage the branch is unknown. This is the orchestrator's one shell call; the
+finalize copy itself stays file-tool-only.
+
 Its **section layout and content template are defined in
 `references/assessment-file.md`** — follow that reference exactly, so every enumerated
 field (`impact`, `likelihood`, `criticality`, `yield`, `effort`, and the Gate
@@ -226,7 +237,13 @@ sections it needs — the file is the shared state, so your own context stays le
 
 ## Steps — in strict order
 
-0. **Triage** — dispatch the `ingrain-relevance-triage` worker with the plan.
+0. **Triage** — dispatch the `ingrain-relevance-triage` worker with the plan, **plus the
+   resolved `<branch-slug>` (or "unknown") and the task title**. Instruct it to first
+   **check for a prior analysis** of this task in the durable snapshot folder
+   `ingrain-threat-assessment/` (matching on branch + task title) before it classifies —
+   per `references/ingrain-relevance-triage.md`. If it finds a prior snapshot whose
+   `## Threats` are non-empty, it returns a **Prior analysis** pointer (path + threat
+   count) alongside its verdict; keep that pointer to forward to the generator in Step 1.
    - If the verdict is `minor`: state "no security review needed — minor change"
      and **stop here**. Do not dispatch any other worker; there is nothing to fold
      into the plan — carry on building it.
@@ -238,7 +255,11 @@ sections it needs — the file is the shared state, so your own context stays le
      (verdict + Surfaces) is now in it. This is the hand-off medium for every step
      that follows — its schema and template live in `references/assessment-file.md`.
 1. **Threats** — dispatch the `ingrain-threat-generator` worker, pointing it at the plan
-   **and the `## Triage` section** (Surfaces are starting points, not a ceiling). It writes
+   **and the `## Triage` section** (Surfaces are starting points, not a ceiling).
+   **If triage returned a Prior analysis pointer**, also point the generator at that prior
+   snapshot's `## Threats` (and `## Mitigations`) so it **seeds from the prior analysis**
+   rather than starting from scratch — re-derive and refresh against the current plan, do
+   not blindly copy. It writes
    the threat rows (descriptive columns, `T1…`; most tasks warrant 3–6 rows, never exceed 8) into the `## Threats` table per the
    `references/assessment-file.md` schema and returns a pointer.
 2. **Critique threats** *(loop, max 3)* — dispatch the `ingrain-threat-critic` worker,
@@ -302,8 +323,10 @@ sections it needs — the file is the shared state, so your own context stays le
      instruction into the plan** (the `## Threats` section, with every threat marked
      excluded/accepted, is the preserved context), **delete the `## Threat critique`
      section (iteration scratch), and persist a durable snapshot yourself** — copy the
-     working file to `ingrain-threat-assessment/assessment-<task-slug>-<timestamp>.md`
-     (see Step 7 for the naming), then continue building the plan.
+     working file to
+     `ingrain-threat-assessment/assessment-<branch-slug>-<task-slug>-<timestamp>.md`
+     (see Step 7 for the naming and the unresolvable-segment fallbacks), then continue
+     building the plan.
 5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the
    user-selected threats — only those; excluded threats are out of scope. It writes the
    mitigations into the `## Mitigations` section and returns a pointer.
@@ -359,11 +382,15 @@ sections it needs — the file is the shared state, so your own context stays le
    **Persist a durable snapshot:** as your last action, copy the finalized working
    file yourself. Read the current working file at
    `.${coding_agent_root}/.temp/assessment-<run>.md` and write its exact contents to
-   `ingrain-threat-assessment/assessment-<task-slug>-<timestamp>.md` at the project
-   root, where `<task-slug>` is the `## Task` Title lowercased and reduced to
-   `[a-z0-9-]` (collapse runs of `-`, trim leading/trailing `-`; if no usable title,
-   drop the slug and use `assessment-<timestamp>.md`) and `<timestamp>` is
-   `YYYYMMDD-HHMMSS`. Use your file tools — no shell needed, so this works on every
+   `ingrain-threat-assessment/assessment-<branch-slug>-<task-slug>-<timestamp>.md` at the
+   project root, where `<branch-slug>` is the current branch resolved once at review start
+   (see **The assessment file**), `<task-slug>` is the `## Task` Title lowercased and
+   reduced to `[a-z0-9-]` (collapse runs of `-`, trim leading/trailing `-`) and
+   `<timestamp>` is `YYYYMMDD-HHMMSS`. Drop a segment that is unresolvable: if the branch
+   is unknown, omit `<branch-slug>-` (→ `assessment-<task-slug>-<timestamp>.md`); if there
+   is no usable title, omit `<task-slug>-` (→ `assessment-<branch-slug>-<timestamp>.md`, or
+   `assessment-<timestamp>.md` when both are absent). The `assessment-` prefix always
+   leads. Use your file tools — no shell needed, so this works on every
    platform. Snapshots are **additive**: always write a NEW file, never overwrite an
    earlier one. The folder and its self-ignoring `.gitignore` already exist (seeded by
    the `ensure-assessment-dir` SessionStart hook), so the snapshot stays uncommitted.

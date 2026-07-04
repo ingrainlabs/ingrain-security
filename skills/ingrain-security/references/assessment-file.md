@@ -22,9 +22,16 @@ shape.
 - **Committed snapshot(s).** At finalize (SKILL.md Step 7, and the Gate 1
   none-selected close) the orchestrator copies the finalized working file itself, using
   its file tools (no shell, so it works on every platform), into
-  `ingrain-threat-assessment/assessment-<task-slug>-<timestamp>.md` at the project root.
-  It derives `<task-slug>` from the `## Task` Title — lowercased and reduced to
-  `[a-z0-9-]` (dropped to a timestamp-only name when there is no usable title). The
+  `ingrain-threat-assessment/assessment-<branch-slug>-<task-slug>-<timestamp>.md` at the
+  project root. `<branch-slug>` is the current git branch — resolved once at review start
+  via `git branch --show-current` (not `.git/HEAD`, unreliable in a worktree/submodule),
+  then lowercased and reduced to `[a-z0-9-]`; it keys every snapshot for a feature branch
+  together and lets triage find a prior analysis of the same task (see
+  `ingrain-relevance-triage`). It derives `<task-slug>` from the `## Task` Title —
+  lowercased and reduced to `[a-z0-9-]`. Any unresolvable segment is dropped (branch
+  unknown → `assessment-<task-slug>-<timestamp>.md`; no usable title →
+  `assessment-<branch-slug>-<timestamp>.md`; both absent → `assessment-<timestamp>.md`),
+  and the `assessment-` prefix always leads. The
   folder and its self-ignoring `.gitignore` are seeded by the
   `ensure-assessment-dir` SessionStart hook. Snapshots are **additive** — each run
   writes a new timestamped file, never overwriting an earlier one. The folder is
@@ -69,6 +76,11 @@ must use **exactly one** of the listed values (lower-case, verbatim).
 - **Verdict** — `minor` | `major`.
 - **Security relevant** — `true` | `false`.
 - **Surfaces** — bullet list (present when `major`).
+- **Prior analysis** — optional; a pointer to a prior durable snapshot found for this
+  task (its `ingrain-threat-assessment/…` path and threat count, e.g.
+  `ingrain-threat-assessment/assessment-<…>.md — 4 threats`), or `none`. Set by
+  `ingrain-relevance-triage` when it finds a threats-bearing prior analysis of the same
+  task (branch + title); the generator seeds from it.
 
 ### `## Threats` — a Markdown table; most tasks warrant **3–6 rows**, **never exceed 8**
 
@@ -136,6 +148,7 @@ Verdict: <minor|major>
 Security relevant: <true|false>
 Surfaces:
 - …
+Prior analysis: <ingrain-threat-assessment/assessment-<…>.md — N threats | none>
 
 ## Threats
 | Tag | Title | Asset | Vector | Description | Assumptions | Impact | Likelihood | Risk score | Criticality | Justification | Acceptance |

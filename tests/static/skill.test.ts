@@ -12,6 +12,7 @@ import { assertOrder, parseFrontmatter } from "../lib/matchers.ts";
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
 const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/assessment-file.md`;
+const TRIAGE_REF = `${ROOT}skills/ingrain-security/references/ingrain-relevance-triage.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 
 const WORKERS = [
@@ -88,6 +89,33 @@ Deno.test("assessment-file.md: defines the strict on-disk format and its allowed
   // Key constraints from the format are stated.
   assertStringIncludes(md, "256"); // justification max length
   assertStringIncludes(md, "never exceed 8"); // max threats (hard ceiling)
+});
+
+Deno.test("SKILL.md + assessment-file.md: durable snapshot name is keyed by branch", async () => {
+  const skill = await Deno.readTextFile(SKILL);
+  const ref = await Deno.readTextFile(ASSESSMENT_REF);
+  // The durable snapshot filename carries a <branch-slug> segment ahead of the task slug.
+  const NAME = "ingrain-threat-assessment/assessment-<branch-slug>-<task-slug>-<timestamp>.md";
+  assertStringIncludes(skill, NAME);
+  assertStringIncludes(ref, "assessment-<branch-slug>-<task-slug>-<timestamp>.md");
+  // Branch is resolved with git (not the unreliable .git/HEAD read).
+  assertStringIncludes(skill, "git branch --show-current");
+  // The unknown-branch fallback keeps the legacy task-only name.
+  assertStringIncludes(skill, "assessment-<task-slug>-<timestamp>.md");
+});
+
+Deno.test("triage: instructs a prior-analysis lookup that seeds the generator", async () => {
+  const skill = await Deno.readTextFile(SKILL);
+  const triage = await Deno.readTextFile(TRIAGE_REF);
+  // The triage worker scans the durable folder for a prior analysis of this task.
+  assertStringIncludes(triage.toLowerCase(), "check for prior analysis");
+  assertStringIncludes(triage, "ingrain-threat-assessment/assessment-<branch-slug>-*.md");
+  // It compares branch + title and emits a Prior analysis pointer.
+  assertStringIncludes(triage, "Prior analysis");
+  // The orchestrator forwards that pointer to the generator so it seeds prior threats.
+  assertStringIncludes(skill, "Prior analysis pointer");
+  // The schema carries the optional Prior analysis field.
+  assertStringIncludes(await Deno.readTextFile(ASSESSMENT_REF), "Prior analysis");
 });
 
 Deno.test("SKILL.md: documents the pointer-based hand-off and context-window discipline", async () => {
