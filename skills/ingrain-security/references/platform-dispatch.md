@@ -44,7 +44,7 @@ isolation, and the main session is write-capable — so:
 At each gate, **first display the findings table in the conversation** (built
 from the bounded gate slice of the assessment file — see SKILL.md → **How to
 ask the user**), and in the same message **name the run's assessment file** (its
-`.${coding_agent_root}/.temp/assessment-<run>.md` path) so the user can open the full analysis
+`ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) so the user can open the full analysis
 behind the table. This display step is host- and mode-independent: it happens on
 every platform, in plan mode and ad-hoc alike, before any selection mechanism
 below — the windows never substitute for it.

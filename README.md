@@ -57,12 +57,12 @@ flowchart TD
 
 ### Artifacts
 
-- A per-run **assessment file** in your host's config dotfolder —
-  `.claude/.temp/assessment-*.md` under Claude Code, `.codex/.temp/assessment-*.md`
-  under Codex — the workers' shared hand-off medium, written section by section.
+- A single **assessment file** written into the `ingrain-security/` folder at your
+  project root — `ingrain-security/assessment-<branch>-<task>.md` (branch- and
+  task-keyed, minted by the `scripts/assessment-path` script). It is the workers'
+  shared hand-off medium *and* its own persisted record — written in place, no temp
+  copy — and is git-ignored by default (share one with `git add -f <file>`).
 - The selected findings, **folded into your plan**.
-- A durable, timestamped snapshot copied to an `ingrain-security/` folder
-  in your project.
 
 ## Installation
 

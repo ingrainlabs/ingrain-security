@@ -70,7 +70,7 @@ rather than pasting prior output into the prompt:
 Read references/<name>.md and follow it as your system prompt.
 You do no code or repo edits — use only Read/Grep/Glob on the codebase. Your ONE
 permitted write is your own section of the stored analysis file for this run at
-<the run's assessment file — e.g. .${coding_agent_root}/.temp/assessment-<plan-basename>.md> (section: <## Section for this worker>),
+<the run's assessment file — e.g. ingrain-security/assessment-<branch-slug>-<task-slug>.md> (section: <## Section for this worker>),
 written to the schema in references/assessment-file.md — use exactly its fields and
 enum values.
 Scope tightly: include only findings genuinely relevant to THIS plan — if an item
@@ -127,7 +127,7 @@ none**. Always do this in **two distinct steps, in this order**:
    the active plan-file path, e.g. `.${coding_agent_root}/plans/<name>.md`; ad-hoc, the inline
    plan you are building — see **The plan file**), so the user sees where the
    selected findings will land, **and name the run's assessment file** (its
-   per-run `.${coding_agent_root}/.temp/assessment-<run>.md` path) so the user knows the full
+   `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) so the user knows the full
    analysis backing the table lives there. These are a **mention only** — nothing is
    written to the plan file at the gates; the write happens at finalize.
 2. **Then present the selection windows.** Only after the table is displayed,
@@ -153,35 +153,38 @@ rather than restating its full detail.
 
 ## The assessment file
 
-The review persists its analysis to a single **per-run** local artifact under
-`.${coding_agent_root}/.temp/`. `${coding_agent_root}` is your host's config
-dotfolder base name — substitute `claude` if you are running in Claude Code, `codex`
-if in Codex — in every path below. **Mint its path once, at the start of the review, and use that exact
-path for every worker dispatch and at finalize** — so two reviews running at once never
-share (and clobber) one file:
-- **Plan mode:** `.${coding_agent_root}/.temp/assessment-<plan-basename>.md`, where `<plan-basename>`
-  is the active plan file's name without `.md` (see **The plan file**) — the assessment
-  pairs 1:1 with the plan it analyzes.
-- **Ad-hoc mode (no plan file):** `.${coding_agent_root}/.temp/assessment-<YYYYMMDD-HHMMSS>-<rand>.md`
-  (a timestamp plus a short random token — mint both yourself; don't shell out to
-  host-specific tooling).
+The review persists its analysis to a **single file written directly into
+`ingrain-security/`** at the project root — it is both the living working copy the workers
+write during the run and its persisted record, so there is **no separate temp file and no
+finalize copy**. **Do not hand-build its path.** Mint it once, at the start of the review,
+by running the bundled **`scripts/assessment-path`** script and reuse its output
+everywhere. Your SessionStart context carries the concrete, ready-to-run command (plugin
+root and host already substituted); it takes the form:
 
-Keep the `assessment-` prefix either way — the finalize helper locates the file by it.
-The artifact is a **living document** and the **hand-off medium** between workers: each
-worker writes its own named section, the orchestrator frames and finalizes it, and the
-plan you produce links it and carries the **Maintenance** instruction for the
-implementing agent.
+    bash <plugin>/skills/ingrain-security/scripts/assessment-path <host> mint --title "<task title>"
 
-**Resolve the current branch once, at review start.** You will need it twice: to key the
-durable snapshot's filename at finalize, and to let triage find a prior analysis of the
-same task (see Step 0). Determine it with `git branch --show-current` (fallback
-`git rev-parse --abbrev-ref HEAD`) — do **not** read `.git/HEAD`, which is unreliable in a
-worktree or submodule checkout where `.git` is a file, not a directory. Slugify it to
-`<branch-slug>`: lowercase, reduce to `[a-z0-9-]`, collapse runs of `-`, trim leading and
-trailing `-`. If the command returns empty or errors (detached HEAD, or not a git repo),
-treat the branch as **unknown** — drop the `<branch-slug>-` segment from the snapshot name
-and tell triage the branch is unknown. This is the orchestrator's one shell call; the
-finalize copy itself stays file-tool-only.
+The script returns a JSON object — use its **`assessment_path`** verbatim as the file path
+for every worker dispatch and at finalize. The path is deterministic in the branch + task:
+
+    ingrain-security/assessment-<branch-slug>-<task-slug>.md
+
+so it doubles as the task's identity — re-reviewing the **same task on the same branch**
+resolves to the **same file** (the run resumes/updates it in place; `file_exists: true`
+signals this), while a different task or branch gets its own file. The `assessment-` prefix
+always leads; any unresolvable segment is dropped (no branch → `assessment-<task-slug>.md`;
+no title → `assessment-<branch-slug>.md`; both → `assessment.md`). The file is
+**git-ignored** (the folder self-ignores), so it stays uncommitted unless you
+`git add -f` it. It is a **living document** and the **hand-off medium** between workers:
+each worker writes its own named section, the orchestrator frames and finalizes it, and the
+plan you produce links it and carries the **Maintenance** instruction for the implementing
+agent.
+
+**The script resolves the current branch once** and returns it as `branch_slug` (with a
+`branch_known` flag). Under the hood it uses `git branch --show-current` (fallback
+`git rev-parse --abbrev-ref HEAD`, never `.git/HEAD`), lowercased and reduced to
+`[a-z0-9-]`; a detached HEAD or non-git checkout yields an **unknown** branch, which drops
+the `<branch-slug>-` segment and tells triage the branch is unknown (see Step 0). Running
+the script is the orchestrator's one shell call.
 
 Its **section layout and content template are defined in
 `references/assessment-file.md`** — follow that reference exactly, so every enumerated
@@ -192,7 +195,7 @@ selection `selected`/`excluded`/`undecided`) uses exactly the values it lists.
 
 The review folds its results into **the plan file** — the implementation plan the
 coding agent edits and executes downstream. This is **distinct from the assessment
-file**: the assessment file (the per-run `.${coding_agent_root}/.temp/assessment-<run>.md`) is the security-analysis
+file**: the assessment file (`ingrain-security/assessment-<branch-slug>-<task-slug>.md`) is the security-analysis
 artifact the workers write; the plan file is the implementation plan the selected
 threats and adopted mitigations become part of.
 
@@ -232,14 +235,14 @@ flowchart TD
 ```
 
 Throughout the flow, each worker writes its own section of **the run's assessment
-file** (the per-run path you minted) and you pass the next worker a pointer to the
+file** (the `assessment_path` you minted) and you pass the next worker a pointer to the
 sections it needs — the file is the shared state, so your own context stays lean.
 
 ## Steps — in strict order
 
 0. **Triage** — dispatch the `ingrain-relevance-triage` worker with the plan, **plus the
    resolved `<branch-slug>` (or "unknown") and the task title**. Instruct it to first
-   **check for a prior analysis** of this task in the durable snapshot folder
+   **check for a prior analysis** of this task in the assessment folder
    `ingrain-security/` (matching on branch + task title) before it classifies —
    per `references/ingrain-relevance-triage.md`. If it finds a prior snapshot whose
    `## Threats` are non-empty, it returns a **Prior analysis** pointer (path + threat
@@ -248,9 +251,9 @@ sections it needs — the file is the shared state, so your own context stays le
      and **stop here**. Do not dispatch any other worker; there is nothing to fold
      into the plan — carry on building it.
    - If the verdict is `major`: keep its **Surfaces** notes — you forward them to
-     the generator in Step 1 — and continue to run the full cycle. **Create the
-     assessment file** at the per-run path (see **The assessment file** for how to
-     mint it) with its title +
+     the generator in Step 1 — and continue to run the full cycle. **Create or open the
+     assessment file** at the minted `assessment_path` (see **The assessment file**;
+     `file_exists: true` means you are resuming this task's prior analysis) with its title +
      banner and the `## Task` section; the triage worker's `## Triage` section
      (verdict + Surfaces) is now in it. This is the hand-off medium for every step
      that follows — its schema and template live in `references/assessment-file.md`.
@@ -292,7 +295,7 @@ sections it needs — the file is the shared state, so your own context stays le
    `⚑ high · 78` in the Risk column) — these are the ones you mark recommended
    in the selection windows, so the table and the windows tell the same story.
    In the same message, **name the run's assessment file** (its
-   `.${coding_agent_root}/.temp/assessment-<run>.md` path) so the user can open the full
+   `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) so the user can open the full
    analysis behind the table, alongside the plan file mention (see **How to ask
    the user**).
 
@@ -321,12 +324,10 @@ sections it needs — the file is the shared state, so your own context stays le
      selected — review closed" and close with a one-line verdict naming the
      threats as accepted risk. Still **fold the assessment link + maintenance
      instruction into the plan** (the `## Threats` section, with every threat marked
-     `excluded`, is the preserved context), **delete the `## Threat critique`
-     section (iteration scratch), and persist a durable snapshot yourself** — copy the
-     working file to
-     `ingrain-security/assessment-<branch-slug>-<task-slug>-<timestamp>.md`
-     (see Step 7 for the naming and the unresolvable-segment fallbacks), then continue
-     building the plan.
+     `excluded`, is the preserved context) and **delete the `## Threat critique`
+     section** (iteration scratch). The assessment file already lives at its
+     `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path — no snapshot copy is
+     needed — so just finalize it in place, then continue building the plan.
 5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the
    user-selected threats — only those; excluded threats are out of scope. It writes the
    mitigations into the `## Mitigations` section and returns a pointer.
@@ -350,7 +351,7 @@ sections it needs — the file is the shared state, so your own context stays le
 
    Keep the table faithful to the frozen mitigations — don't invent or re-scope.
    In the same message, **name the run's assessment file** (its
-   `.${coding_agent_root}/.temp/assessment-<run>.md` path) so the user can open the full
+   `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) so the user can open the full
    analysis behind the table, alongside the plan file mention (see **How to ask
    the user**).
 
@@ -371,37 +372,22 @@ sections it needs — the file is the shared state, so your own context stays le
    - **None selected** — incorporate nothing; note that the selected threats
      remain unmitigated.
 
-   **Finalize the assessment file:** record each mitigation's `Selection` in the
+   **Finalize the assessment file in place:** record each mitigation's `Selection` in the
    `## Mitigations` table (adopt → `selected`, decline → `excluded`), and fill
    `## Coverage / open items` with any `selected` threat left without a `selected`
    covering mitigation — per the `references/assessment-file.md` schema. Then
    **delete the `## Threat critique` and `## Mitigation critique` sections** (heading
    and body) — they are iteration scratch; the finalized file carries only end
-   results and matches the schema template.
-
-   **Persist a durable snapshot:** as your last action, copy the finalized working
-   file yourself. Read the current working file at
-   `.${coding_agent_root}/.temp/assessment-<run>.md` and write its exact contents to
-   `ingrain-security/assessment-<branch-slug>-<task-slug>-<timestamp>.md` at the
-   project root, where `<branch-slug>` is the current branch resolved once at review start
-   (see **The assessment file**), `<task-slug>` is the `## Task` Title lowercased and
-   reduced to `[a-z0-9-]` (collapse runs of `-`, trim leading/trailing `-`) and
-   `<timestamp>` is `YYYYMMDD-HHMMSS`. Drop a segment that is unresolvable: if the branch
-   is unknown, omit `<branch-slug>-` (→ `assessment-<task-slug>-<timestamp>.md`); if there
-   is no usable title, omit `<task-slug>-` (→ `assessment-<branch-slug>-<timestamp>.md`, or
-   `assessment-<timestamp>.md` when both are absent). The `assessment-` prefix always
-   leads. Use your file tools — no shell needed, so this works on every
-   platform. Snapshots are **additive**: always write a NEW file, never overwrite an
-   earlier one. The folder and its self-ignoring `.gitignore` already exist (seeded by
-   the `ensure-assessment-dir` SessionStart hook), so the snapshot stays uncommitted.
+   results and matches the schema template. The file already lives at its
+   `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path, so there is **no snapshot
+   to copy** — finalizing it *is* persisting it.
 
    Then **write the results into the plan file** (see **The plan file**) — the
    implementation plan the coding agent edits and executes. Incorporate the selected
    threats and adopted mitigations, and fold in two supporting things: (1) a link to
-   the run's assessment file (`.${coding_agent_root}/.temp/assessment-<run>.md`, the living working
-   copy the maintenance instruction tracks) — noting the durable snapshot now saved
-   under `ingrain-security/`,
-   which is git-ignored by default (share one with `git add -f <file>`); and (2) the
+   the run's assessment file (`ingrain-security/assessment-<branch-slug>-<task-slug>.md`, the
+   living record the maintenance instruction tracks), which is git-ignored by default
+   (share it with `git add -f <file>`); and (2) the
    maintenance instruction — tell the implementing agent to keep that file in sync as
    the implementation changes across iteration loops. In plan mode, **name the plan
    file you write to** (e.g. `.${coding_agent_root}/plans/<name>.md`); ad-hoc, this is the inline
@@ -440,7 +426,7 @@ sections it needs — the file is the shared state, so your own context stays le
   assessment artifact; it writes no code.
 - **Read-only on the codebase; two outputs.** Workers make **no code or repo
   edits** — Read/Grep/Glob on the codebase only — and their sole write is their own
-  section of the stored analysis file (the per-run path the orchestrator minted).
+  section of the stored analysis file (the `assessment_path` the orchestrator minted).
   Restate that constraint in every dispatch, since without tool-level enforcement it
   is advisory. The process produces exactly two things: **the assessment file** (the
   hand-off medium the workers write, section by section, and you finalize) and

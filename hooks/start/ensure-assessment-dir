@@ -52,18 +52,15 @@ seed_readme() {
         'Point-in-time threat assessments produced by the `ingrain-security`' \
         'plugin at the end of each security-review run.' \
         '' \
-        'Each file is a branch- and task-keyed snapshot named' \
-        '`assessment-<branch>-<task-slug>-<timestamp>.md` (an unresolvable segment is' \
-        'dropped). History is additive — each run adds a new file rather than' \
-        'overwriting an existing one.' \
+        'Each file is keyed by branch and task, named' \
+        '`assessment-<branch>-<task-slug>.md` (an unresolvable segment is dropped). It is' \
+        'both the live working copy a review writes and its persisted record — the same' \
+        'file is updated in place, and re-reviewing the same task on the same branch' \
+        'resumes it. Different tasks and branches get their own files.' \
         '' \
         'This folder is git-ignored by default (see the `.gitignore` here): an' \
         'assessment can contain analysis of your private codebase, so it is not' \
         'committed unless you explicitly `git add -f <file>` one to share it.' \
-        '' \
-        'The live working copy during a review is the uncommitted' \
-        '`.claude/.temp/assessment-<run>.md` (or `.codex/.temp/` under Codex); the' \
-        'files here are its durable snapshots.' \
         > "${readme}" 2>/dev/null || true
 }
 

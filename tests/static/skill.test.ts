@@ -14,6 +14,7 @@ const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
 const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/assessment-file.md`;
 const TRIAGE_REF = `${ROOT}skills/ingrain-security/references/ingrain-relevance-triage.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
+const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
 
 const WORKERS = [
   "ingrain-relevance-triage",
@@ -66,21 +67,25 @@ Deno.test("SKILL.md: documents the read-reference dispatch mechanism", async () 
 
 Deno.test("SKILL.md: documents the assessment file, its path, and living-document behavior", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // Dedicated section and the host-templated local path.
+  // Dedicated section, and the single file written straight into ingrain-security/.
   assertStringIncludes(md, "## The assessment file");
-  assertStringIncludes(md, ".${coding_agent_root}/.temp/assessment-");
-  // The host-root variable is defined so the agent can substitute claude/codex.
+  assertStringIncludes(md, "ingrain-security/assessment-<branch-slug>-<task-slug>.md");
+  // The host-root variable is still defined (used for the plan-file path).
   assertStringIncludes(md, "${coding_agent_root}");
   // It is written/updated as a living document.
   assertStringIncludes(md.toLowerCase(), "living document");
   // The file's schema/template is defined in a dedicated reference file.
   assertStringIncludes(md, "references/assessment-file.md");
+  // The path is minted by the bundled script (mint), not hand-built.
+  assertStringIncludes(md, "scripts/assessment-path");
+  assertStringIncludes(md, "mint");
+  assertStringIncludes(md, "assessment_path");
 });
 
 Deno.test("assessment-file.md: defines the strict on-disk format and its allowed values", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
-  // The host-templated artifact path.
-  assertStringIncludes(md, ".${coding_agent_root}/.temp/assessment-");
+  // The single in-repo artifact path.
+  assertStringIncludes(md, "ingrain-security/assessment-<branch-slug>-<task-slug>.md");
   // Enumerated fields carry their exact allowed values.
   assertStringIncludes(md, "very high"); // likelihood
   for (const v of ["selected", "excluded", "undecided"]) {
@@ -89,19 +94,21 @@ Deno.test("assessment-file.md: defines the strict on-disk format and its allowed
   // Key constraints from the format are stated.
   assertStringIncludes(md, "256"); // justification max length
   assertStringIncludes(md, "never exceed 8"); // max threats (hard ceiling)
+  // The path is obtained from the bundled path-minting script.
+  assertStringIncludes(md, "scripts/assessment-path");
 });
 
-Deno.test("SKILL.md + assessment-file.md: durable snapshot name is keyed by branch", async () => {
+Deno.test("SKILL.md + assessment-file.md: the assessment file name is keyed by branch + task", async () => {
   const skill = await Deno.readTextFile(SKILL);
   const ref = await Deno.readTextFile(ASSESSMENT_REF);
-  // The durable snapshot filename carries a <branch-slug> segment ahead of the task slug.
-  const NAME = "ingrain-security/assessment-<branch-slug>-<task-slug>-<timestamp>.md";
+  // Deterministic branch+task name (no timestamp) in both the skill and its schema ref.
+  const NAME = "ingrain-security/assessment-<branch-slug>-<task-slug>.md";
   assertStringIncludes(skill, NAME);
-  assertStringIncludes(ref, "assessment-<branch-slug>-<task-slug>-<timestamp>.md");
+  assertStringIncludes(ref, "assessment-<branch-slug>-<task-slug>.md");
   // Branch is resolved with git (not the unreliable .git/HEAD read).
   assertStringIncludes(skill, "git branch --show-current");
-  // The unknown-branch fallback keeps the legacy task-only name.
-  assertStringIncludes(skill, "assessment-<task-slug>-<timestamp>.md");
+  // The unknown-branch fallback keeps the task-only name.
+  assertStringIncludes(skill, "assessment-<task-slug>.md");
 });
 
 Deno.test("triage: instructs a prior-analysis lookup that seeds the generator", async () => {
@@ -146,4 +153,15 @@ Deno.test("hook.json: valid JSON configuring a SessionStart hook", async () => {
   const hook = JSON.parse(await Deno.readTextFile(HOOK_JSON));
   const serialized = JSON.stringify(hook);
   assertStringIncludes(serialized, "SessionStart");
+});
+
+Deno.test("hook.json: both platforms pass their host token to session-start", async () => {
+  // session-start needs the host so it can inject a host-correct assessment-path command.
+  const claude = JSON.stringify(JSON.parse(await Deno.readTextFile(HOOK_JSON)));
+  const codex = JSON.stringify(JSON.parse(await Deno.readTextFile(CODEX_HOOK_JSON)));
+  assertStringIncludes(claude, "start/session-start claude");
+  assertStringIncludes(codex, "start/session-start codex");
+  // The assessment-folder hook keeps passing its host token too.
+  assertStringIncludes(claude, "start/ensure-assessment-dir claude");
+  assertStringIncludes(codex, "start/ensure-assessment-dir codex");
 });

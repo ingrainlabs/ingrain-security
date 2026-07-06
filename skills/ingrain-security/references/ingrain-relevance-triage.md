@@ -38,13 +38,16 @@ Before you classify, look for an analysis that already exists for **this same ta
 the pipeline can build on prior work instead of restarting. This is read-only — use only
 Glob, Grep, and Read:
 
-1. **Glob the durable snapshot folder** `ingrain-security/` for this branch:
-   `ingrain-security/assessment-<branch-slug>-*.md`. If the branch is `unknown`,
+1. **Glob the assessment folder** `ingrain-security/` for this branch:
+   `ingrain-security/assessment-<branch-slug>-*.md`, where `<branch-slug>` is the
+   `branch_slug` the orchestrator resolved via the `scripts/assessment-path` script
+   (so this glob and the file names always agree). If the branch is `unknown`,
    Glob all `ingrain-security/assessment-*.md` instead.
 2. **Match on the task.** For each candidate, read its `## Task` Title and **compare the
    branch and the title/description against the current plan** — a match is the same
-   branch and a title describing the same work. Pick the best match; on ties, prefer the
-   most recent `<timestamp>`.
+   branch and a title describing the same work. A match on the same task is the file this
+   run will resume and build on. Pick the best match; on ties, prefer the most recently
+   modified file.
 3. **If a matched snapshot has a non-empty `## Threats` section**, capture its path and
    threat count — this is your **Prior analysis** pointer, and the orchestrator forwards
    it to the `ingrain-threat-generator` so it seeds from those threats. If nothing

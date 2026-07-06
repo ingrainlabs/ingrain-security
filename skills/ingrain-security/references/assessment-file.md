@@ -7,39 +7,25 @@ shape.
 
 ## Nature
 
-- **Path (per run):** a uniquely-named file under `.${coding_agent_root}/.temp/`,
-  relative to the working project root, so two reviews running at once never share
-  (and clobber) one file. `${coding_agent_root}` is the host's config dotfolder base
-  name — `claude` under Claude Code, `codex` under Codex (substitute it for your host);
-  see SKILL.md → **The assessment file**. The
-  orchestrator mints the path once at the start of the review and uses it throughout:
-  in plan mode `.${coding_agent_root}/.temp/assessment-<plan-basename>.md` (mirroring
-  the active `.${coding_agent_root}/plans/<plan-basename>.md`); ad-hoc
-  `.${coding_agent_root}/.temp/assessment-<YYYYMMDD-HHMMSS>-<rand>.md`. Both keep the
-  `assessment-` prefix. It is a **local working artifact** in the host's own config
-  folder (`.${coding_agent_root}/`), not committed — that folder is git-ignored by
-  convention; keep the file uncommitted.
-- **Committed snapshot(s).** At finalize (SKILL.md Step 7, and the Gate 1
-  none-selected close) the orchestrator copies the finalized working file itself, using
-  its file tools (no shell, so it works on every platform), into
-  `ingrain-security/assessment-<branch-slug>-<task-slug>-<timestamp>.md` at the
-  project root. `<branch-slug>` is the current git branch — resolved once at review start
-  via `git branch --show-current` (not `.git/HEAD`, unreliable in a worktree/submodule),
-  then lowercased and reduced to `[a-z0-9-]`; it keys every snapshot for a feature branch
-  together and lets triage find a prior analysis of the same task (see
-  `ingrain-relevance-triage`). It derives `<task-slug>` from the `## Task` Title —
-  lowercased and reduced to `[a-z0-9-]`. Any unresolvable segment is dropped (branch
-  unknown → `assessment-<task-slug>-<timestamp>.md`; no usable title →
-  `assessment-<branch-slug>-<timestamp>.md`; both absent → `assessment-<timestamp>.md`),
-  and the `assessment-` prefix always leads. The
-  folder and its self-ignoring `.gitignore` are seeded by the
-  `ensure-assessment-dir` SessionStart hook. Snapshots are **additive** — each run
-  writes a new timestamped file, never overwriting an earlier one. The folder is
-  **self-ignoring** (an inner `.gitignore` of `*` + `!.gitignore`), so snapshots do
-  not appear in `git status`; sharing one is an explicit `git add -f <file>` opt-in.
-  Relationship: the per-run `.${coding_agent_root}/.temp/assessment-<run>.md` is the **living,
-  uncommitted** working copy that workers write and the Maintenance instruction tracks;
-  the folder holds the **frozen** snapshots of it over time.
+- **Path.** A single file written directly into `ingrain-security/` at the project
+  root — it is **both** the living working copy the workers write during the run **and**
+  its persisted record, so there is no separate temp file and no finalize copy. The
+  orchestrator does not hand-build it: it runs the `scripts/assessment-path` script
+  (`mint` subcommand) once at review start and reuses its `assessment_path` throughout —
+  see SKILL.md → **The assessment file**. The name is deterministic in the branch + task:
+  `ingrain-security/assessment-<branch-slug>-<task-slug>.md`. The script resolves
+  `<branch-slug>` from the current git branch (`git branch --show-current`, not
+  `.git/HEAD`, unreliable in a worktree/submodule), lowercased and reduced to `[a-z0-9-]`,
+  and derives `<task-slug>` from the `## Task` Title by the same rule. Because the name
+  *is* the task identity, re-reviewing the **same task on the same branch** resolves to the
+  **same file** (the run resumes/updates it in place; `file_exists: true` signals this),
+  while a different task or branch gets its own file. Any unresolvable segment is dropped
+  (branch unknown → `assessment-<task-slug>.md`; no usable title →
+  `assessment-<branch-slug>.md`; both absent → `assessment.md`), and the `assessment-`
+  prefix always leads. The folder is **self-ignoring** (an inner `.gitignore` of `*` +
+  `!.gitignore`, seeded by the `ensure-assessment-dir` hook and re-ensured by the script),
+  so the file does not appear in `git status`; sharing it is an explicit
+  `git add -f <file>` opt-in.
 - **Hand-off medium.** Workers write their sections and return to the orchestrator
   only a branch keyword plus a one-line pointer. The orchestrator owns the
   title/banner and the finalize; it moves data between workers by pointer and does
@@ -59,8 +45,8 @@ shape.
   always mirrors the current frozen state — critic-loop revisions and re-selection
   overwrite the prior contents of that section. The critique sections are iteration
   scratch, not results: once their loop is done they are dead weight, and the
-  orchestrator **deletes both critique sections at finalize** — the finalized file and
-  every durable snapshot contain only end results. This is why the template below has
+  orchestrator **deletes both critique sections at finalize** — the finalized file
+  contains only end results. This is why the template below has
   no critique sections.
 
 ## Sections and fields
@@ -75,7 +61,7 @@ must use **exactly one** of the listed values (lower-case, verbatim).
 - **Verdict** — `minor` | `major`.
 - **Security relevant** — `true` | `false`.
 - **Surfaces** — bullet list (present when `major`).
-- **Prior analysis** — optional; a pointer to a prior durable snapshot found for this
+- **Prior analysis** — optional; a pointer to a prior analysis file found for this
   task (its `ingrain-security/…` path and threat count, e.g.
   `ingrain-security/assessment-<…>.md — 4 threats`), or `none`. Set by
   `ingrain-relevance-triage` when it finds a threats-bearing prior analysis of the same

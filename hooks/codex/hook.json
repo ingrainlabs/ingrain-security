@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" start/session-start",
+            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" start/session-start codex",
             "statusMessage": "Loading ingrain-security context"
           },
           {
