@@ -22,8 +22,8 @@ description: >-
 >   the stored analysis file (path per your dispatch), filling the descriptive columns (Tag,
 >   Title, Asset, Vector, Description, Assumptions) per the schema in
 >   `references/assessment-file.md` — the risk-scorer fills the scoring columns and
->   the orchestrator fills Selection later; most tasks warrant 3–6 rows; never
->   exceed 8. Then return to the
+>   the orchestrator fills Selection later; most tasks warrant 3–6 rows — keep it
+>   short and scoped (a target, not a hard cap). Then return to the
 >   orchestrator ONLY a one-line headline (e.g. the threat count) plus a pointer to
 >   that section — not the full list.
 

@@ -67,7 +67,7 @@ must use **exactly one** of the listed values (lower-case, verbatim).
   `ingrain-relevance-triage` when it finds a threats-bearing prior analysis of the same
   task (branch + title); the generator seeds from it.
 
-### `## Threats` — a Markdown table; most tasks warrant **3–6 rows**, **never exceed 8**
+### `## Threats` — a Markdown table; most tasks warrant **3–6 rows** — a target, not a hard limit; keep it short and scoped
 
 One row per threat, with these columns:
 
@@ -90,9 +90,7 @@ One row per threat, with these columns:
 left-to-right, so this table doubles as a reasoning schema: writing the justification
 *before* the numerical (Risk score) and qualitative (Impact, Likelihood, Criticality)
 scores forces the reasoning to come first and drive the scores, rather than
-rationalizing numbers already chosen. This intentionally diverges from the field order
-of `@ingrain`'s `PThreatSchema` (which trails justification last); the divergence is
-deliberate and scoped to this skill.
+rationalizing numbers already chosen. 
 
 **Gate 1 → Selection.** When the user decides at Gate 1, record each threat's
 **Selection**: include → `selected`, exclude → `excluded`. Use

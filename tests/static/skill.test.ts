@@ -93,7 +93,7 @@ Deno.test("assessment-file.md: defines the strict on-disk format and its allowed
   }
   // Key constraints from the format are stated.
   assertStringIncludes(md, "256"); // justification max length
-  assertStringIncludes(md, "never exceed 8"); // max threats (hard ceiling)
+  assertStringIncludes(md, "3–6 rows"); // threat count: soft target, not a hard limit
   // The path is obtained from the bundled path-minting script.
   assertStringIncludes(md, "scripts/assessment-path");
 });

@@ -263,7 +263,7 @@ sections it needs — the file is the shared state, so your own context stays le
    snapshot's `## Threats` (and `## Mitigations`) so it **seeds from the prior analysis**
    rather than starting from scratch — re-derive and refresh against the current plan, do
    not blindly copy. It writes
-   the threat rows (descriptive columns, `T1…`; most tasks warrant 3–6 rows, never exceed 8) into the `## Threats` table per the
+   the threat rows (descriptive columns, `T1…`; most tasks warrant 3–6 rows — a target, not a hard cap) into the `## Threats` table per the
    `references/assessment-file.md` schema and returns a pointer.
 2. **Critique threats** *(loop, max 3)* — dispatch the `ingrain-threat-critic` worker,
    pointing it at the `## Threats` section. On `needs-revision`, re-dispatch
