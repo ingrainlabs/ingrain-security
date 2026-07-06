@@ -83,8 +83,8 @@ Deno.test("assessment-file.md: defines the strict on-disk format and its allowed
   assertStringIncludes(md, ".${coding_agent_root}/.temp/assessment-");
   // Enumerated fields carry their exact allowed values.
   assertStringIncludes(md, "very high"); // likelihood
-  for (const v of ["accepted", "rejected", "uncertain"]) {
-    assertStringIncludes(md, v); // acceptance status
+  for (const v of ["selected", "excluded", "undecided"]) {
+    assertStringIncludes(md, v); // selection status
   }
   // Key constraints from the format are stated.
   assertStringIncludes(md, "256"); // justification max length
@@ -95,7 +95,7 @@ Deno.test("SKILL.md + assessment-file.md: durable snapshot name is keyed by bran
   const skill = await Deno.readTextFile(SKILL);
   const ref = await Deno.readTextFile(ASSESSMENT_REF);
   // The durable snapshot filename carries a <branch-slug> segment ahead of the task slug.
-  const NAME = "ingrain-threat-assessment/assessment-<branch-slug>-<task-slug>-<timestamp>.md";
+  const NAME = "ingrain-security/assessment-<branch-slug>-<task-slug>-<timestamp>.md";
   assertStringIncludes(skill, NAME);
   assertStringIncludes(ref, "assessment-<branch-slug>-<task-slug>-<timestamp>.md");
   // Branch is resolved with git (not the unreliable .git/HEAD read).
@@ -109,7 +109,7 @@ Deno.test("triage: instructs a prior-analysis lookup that seeds the generator", 
   const triage = await Deno.readTextFile(TRIAGE_REF);
   // The triage worker scans the durable folder for a prior analysis of this task.
   assertStringIncludes(triage.toLowerCase(), "check for prior analysis");
-  assertStringIncludes(triage, "ingrain-threat-assessment/assessment-<branch-slug>-*.md");
+  assertStringIncludes(triage, "ingrain-security/assessment-<branch-slug>-*.md");
   // It compares branch + title and emits a Prior analysis pointer.
   assertStringIncludes(triage, "Prior analysis");
   // The orchestrator forwards that pointer to the generator so it seeds prior threats.

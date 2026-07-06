@@ -186,7 +186,7 @@ finalize copy itself stays file-tool-only.
 Its **section layout and content template are defined in
 `references/assessment-file.md`** — follow that reference exactly, so every enumerated
 field (`impact`, `likelihood`, `criticality`, `yield`, `effort`, and the Gate
-acceptance `accepted`/`rejected`/`uncertain`) uses exactly the values it lists.
+selection `selected`/`excluded`/`undecided`) uses exactly the values it lists.
 
 ## The plan file
 
@@ -240,7 +240,7 @@ sections it needs — the file is the shared state, so your own context stays le
 0. **Triage** — dispatch the `ingrain-relevance-triage` worker with the plan, **plus the
    resolved `<branch-slug>` (or "unknown") and the task title**. Instruct it to first
    **check for a prior analysis** of this task in the durable snapshot folder
-   `ingrain-threat-assessment/` (matching on branch + task title) before it classifies —
+   `ingrain-security/` (matching on branch + task title) before it classifies —
    per `references/ingrain-relevance-triage.md`. If it finds a prior snapshot whose
    `## Threats` are non-empty, it returns a **Prior analysis** pointer (path + threat
    count) alongside its verdict; keep that pointer to forward to the generator in Step 1.
@@ -267,8 +267,8 @@ sections it needs — the file is the shared state, so your own context stays le
    `ingrain-threat-generator` with a pointer to `## Threats` + `## Threat critique` and
    repeat. Then **freeze** the threats (the frozen list lives in the `## Threats` section).
 3. **Risk score** — dispatch the `ingrain-risk-scorer` worker, pointing it at the frozen
-   `## Threats` section. It fills each row's scoring columns (Impact, Likelihood, Risk
-   score 0–100, Criticality, Justification) and writes the plan-level residual risk into
+   `## Threats` section. It fills each row's scoring columns (Justification, Impact,
+   Likelihood, Risk score 0–100, Criticality) and writes the plan-level residual risk into
    `## Risk score` — per the `references/assessment-file.md` schema.
 4. **Ask user — select which threats to address (Gate 1).** Follow the two-step
    display-then-ask pattern (see **How to ask the user**). The user is deciding
@@ -310,8 +310,8 @@ sections it needs — the file is the shared state, so your own context stays le
    stop and re-dispatch the `ingrain-risk-scorer` (or the `ingrain-threat-generator` if the
    rows themselves are missing) rather than skipping the table or rendering it
    empty. **After the user decides, record each
-   threat's `Acceptance`** in the `## Threats` table (include → `accepted`, exclude →
-   `rejected`; `uncertain` only if the user is explicitly unsure), per the
+   threat's `Selection`** in the `## Threats` table (include → `selected`, exclude →
+   `excluded`; `undecided` only if the user is explicitly unsure), per the
    `references/assessment-file.md` schema.
 
    - **1–N selected** — incorporate the selected threats into the plan; only
@@ -321,10 +321,10 @@ sections it needs — the file is the shared state, so your own context stays le
      selected — review closed" and close with a one-line verdict naming the
      threats as accepted risk. Still **fold the assessment link + maintenance
      instruction into the plan** (the `## Threats` section, with every threat marked
-     excluded/accepted, is the preserved context), **delete the `## Threat critique`
+     `excluded`, is the preserved context), **delete the `## Threat critique`
      section (iteration scratch), and persist a durable snapshot yourself** — copy the
      working file to
-     `ingrain-threat-assessment/assessment-<branch-slug>-<task-slug>-<timestamp>.md`
+     `ingrain-security/assessment-<branch-slug>-<task-slug>-<timestamp>.md`
      (see Step 7 for the naming and the unresolvable-segment fallbacks), then continue
      building the plan.
 5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the
@@ -371,9 +371,9 @@ sections it needs — the file is the shared state, so your own context stays le
    - **None selected** — incorporate nothing; note that the selected threats
      remain unmitigated.
 
-   **Finalize the assessment file:** record each mitigation's `Acceptance` in the
-   `## Mitigations` table (adopt → `accepted`, decline → `rejected`), and fill
-   `## Coverage / open items` with any `accepted` threat left without an `accepted`
+   **Finalize the assessment file:** record each mitigation's `Selection` in the
+   `## Mitigations` table (adopt → `selected`, decline → `excluded`), and fill
+   `## Coverage / open items` with any `selected` threat left without a `selected`
    covering mitigation — per the `references/assessment-file.md` schema. Then
    **delete the `## Threat critique` and `## Mitigation critique` sections** (heading
    and body) — they are iteration scratch; the finalized file carries only end
@@ -382,7 +382,7 @@ sections it needs — the file is the shared state, so your own context stays le
    **Persist a durable snapshot:** as your last action, copy the finalized working
    file yourself. Read the current working file at
    `.${coding_agent_root}/.temp/assessment-<run>.md` and write its exact contents to
-   `ingrain-threat-assessment/assessment-<branch-slug>-<task-slug>-<timestamp>.md` at the
+   `ingrain-security/assessment-<branch-slug>-<task-slug>-<timestamp>.md` at the
    project root, where `<branch-slug>` is the current branch resolved once at review start
    (see **The assessment file**), `<task-slug>` is the `## Task` Title lowercased and
    reduced to `[a-z0-9-]` (collapse runs of `-`, trim leading/trailing `-`) and
@@ -400,7 +400,7 @@ sections it needs — the file is the shared state, so your own context stays le
    threats and adopted mitigations, and fold in two supporting things: (1) a link to
    the run's assessment file (`.${coding_agent_root}/.temp/assessment-<run>.md`, the living working
    copy the maintenance instruction tracks) — noting the durable snapshot now saved
-   under `ingrain-threat-assessment/`,
+   under `ingrain-security/`,
    which is git-ignored by default (share one with `git add -f <file>`); and (2) the
    maintenance instruction — tell the implementing agent to keep that file in sync as
    the implementation changes across iteration loops. In plan mode, **name the plan

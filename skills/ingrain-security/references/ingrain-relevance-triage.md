@@ -38,9 +38,9 @@ Before you classify, look for an analysis that already exists for **this same ta
 the pipeline can build on prior work instead of restarting. This is read-only — use only
 Glob, Grep, and Read:
 
-1. **Glob the durable snapshot folder** `ingrain-threat-assessment/` for this branch:
-   `ingrain-threat-assessment/assessment-<branch-slug>-*.md`. If the branch is `unknown`,
-   Glob all `ingrain-threat-assessment/assessment-*.md` instead.
+1. **Glob the durable snapshot folder** `ingrain-security/` for this branch:
+   `ingrain-security/assessment-<branch-slug>-*.md`. If the branch is `unknown`,
+   Glob all `ingrain-security/assessment-*.md` instead.
 2. **Match on the task.** For each candidate, read its `## Task` Title and **compare the
    branch and the title/description against the current plan** — a match is the same
    branch and a title describing the same work. Pick the best match; on ties, prefer the
@@ -87,8 +87,8 @@ Lead with the verdict word so the orchestrator can branch on it, then hand the n
 - **`major`** — one line on why, plus a short **Surfaces** list naming the security-relevant aspects you spotted (e.g. "new file-upload endpoint", "adds JWT verification", "raw SQL with user input"). The `ingrain-threat-generator` seeds its threat list from these, so name concrete surfaces, not generic categories.
 
 Always include a **Prior analysis** line — the pointer from the lookup above (a prior
-`ingrain-threat-assessment/…` snapshot path + its threat count, e.g.
-`ingrain-threat-assessment/assessment-<…>.md — 4 threats`) or `none` when there is no
+`ingrain-security/…` snapshot path + its threat count, e.g.
+`ingrain-security/assessment-<…>.md — 4 threats`) or `none` when there is no
 matching threats-bearing prior analysis. Write it into your `## Triage` section and return
 it to the orchestrator alongside the verdict.
 

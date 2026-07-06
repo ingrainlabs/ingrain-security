@@ -22,7 +22,7 @@ shape.
 - **Committed snapshot(s).** At finalize (SKILL.md Step 7, and the Gate 1
   none-selected close) the orchestrator copies the finalized working file itself, using
   its file tools (no shell, so it works on every platform), into
-  `ingrain-threat-assessment/assessment-<branch-slug>-<task-slug>-<timestamp>.md` at the
+  `ingrain-security/assessment-<branch-slug>-<task-slug>-<timestamp>.md` at the
   project root. `<branch-slug>` is the current git branch — resolved once at review start
   via `git branch --show-current` (not `.git/HEAD`, unreliable in a worktree/submodule),
   then lowercased and reduced to `[a-z0-9-]`; it keys every snapshot for a feature branch
@@ -49,10 +49,10 @@ shape.
   |---------|-----------|
   | `## Task` | orchestrator (framing) |
   | `## Triage` | `ingrain-relevance-triage` |
-  | `## Threats` | `ingrain-threat-generator` (descriptive columns) → `ingrain-risk-scorer` (scoring columns) → orchestrator (Acceptance at Gate 1) — **filled in stages** |
+  | `## Threats` | `ingrain-threat-generator` (descriptive columns) → `ingrain-risk-scorer` (scoring columns) → orchestrator (Selection at Gate 1) — **filled in stages** |
   | `## Threat critique` | `ingrain-threat-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Risk score` | `ingrain-risk-scorer` (plan-level residual) |
-  | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Acceptance at Gate 2) |
+  | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Selection at Gate 2) |
   | `## Mitigation critique` | `ingrain-mitigation-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Coverage / open items`, `## Maintenance` | orchestrator (finalize) |
 - **Living document.** Rewrite the relevant section at each commit point so the file
@@ -70,15 +70,14 @@ must use **exactly one** of the listed values (lower-case, verbatim).
 
 ### `## Task` 
 - **Title** — string.
-- **Latest stage** — one of `planning` | `development` | `review`.
 
 ### `## Triage` — the relevance-triage verdict
 - **Verdict** — `minor` | `major`.
 - **Security relevant** — `true` | `false`.
 - **Surfaces** — bullet list (present when `major`).
 - **Prior analysis** — optional; a pointer to a prior durable snapshot found for this
-  task (its `ingrain-threat-assessment/…` path and threat count, e.g.
-  `ingrain-threat-assessment/assessment-<…>.md — 4 threats`), or `none`. Set by
+  task (its `ingrain-security/…` path and threat count, e.g.
+  `ingrain-security/assessment-<…>.md — 4 threats`), or `none`. Set by
   `ingrain-relevance-triage` when it finds a threats-bearing prior analysis of the same
   task (branch + title); the generator seeds from it.
 
@@ -94,16 +93,24 @@ One row per threat, with these columns:
 | **Vector** | string |
 | **Description** | string |
 | **Assumptions** | string |
+| **Justification** | string, **≤ 256 characters** |
 | **Impact** | `critical` \| `high` \| `medium` \| `low` |
 | **Likelihood** | `very high` \| `high` \| `medium` \| `low` |
 | **Risk score** | integer `0`–`100` |
 | **Criticality** | `low` \| `medium` \| `high` \| `critical` |
-| **Justification** | string, **≤ 256 characters** |
-| **Acceptance** | `accepted` \| `rejected` \| `uncertain` (optional until Gate 1) |
+| **Selection** | `selected` \| `excluded` \| `undecided` (optional until Gate 1) |
 
-**Gate 1 → Acceptance.** When the user decides at Gate 1, record each threat's
-**Acceptance**: include → `accepted`, exclude → `rejected`. Use
-`uncertain` only if the user is explicitly unsure. Before Gate 1 the column is empty.
+**Justification leads the scoring columns on purpose.** The scorer fills a row
+left-to-right, so this table doubles as a reasoning schema: writing the justification
+*before* the numerical (Risk score) and qualitative (Impact, Likelihood, Criticality)
+scores forces the reasoning to come first and drive the scores, rather than
+rationalizing numbers already chosen. This intentionally diverges from the field order
+of `@ingrain`'s `PThreatSchema` (which trails justification last); the divergence is
+deliberate and scoped to this skill.
+
+**Gate 1 → Selection.** When the user decides at Gate 1, record each threat's
+**Selection**: include → `selected`, exclude → `excluded`. Use
+`undecided` only if the user is explicitly unsure. Before Gate 1 the column is empty.
 
 ### `## Risk score` — plan-level residual risk
 - **Score** — integer `0`–`100`.
@@ -119,14 +126,14 @@ One row per threat, with these columns:
 | **Yield** | `high` \| `medium` \| `low` |
 | **Effort** | `high` \| `medium` \| `low` |
 | **Threat tags** | **≥ 1** threat tag (e.g. `T1, T3`) |
-| **Acceptance** | `accepted` \| `rejected` \| `uncertain` (optional until Gate 2) |
+| **Selection** | `selected` \| `excluded` \| `undecided` (optional until Gate 2) |
 
-**Gate 2 → Acceptance.** Record each mitigation's **Acceptance**:
-adopt → `accepted`, decline → `rejected`; `uncertain` only if the user is unsure.
+**Gate 2 → Selection.** Record each mitigation's **Selection**:
+adopt → `selected`, decline → `excluded`; `undecided` only if the user is unsure.
 
 ### `## Coverage / open items`
-- Any threat whose **Acceptance** is `accepted` that has no mitigation with
-  **Acceptance** `accepted` covering it (via its **Threat tags**).
+- Any threat whose **Selection** is `selected` that has no mitigation with
+  **Selection** `selected` covering it (via its **Threat tags**).
 
 ### `## Maintenance (for the implementing agent)`
 - Instruction to keep the file in sync as the implementation evolves.
@@ -148,29 +155,29 @@ Verdict: <minor|major>
 Security relevant: <true|false>
 Surfaces:
 - …
-Prior analysis: <ingrain-threat-assessment/assessment-<…>.md — N threats | none>
+Prior analysis: <ingrain-security/assessment-<…>.md — N threats | none>
 
 ## Threats
-| Tag | Title | Asset | Vector | Description | Assumptions | Impact | Likelihood | Risk score | Criticality | Justification | Acceptance |
-|-----|-------|-------|--------|-------------|-------------|--------|------------|------------|-------------|---------------|------------|
-| T1  | …     | …     | …      | …           | …           | high   | medium     | 78         | high        | …             | accepted   |
-| T2  | …     | …     | …      | …           | …           | low    | low        | 40         | medium      | …             | rejected   |
+| Tag | Title | Asset | Vector | Description | Assumptions | Justification | Impact | Likelihood | Risk score | Criticality | Selection |
+|-----|-------|-------|--------|-------------|-------------|---------------|--------|------------|------------|-------------|------------|
+| T1  | …     | …     | …      | …           | …           | …             | high   | medium     | 78         | high        | selected   |
+| T2  | …     | …     | …      | …           | …           | …             | low    | low        | 40         | medium      | excluded   |
 
 ## Risk score
 Score: <0–100>
 Criticality: <low|medium|high|critical>
 
 ## Mitigations
-| Tag | Title | Description | Yield | Effort | Threat tags | Acceptance |
+| Tag | Title | Description | Yield | Effort | Threat tags | Selection |
 |-----|-------|-------------|-------|--------|-------------|------------|
-| M1  | …     | …           | high  | medium | T1          | accepted   |
+| M1  | …     | …           | high  | medium | T1          | selected   |
 
 ## Coverage / open items
-- <any accepted threat with no accepted mitigation covering it>
+- <any selected threat with no selected mitigation covering it>
 
 ## Maintenance (for the implementing agent)
 Update this file whenever the implementation diverges from the analysis — a new
 surface, a threat's acceptance changes, or a mitigation is added, dropped, or
-altered. Keep the Acceptance columns and coverage honest against the code you write,
+altered. Keep the Selection columns and coverage honest against the code you write,
 and keep every enumerated field within its allowed values.
 ```

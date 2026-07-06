@@ -21,7 +21,7 @@ description: >-
 > - **Hand-off contract:** write the mitigation rows into the `## Mitigations` table
 >   of the stored analysis file (path per your dispatch), filling Tag, Title, Description,
 >   Yield, Effort, and the Threat tags each addresses (≥1) per the schema in
->   `references/assessment-file.md` — the orchestrator fills Acceptance at Gate 2.
+>   `references/assessment-file.md` — the orchestrator fills Selection at Gate 2.
 >   Then return to the orchestrator ONLY a one-line headline (e.g. the mitigation
 >   count) plus a pointer to that section — not the full list.
 

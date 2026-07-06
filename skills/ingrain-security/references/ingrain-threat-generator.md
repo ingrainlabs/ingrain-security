@@ -22,7 +22,7 @@ description: >-
 >   the stored analysis file (path per your dispatch), filling the descriptive columns (Tag,
 >   Title, Asset, Vector, Description, Assumptions) per the schema in
 >   `references/assessment-file.md` — the risk-scorer fills the scoring columns and
->   the orchestrator fills Acceptance later; most tasks warrant 3–6 rows; never
+>   the orchestrator fills Selection later; most tasks warrant 3–6 rows; never
 >   exceed 8. Then return to the
 >   orchestrator ONLY a one-line headline (e.g. the threat count) plus a pointer to
 >   that section — not the full list.
@@ -38,7 +38,7 @@ You are a Professional Security Analyst producing the threat list that the rest 
 
 Identify the threats that are genuinely relevant to *this* task — not a generic checklist. Scope tightly: a threat that doesn't apply to the change in front of you is noise that costs the critic and scorer time.
 
-Apply a hard drop test to every candidate: if a threat wouldn't change how this specific change is reviewed or implemented, omit it. Merge candidates that share an asset and vector into one threat. A short, sharp list is the goal — most tasks warrant 3–6 threats; 8 is a rare ceiling for genuinely broad changes, never a quota to fill.
+Apply a hard drop test to every candidate: if a threat wouldn't change how this specific change is reviewed or implemented, omit it. Merge candidates that share an asset and vector into one threat. A short, sharp list is the goal — most tasks warrant 3–6 threats.
 
 ## Output
 

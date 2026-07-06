@@ -85,7 +85,7 @@ main() {
     local host="${1:-}" project_root assessment_dir
     project_root="$(resolve_project_root "${host}")"
     [ -n "${project_root}" ] || return 0
-    assessment_dir="${project_root}/ingrain-threat-assessment"
+    assessment_dir="${project_root}/ingrain-security"
 
     # Never follow a pre-placed symlink at the target — a crafted repo could point
     # it outside the tree. Silent no-op; this hook must not abort the session (M4).

@@ -61,7 +61,7 @@ flowchart TD
   `.claude/.temp/assessment-*.md` under Claude Code, `.codex/.temp/assessment-*.md`
   under Codex — the workers' shared hand-off medium, written section by section.
 - The selected findings, **folded into your plan**.
-- A durable, timestamped snapshot copied to an `ingrain-threat-assessment/` folder
+- A durable, timestamped snapshot copied to an `ingrain-security/` folder
   in your project.
 
 ## Installation
@@ -112,7 +112,7 @@ the skill manually.
 **Read-only guarantee.** The workers never edit code. The only writes the review
 makes are the assessment file and the findings folded into your plan.
 
-**The assessment folder is git-ignored.** `ingrain-threat-assessment/` is ignored
+**The assessment folder is git-ignored.** `ingrain-security/` is ignored
 by default. To share a snapshot, force-add it: `git add -f <file>`.
 
 ## For contributors
