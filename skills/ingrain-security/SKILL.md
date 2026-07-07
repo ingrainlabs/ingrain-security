@@ -170,11 +170,14 @@ for every worker dispatch and at finalize. The path is deterministic in the bran
 
 so it doubles as the task's identity — re-reviewing the **same task on the same branch**
 resolves to the **same file** (the run resumes/updates it in place; `file_exists: true`
-signals this), while a different task or branch gets its own file. The `assessment-` prefix
+signals this), while a different task or branch gets its own file. This task-slug keying is
+**by design how two concurrent tasks on one branch stay isolated**: distinct titles mint
+distinct files, so parallel reviews never write over each other — the separation is
+structural, not left to a worker's judgement. The `assessment-` prefix
 always leads; any unresolvable segment is dropped (no branch → `assessment-<task-slug>.md`;
 no title → `assessment-<branch-slug>.md`; both → `assessment.md`). The file is
-**git-ignored** (the folder self-ignores), so it stays uncommitted. It is a **living
-document** and the **hand-off medium** between workers:
+**git-ignored** (the folder self-ignores), so it stays uncommitted. It is a
+**living document** and the **hand-off medium** between workers:
 each worker writes its own named section, the orchestrator frames and finalizes it, and the
 plan you produce links it and carries the **Maintenance** instruction for the implementing
 agent.
@@ -243,8 +246,9 @@ sections it needs — the file is the shared state, so your own context stays le
 0. **Triage** — dispatch the `ingrain-relevance-triage` worker with the plan, **plus the
    resolved `<branch-slug>` (or "unknown") and the task title**. Instruct it to first
    **check for a prior analysis** of this task in the assessment folder
-   `ingrain-security/` (matching on branch + task title) before it classifies —
-   per `references/ingrain-relevance-triage.md`. If it finds a prior snapshot whose
+   `ingrain-security/` (matching on branch + task title — a shared branch may
+   hold other concurrent tasks' assessments, so a loose match returns `none`) before it
+   classifies — per `references/ingrain-relevance-triage.md`. If it finds a prior snapshot whose
    `## Threats` are non-empty, it returns a **Prior analysis** pointer (path + threat
    count) alongside its verdict; keep that pointer to forward to the generator in Step 1.
    - If the verdict is `minor`: state "no security review needed — minor change"

@@ -43,11 +43,15 @@ Glob, Grep, and Read:
    `branch_slug` the orchestrator resolved via the `scripts/assessment-path` script
    (so this glob and the file names always agree). If the branch is `unknown`,
    Glob all `ingrain-security/assessment-*.md` instead.
-2. **Match on the task.** For each candidate, read its `## Task` Title and **compare the
-   branch and the title/description against the current plan** — a match is the same
-   branch and a title describing the same work. A match on the same task is the file this
-   run will resume and build on. Pick the best match; on ties, prefer the most recently
-   modified file.
+2. **Match on the task — strictly.** A shared branch may hold several concurrent tasks'
+   assessments, so the glob can return files belonging to *other* work. For each candidate,
+   read its `## Task` Title and **compare the branch and the title/description against the
+   current plan** — a match is the same branch **and** a title describing the *same* work,
+   not merely an adjacent task on the branch. On ties, prefer the most recently modified
+   file. **If no candidate clearly describes _this_ task, return `none`** — seeding the
+   pipeline from a sibling task's analysis poisons every downstream stage, so starting fresh
+   is strictly safer than a loose match. Only a confident same-task match is the file this
+   run resumes and builds on.
 3. **If a matched snapshot has a non-empty `## Threats` section**, capture its path and
    threat count — this is your **Prior analysis** pointer, and the orchestrator forwards
    it to the `ingrain-threat-generator` so it seeds from those threats. If nothing

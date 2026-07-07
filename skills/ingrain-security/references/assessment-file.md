@@ -19,7 +19,10 @@ shape.
   and derives `<task-slug>` from the `## Task` Title by the same rule. Because the name
   *is* the task identity, re-reviewing the **same task on the same branch** resolves to the
   **same file** (the run resumes/updates it in place; `file_exists: true` signals this),
-  while a different task or branch gets its own file. Any unresolvable segment is dropped
+  while a different task or branch gets its own file. This is also **how two concurrent
+  tasks on one branch stay isolated** — distinct titles mint distinct files, so parallel
+  reviews never clobber each other; the separation is structural, not a worker's judgement
+  call. Any unresolvable segment is dropped
   (branch unknown → `assessment-<task-slug>.md`; no usable title →
   `assessment-<branch-slug>.md`; both absent → `assessment.md`), and the `assessment-`
   prefix always leads. The folder is **self-ignoring** (an inner `.gitignore` of `*` +
