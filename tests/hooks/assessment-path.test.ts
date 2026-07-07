@@ -224,6 +224,60 @@ Deno.test("mint: slug rules, and --branch-slug is honored verbatim", async () =>
   });
 });
 
+Deno.test("mint: raw branch field carries the un-slugified name", async () => {
+  await withProject(async (dir) => {
+    await sh(gitRepo("feature/foo"), dir);
+    const j = await runJson(["claude", "mint", "--title", "T"], { projectDir: dir });
+    // branch_slug is the filename-safe form; branch is the git ref verbatim.
+    assertEquals(j.branch, "feature/foo");
+    assertEquals(j.branch_slug, "feature-foo");
+    // When --branch-slug is supplied the git branch is not consulted, so it is empty.
+    const forced = await runJson(
+      ["claude", "mint", "--title", "T", "--branch-slug", "other-branch"],
+      { projectDir: dir },
+    );
+    assertEquals(forced.branch, "");
+    assertEquals(forced.branch_slug, "other-branch");
+  });
+});
+
+Deno.test("mint: a detached HEAD drops the branch segment", async () => {
+  await withProject(async (dir) => {
+    // One commit to detach onto, then check out its SHA -> HEAD is detached.
+    await sh(
+      `${gitRepo("main")} && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init` +
+        ` && git checkout -q --detach HEAD`,
+      dir,
+    );
+    const j = await runJson(["claude", "mint", "--title", "Add JWT auth"], { projectDir: dir });
+    assertEquals(j.branch, "");
+    assertEquals(j.branch_known, false);
+    assertEquals(j.assessment_path, "ingrain-security/assessment-add-jwt-auth.md");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mint: JSON-escaping robustness
+// ---------------------------------------------------------------------------
+
+Deno.test("mint: a project path with quotes/backslashes still yields valid JSON", async () => {
+  await withProject(async (parent) => {
+    // The title is slugified before output, so it never reaches escape_for_json; the
+    // raw-passed fields (project_root, assessment_abs) are. Drive one through a dir
+    // whose name carries a double-quote and a backslash — chars git refs cannot hold.
+    const nasty = `${parent}/pr"oj\\ekt`;
+    await Deno.mkdir(nasty);
+    await sh(gitRepo("feature/foo"), nasty);
+    // runJson's JSON.parse succeeding at all proves the output stayed well-formed;
+    // then confirm the escaped chars survived round-trip into the parsed strings.
+    const j = await runJson(["claude", "mint", "--title", "T"], { projectDir: nasty });
+    assertStringIncludes(j.project_root, '"');
+    assertStringIncludes(j.project_root, "\\");
+    assertStringIncludes(j.assessment_abs, '"');
+    assertEquals(j.basename, "assessment-feature-foo-t.md");
+  });
+});
+
 // ---------------------------------------------------------------------------
 // mint: guards & interface
 // ---------------------------------------------------------------------------
@@ -253,5 +307,34 @@ Deno.test("usage errors exit 2 (unknown subcommand / missing host / bad flag)", 
     assertEquals((await run(["claude", "bogus"], { projectDir: dir })).code, 2);
     assertEquals((await run([], { projectDir: dir })).code, 2);
     assertEquals((await run(["claude", "mint", "--nope"], { projectDir: dir })).code, 2);
+  });
+});
+
+Deno.test("usage errors exit 2 (missing subcommand after a host)", async () => {
+  await withProject(async (dir) => {
+    const res = await run(["claude"], { projectDir: dir });
+    assertEquals(res.code, 2);
+    assertStringIncludes(res.stderr, "subcommand");
+  });
+});
+
+Deno.test("usage errors exit 2 (a flag given as the last arg has no value)", async () => {
+  await withProject(async (dir) => {
+    const noTitle = await run(["claude", "mint", "--title"], { projectDir: dir });
+    assertEquals(noTitle.code, 2);
+    assertStringIncludes(noTitle.stderr, "--title needs a value");
+
+    const noSlug = await run(["claude", "mint", "--branch-slug"], { projectDir: dir });
+    assertEquals(noSlug.code, 2);
+    assertStringIncludes(noSlug.stderr, "--branch-slug needs a value");
+  });
+});
+
+Deno.test("usage errors exit 2 (a host token that slugifies to empty)", async () => {
+  await withProject(async (dir) => {
+    // "---" has no alphanumerics, so host_slug is empty and mint rejects it.
+    const res = await run(["---", "mint", "--title", "T"], { projectDir: dir });
+    assertEquals(res.code, 2);
+    assertStringIncludes(res.stderr, "invalid host token");
   });
 });

@@ -173,8 +173,8 @@ resolves to the **same file** (the run resumes/updates it in place; `file_exists
 signals this), while a different task or branch gets its own file. The `assessment-` prefix
 always leads; any unresolvable segment is dropped (no branch → `assessment-<task-slug>.md`;
 no title → `assessment-<branch-slug>.md`; both → `assessment.md`). The file is
-**git-ignored** (the folder self-ignores), so it stays uncommitted unless you
-`git add -f` it. It is a **living document** and the **hand-off medium** between workers:
+**git-ignored** (the folder self-ignores), so it stays uncommitted. It is a **living
+document** and the **hand-off medium** between workers:
 each worker writes its own named section, the orchestrator frames and finalizes it, and the
 plan you produce links it and carries the **Maintenance** instruction for the implementing
 agent.
