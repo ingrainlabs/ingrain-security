@@ -10,8 +10,10 @@ description: >-
   only runs the full review for security-relevant ("major") changes: threats →
   0-100 risk score → user selects which threats to address (0–N) → mitigations →
   user selects which mitigations to adopt, with critic-driven improvement loops,
-  via dedicated read-only subagents. The selected threats and adopted mitigations
-  become part of the plan you produce.
+  via dedicated read-only subagents. Mitigations are informed by the org's own
+  security rules, retrieved through the ingrain CLI, so they reflect established
+  org practice for how to implement the fix. The selected threats and adopted
+  mitigations become part of the plan you produce.
 ---
 
 <SUBAGENT-STOP>
@@ -95,6 +97,15 @@ own context during the loop. Hold only the compact statuses/pointers workers ret
 Read a bounded slice of the file only when you must — at Gate 1 and Gate 2, to render
 the prepared table for the user, and at finalize. This keeps your context lean across
 the whole review.
+
+**One exception to the read-only constraint:** the `ingrain-mitigation-generator`
+is additionally allowed to run the read-only `ingrain context security_rules
+"<query>"` CLI lookup to fetch the org's security rules — dispatch it with the
+Bash/exec tool available in addition to Read/Grep/Glob, and say so in its
+dispatch. It still makes no edits and runs no other commands. **Every other
+worker stays strictly Read/Grep/Glob.** If the CLI is unavailable or
+unconfigured, the generator degrades gracefully and proceeds without rules — see
+`references/platform-dispatch.md`.
 
 ## Model tiers
 
@@ -225,7 +236,7 @@ flowchart TD
     freezeThreats --> riskScorer[ingrain-risk-scorer]
     riskScorer --> gate1{Gate 1: select threats 0–N}
     gate1 -->|none selected| done([Fold results into the plan; keep planning])
-    gate1 -->|1+ selected| mitGen[ingrain-mitigation-generator]
+    gate1 -->|1+ selected| mitGen[ingrain-mitigation-generator<br/>+ retrieve org rules via ingrain CLI]
 
     mitGen --> mitCritic[ingrain-mitigation-critic]
     mitCritic --> mitsOk{mitigations ok?}
@@ -333,8 +344,13 @@ sections it needs — the file is the shared state, so your own context stays le
      `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path — no snapshot copy is
      needed — so just finalize it in place, then continue building the plan.
 5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the
-   user-selected threats — only those; excluded threats are out of scope. It writes the
-   mitigations into the `## Mitigations` section and returns a pointer.
+   user-selected threats — only those; excluded threats are out of scope. As part
+   of this step the generator retrieves the org's **security rules** — authoritative
+   guidance on *how to implement* the needed security features — by running
+   `ingrain context security_rules "<query>"`, and folds them into its proposals so
+   the mitigations reflect established org practice, not just generic advice. If the
+   CLI is unavailable or unconfigured it degrades gracefully and proceeds without
+   rules. The mitigations it returns carry the backing rule(s) they cite.
 6. **Critique mitigations** *(loop, max 3)* — dispatch the `ingrain-mitigation-critic`
    worker, pointing it at `## Mitigations`; re-dispatch `ingrain-mitigation-generator` on
    `needs-revision`. Then **freeze** the mitigations.
@@ -350,19 +366,16 @@ sections it needs — the file is the shared state, so your own context stays le
    | **Mitigation** | short title of the proposed mitigation |
    | **Addresses** | the threat tag(s) it covers (`T1`, `T3`, …) |
    | **What it does** | the task-specific guidance, from the mitigation's Description |
+   | **Rules** | the backing org rule(s) it cites, as `title` (`id`), from the mitigation's Rules field (`none` if no rule applies) |
    | **Yield** | the risk it removes over the current baseline |
    | **Effort** | how much work it takes to implement |
 
-   Keep the table faithful to the frozen mitigations — don't invent or re-scope.
-   In the same message, **name the run's assessment file** (its
-   `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) so the user can open the full
-   analysis behind the table, alongside the plan file mention (see **How to ask
-   the user**).
-
-   To build the table, read the bounded `## Mitigations` slice of the assessment
-   file — not the whole running analysis. Every table cell and every window label
-   comes from that slice; if the slice is empty or missing, stop and re-dispatch
-   the `ingrain-mitigation-generator` rather than rendering an empty table.
+   Keep the table faithful to the frozen mitigations — don't invent or re-scope,
+   and cite only rules the generator actually retrieved. If the generator recorded
+   graceful degradation (no org rules retrieved), say so in one line above the
+   table and leave the **Rules** column as `none`. If the generator surfaced any
+   **Applicable rules** not tied to a single mitigation, list them in that same
+   one-line note so the user sees them at the gate.
 
    **Then present one single-choice window per mitigation** asking which
    mitigations to adopt — each window a single include/exclude decision for that
@@ -415,9 +428,9 @@ sections it needs — the file is the shared state, so your own context stays le
 | "The user excluded T2, but it's important — I'll mitigate it anyway" | Excluded findings are out of scope. Record them as accepted risk and move on. |
 | "The critic flagged issues but it's good enough" | Re-run the generator with the feedback (up to 3 rounds). |
 | "This loop could keep improving forever" | Cap each critic loop at 3 rounds; surface what's unresolved. |
-| "I'll just answer the worker's job myself instead of dispatching" | Each worker runs in its own subagent — dispatch it, don't inline it. |
-| "I'll paste the prior worker's output into the next dispatch" | Hand off by pointer — tell the next worker which section of the assessment file to read; don't thread full content through your context. |
-| "I'll read the whole assessment file to keep track" | Don't. Hold only the compact statuses; read only the bounded gate slices. Reading the full running analysis defeats the context-window discipline. |
+| "I'll just answer the worker's job myself instead of dispatching" | Each worker runs in its own read-only subagent — dispatch it, don't inline it. |
+| "The `ingrain` CLI errored / isn't configured, so I'll stop the review" | Rule retrieval degrades gracefully — proceed without rules, note why, and still propose mitigations. |
+| "I'll cite a plausible-sounding org rule to back this mitigation" | Cite only rules actually returned by `ingrain context` — never invent a rule or an id. |
 | "I'll put all the detail in the window options and skip the table" | Display the findings as a table first, then present the single-choice windows — never the windows alone. |
 | "I'm in plan mode / keeping output lean, so I'll skip printing the gate table" | The gate table is mandatory visible output in every mode. Read the bounded slice of the assessment file — that read is the one the context-window discipline permits — and print the table before any window. |
 

@@ -149,6 +149,26 @@ Deno.test("platform-dispatch.md: covers the subagent primitive and the fallback"
   assertStringIncludes(md.toLowerCase(), "fallback");
 });
 
+Deno.test("ingrain-mitigation-generator.md: documents the ingrain rule-retrieval CLI", async () => {
+  const ref = `${ROOT}skills/ingrain-security/references/ingrain-mitigation-generator.md`;
+  const md = await Deno.readTextFile(ref);
+  // The retrieval command and its output shape.
+  assertStringIncludes(md, "ingrain context security_rules");
+  // Version fallback for older CLIs (pre-rename #98).
+  assertStringIncludes(md, "ingrain context decisions");
+  // Graceful degradation when the CLI is absent/unconfigured.
+  assertStringIncludes(md.toLowerCase(), "graceful degradation");
+  assertStringIncludes(md.toLowerCase(), "proceed without rules");
+});
+
+Deno.test("SKILL.md: mitigation step retrieves rules and Gate 2 displays them", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  // Step 5 folds rule retrieval into the mitigation step.
+  assertStringIncludes(md, "ingrain context security_rules");
+  // Gate 2 table surfaces the backing rules to the user.
+  assertStringIncludes(md, "| **Rules** |");
+});
+
 Deno.test("hook.json: valid JSON configuring a SessionStart hook", async () => {
   const hook = JSON.parse(await Deno.readTextFile(HOOK_JSON));
   const serialized = JSON.stringify(hook);

@@ -39,6 +39,21 @@ isolation, and the main session is write-capable — so:
   content; the orchestrator does not read the full running analysis into its own
   context, only compact statuses and the bounded gate slices.
 
+## Mitigation-generator's CLI exception
+
+Every worker is read-only, but the `ingrain-mitigation-generator` has one narrow
+exception: it runs the read-only `ingrain context security_rules "<query>"` lookup
+to fetch the org's security rules. Dispatch it with the host's shell/exec tool
+available **in addition to** Read/Grep/Glob (e.g. Claude Code: allow Bash for
+`ingrain context`; Codex: the exec capability). Restate inline that it makes no
+edits and runs no other commands. All other workers get no shell access.
+
+This is best-effort, not required: where the host cannot grant shell access, the
+`ingrain` binary is not installed, or the CLI is unconfigured (no
+`INGRAIN_SYNC_URL` / API token) or returns nothing, the worker **degrades
+gracefully** — it proposes mitigations without org rules and notes why. Rule
+retrieval never blocks or fails the review.
+
 ## Selection windows (Gate 1 and Gate 2)
 
 At each gate, **first display the findings table in the conversation** (built
