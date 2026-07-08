@@ -103,9 +103,13 @@ is additionally allowed to run the read-only `ingrain context security_rules
 "<query>"` CLI lookup to fetch the org's security rules — dispatch it with the
 Bash/exec tool available in addition to Read/Grep/Glob, and say so in its
 dispatch. It still makes no edits and runs no other commands. **Every other
-worker stays strictly Read/Grep/Glob.** If the CLI is unavailable or
-unconfigured, the generator degrades gracefully and proceeds without rules — see
-`references/platform-dispatch.md`.
+worker stays strictly Read/Grep/Glob.** If the CLI is genuinely unavailable or
+unconfigured, the generator degrades gracefully and proceeds without rules. But a
+**sandbox / permission denial is recoverable** — the generator first relies on the
+host's native "allow this command?" prompt to the user, and where it cannot surface
+one it returns a `fetch blocked — permission needed` signal so **you** ask the user
+for access and re-dispatch it (see **On a `fetch blocked` signal** under step 5, and
+`references/platform-dispatch.md`).
 
 ## Model tiers
 
@@ -350,7 +354,22 @@ sections it needs — the file is the shared state, so your own context stays le
    `ingrain context security_rules "<query>"`, and folds them into its proposals so
    the mitigations reflect established org practice, not just generic advice. If the
    CLI is unavailable or unconfigured it degrades gracefully and proceeds without
-   rules. The mitigations it returns carry the backing rule(s) they cite.
+   rules. If instead the rule fetch is **blocked by the sandbox / permission layer**,
+   the generator asks for access via the host's native prompt or signals back so you
+   can prompt and retry (see **On a `fetch blocked` signal** below) — a permission
+   denial is not silently dropped. The mitigations it returns carry the backing
+   rule(s) they cite.
+
+   **On a `fetch blocked` signal.** If the generator returns
+   `fetch blocked — permission needed` (its `ingrain context` lookup was denied by the
+   sandbox and it could not surface a permission prompt itself), do **not** accept the
+   review without org rules yet. **Ask the user for permission** to run the org-rules
+   fetch — using the host's selection-window / question primitive, the same one the
+   gates use (see **How to ask the user** and `references/platform-dispatch.md` →
+   **Selection windows**). On grant, **re-dispatch the `ingrain-mitigation-generator`**
+   with exec access granted so the fetch can complete. Only if the user **declines**
+   (or no permission channel exists) do you let it proceed with graceful degradation —
+   note that no org rules were retrieved because access was declined.
 6. **Critique mitigations** *(loop, max 3)* — dispatch the `ingrain-mitigation-critic`
    worker, pointing it at `## Mitigations`; re-dispatch `ingrain-mitigation-generator` on
    `needs-revision`. Then **freeze** the mitigations.
@@ -429,7 +448,8 @@ sections it needs — the file is the shared state, so your own context stays le
 | "The critic flagged issues but it's good enough" | Re-run the generator with the feedback (up to 3 rounds). |
 | "This loop could keep improving forever" | Cap each critic loop at 3 rounds; surface what's unresolved. |
 | "I'll just answer the worker's job myself instead of dispatching" | Each worker runs in its own read-only subagent — dispatch it, don't inline it. |
-| "The `ingrain` CLI errored / isn't configured, so I'll stop the review" | Rule retrieval degrades gracefully — proceed without rules, note why, and still propose mitigations. |
+| "The `ingrain` CLI errored / isn't configured, so I'll stop the review" | Genuine unavailability (binary absent, unconfigured, no matches) degrades gracefully — proceed without rules, note why, and still propose mitigations. |
+| "The `ingrain` fetch was blocked by the sandbox, so I'll just proceed without rules" | A permission/sandbox denial is recoverable, not graceful-degradation — ask the user for access (native prompt, or the generator's `fetch blocked — permission needed` signal → you prompt and re-dispatch) and retry. Only proceed without rules if the user declines. |
 | "I'll cite a plausible-sounding org rule to back this mitigation" | Cite only rules actually returned by `ingrain context` — never invent a rule or an id. |
 | "I'll put all the detail in the window options and skip the table" | Display the findings as a table first, then present the single-choice windows — never the windows alone. |
 | "I'm in plan mode / keeping output lean, so I'll skip printing the gate table" | The gate table is mandatory visible output in every mode. Read the bounded slice of the assessment file — that read is the one the context-window discipline permits — and print the table before any window. |
