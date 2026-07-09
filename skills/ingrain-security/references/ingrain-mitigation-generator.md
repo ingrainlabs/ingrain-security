@@ -21,8 +21,10 @@ description: >-
 >   supports per-subagent model selection).
 > - **Hand-off contract:** write the mitigation rows into the `## Mitigations` table
 >   of the stored analysis file (path per your dispatch), filling Tag, Title, Description,
->   Yield, Effort, and the Threat tags each addresses (≥1) per the schema in
->   `references/assessment-file.md` — the orchestrator fills Selection at Gate 2. Write the
+>   Yield, Effort, the Threat tags each addresses (`0..N` — `—` for a general
+>   implementation instruction), and the Rule refs it follows (`0..N` rule ids) per the
+>   schema in `references/assessment-file.md` — the orchestrator fills Selection at Gate 2.
+>   Write the
 >   retrieved rules (the Output items below) into the transient **`## Org rules`** section
 >   of the same file, keyed by mitigation tag — that is where the critic and revision
 >   rounds read them; the orchestrator deletes it at finalize. Then return to the
@@ -104,11 +106,20 @@ branch above.
 
 ### 2. Propose mitigations
 
-For each selected threat, propose mitigation(s) that actually reduce its risk for
-*this* task — concrete guidance the implementer can act on, not generic advice.
-Where a retrieved rule applies, let it shape the mitigation and cite it; a
-mitigation that conforms to an established org rule is stronger than a fresh
-opinion.
+Propose two kinds of mitigation, both concrete and actionable for *this* task, not
+generic advice:
+
+- **Threat mitigations** — for each selected threat, mitigation(s) that actually reduce
+  its risk. Every selected threat must be covered by at least one threat mitigation.
+- **General implementation instructions** — guidance for the full scoped implementation
+  task that is not tied to a single threat (e.g. an org logging or input-validation
+  standard the whole change must follow). These carry no threat tag (`—`) and are
+  additional to — not replacements for — the threat mitigations.
+
+Where a retrieved rule applies, let it shape the mitigation and record the rule id(s) it
+follows in **Rule refs** (one mitigation may follow multiple rules); a mitigation that
+conforms to an established org rule is stronger than a fresh opinion. A mitigation with
+no backing rule is a pure threat mitigation — leave its Rule refs `—`.
 
 ## Output
 
@@ -117,10 +128,11 @@ schema): the mitigation rows into the `## Mitigations` table, and the retrieved 
 into the transient `## Org rules` section.
 
 **Into the `## Mitigations` table** — for each mitigation:
-- **Description** — detailed, task-specific guidance on how to tackle the threat(s).
+- **Description** — detailed, task-specific guidance on how to tackle the threat(s) or, for a general instruction, how the whole change should be implemented.
 - **Yield** — how much value it adds over the current baseline of the task (what risk it removes).
 - **Effort** — how much work it takes to implement.
-- **threatTags** — the threat tag(s) (`T1`, `T2`, …) it addresses (the table's **Threat tags** column). Reference only selected threats, and make sure every selected threat ends up covered by at least one mitigation.
+- **threatTags** — the threat tag(s) (`T1`, `T2`, …) it addresses (the table's **Threat tags** column), or `—` for a general implementation instruction not tied to a threat. Reference only selected threats, and make sure every selected threat ends up covered by at least one **threat** mitigation.
+- **Rule refs** — the id(s) of the org rules this mitigation follows (**one mitigation may follow multiple rules**); `—` if it follows none (a pure threat mitigation). Each id must match a rule you recorded in `## Org rules` — never invent one.
 
 **Into the transient `## Org rules` section** — the retrieved rules, kept for the critic
 and revision rounds (the orchestrator deletes this section at finalize; it is not shown

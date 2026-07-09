@@ -108,6 +108,10 @@ rationalizing numbers already chosen.
 
 ### `## Mitigations` — a Markdown table, one row per mitigation, with these columns:
 
+A mitigation is either a **threat mitigation** (carries ≥1 threat tag) or a **general
+implementation instruction** for the full scoped task (no threat tag). Both belong in
+this table.
+
 | Column | Constraint |
 |--------|------------|
 | **Tag** | `M<n>` (e.g. `M1`) |
@@ -115,8 +119,13 @@ rationalizing numbers already chosen.
 | **Description** | string |
 | **Yield** | `high` \| `medium` \| `low` |
 | **Effort** | `high` \| `medium` \| `low` |
-| **Threat tags** | **≥ 1** threat tag (e.g. `T1, T3`) |
+| **Threat tags** | `0..N` threat tags (e.g. `T1, T3`); `—` when the mitigation is a general implementation instruction not tied to a specific threat |
+| **Rule refs** | the org rule id(s) the mitigation follows, `0..N` comma-separated (e.g. `r-auth-01, r-log-03`); `—` when it follows no org rule (a pure threat mitigation). One mitigation may follow multiple rules. Full rule detail lives in the transient `## Org rules` section. |
 | **Selection** | `selected` \| `excluded` \| `undecided` (optional until Gate 2) |
+
+**Follows org rules is derived, not stored twice.** A mitigation with ≥1 **Rule ref**
+follows org rules; an empty **Rule refs** (`—`) means a pure threat mitigation. Surface
+this as a computed indicator (e.g. at Gate 2) rather than a separate column.
 
 **Gate 2 → Selection.** Record each mitigation's **Selection**:
 adopt → `selected`, decline → `excluded`; `undecided` only if the user is unsure.
@@ -141,7 +150,9 @@ Cite only rules actually retrieved — never invent a rule or an `id`.
 
 ### `## Coverage / open items`
 - Any threat whose **Selection** is `selected` that has no mitigation with
-  **Selection** `selected` covering it (via its **Threat tags**).
+  **Selection** `selected` covering it (via its **Threat tags**). Only **threat
+  mitigations** (those carrying threat tags) count toward covering a threat — general
+  implementation instructions are not expected to cover a specific threat.
 
 ### `## Maintenance (for the implementing agent)`
 - Instruction to keep the file in sync as the implementation evolves.
@@ -176,9 +187,10 @@ Score: <0–100>
 Criticality: <low|medium|high|critical>
 
 ## Mitigations
-| Tag | Title | Description | Yield | Effort | Threat tags | Selection |
-|-----|-------|-------------|-------|--------|-------------|------------|
-| M1  | …     | …           | high  | medium | T1          | selected   |
+| Tag | Title | Description | Yield | Effort | Threat tags | Rule refs         | Selection |
+|-----|-------|-------------|-------|--------|-------------|-------------------|------------|
+| M1  | …     | …           | high  | medium | T1          | r-auth-01         | selected   |
+| M2  | …     | …           | medium| low    | —           | r-log-03          | selected   |
 
 ## Coverage / open items
 - <any selected threat with no selected mitigation covering it>

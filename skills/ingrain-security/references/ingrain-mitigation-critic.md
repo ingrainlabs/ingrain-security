@@ -30,14 +30,14 @@ You are a Professional Security Analyst reviewing a colleague's proposed mitigat
 
 ## Inputs
 
-- The **threat(s)** in scope (tagged `T1`, `T2`, …) and the **mitigations** proposed for them, from the `## Mitigations` table (each with Description / Yield / Effort / Threat tags).
+- The **threat(s)** in scope (tagged `T1`, `T2`, …) and the **mitigations** proposed for them, from the `## Mitigations` table (each with Description / Yield / Effort / Threat tags / **Rule refs**). A mitigation is either a **threat mitigation** (carries ≥1 threat tag) or a **general implementation instruction** for the whole task (Threat tags `—`).
 - The **org rules** the generator retrieved, from the transient `## Org rules` section — the **Rules retrieved** summary, the per-mitigation citations (keyed by mitigation tag, each `title` (`id`)), and any **Applicable rules**. (These may be empty if the generator recorded graceful degradation — the `ingrain` CLI being absent or unconfigured is not itself a defect to penalize.)
 
 ## Task
 
-Judge how well the mitigations cover the threats they claim to address. Look for: threats left partially or wholly uncovered, mitigations that don't match their `threatTags`, advice too vague to implement, and over-engineering where the effort dwarfs the yield.
+Judge how well the **threat mitigations** cover the threats they claim to address. Look for: threats left partially or wholly uncovered, mitigations that don't match their `threatTags`, advice too vague to implement, and over-engineering where the effort dwarfs the yield. Judge **general implementation instructions** (Threat tags `—`) on soundness and rule alignment instead — do **not** penalize them for not covering a specific threat.
 
-Also judge how faithfully the mitigations use the retrieved rules: a mitigation whose **Rules** citation misrepresents the rule's guidance, a retrieved rule that is clearly relevant yet ignored, and a cited `id`/`title` that does not match a rule the generator actually retrieved.
+Also judge how faithfully the mitigations use the retrieved rules: a mitigation whose **Rule refs** misrepresent the rule's guidance, a retrieved rule that is clearly relevant yet followed by no mitigation, and a **Rule ref id that does not match** any rule the generator recorded in `## Org rules`.
 
 ## Output
 

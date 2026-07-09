@@ -348,7 +348,10 @@ sections it needs — the file is the shared state, so your own context stays le
      `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path — no snapshot copy is
      needed — so just finalize it in place, then continue building the plan.
 5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the
-   user-selected threats — only those; excluded threats are out of scope. As part
+   user-selected threats — only those; excluded threats are out of scope. It proposes
+   both **threat mitigations** (covering the selected threats) and **general
+   implementation instructions** for the full scoped task that are not tied to a single
+   threat — both belong in the mitigation plan. As part
    of this step the generator retrieves the org's **security rules** — authoritative
    guidance on *how to implement* the needed security features — by running
    `ingrain context security_rules "<query>"`, and folds them into its proposals so
@@ -357,10 +360,11 @@ sections it needs — the file is the shared state, so your own context stays le
    rules. If instead the rule fetch is **blocked by the sandbox / permission layer**,
    the generator asks for access via the host's native prompt or signals back so you
    can prompt and retry (see **On a `fetch blocked` signal** below) — a permission
-   denial is not silently dropped. The generator records the retrieved rules in the
-   transient `## Org rules` section of the assessment file (keyed by mitigation tag),
-   where the critic reads them; that section is deleted at finalize and never shown to
-   the user at Gate 2.
+   denial is not silently dropped. The generator records **compact Rule refs (rule
+   ids)** on each mitigation row of `## Mitigations` — persisted, part of the plan, and
+   shown at Gate 2 — **plus** the fuller rule detail (bodies, applicable rules) in the
+   transient `## Org rules` section, where the critic reads it; that transient section
+   is deleted at finalize.
 
    **On a `fetch blocked` signal.** If the generator returns
    `fetch blocked — permission needed` (its `ingrain context` lookup was denied by the
@@ -386,19 +390,21 @@ sections it needs — the file is the shared state, so your own context stays le
    | Column | Contents |
    |--------|----------|
    | **Mitigation** | short title of the proposed mitigation |
-   | **Addresses** | the threat tag(s) it covers (`T1`, `T3`, …) |
+   | **Addresses** | the threat tag(s) it covers (`T1`, `T3`, …), or `— (general)` for a general implementation instruction not tied to a threat |
    | **What it does** | the task-specific guidance, from the mitigation's Description |
    | **Yield** | the risk it removes over the current baseline |
    | **Effort** | how much work it takes to implement |
+   | **Follows rules** | the org rule id(s) it follows, from the mitigation's **Rule refs** (e.g. `r-auth-01, r-log-03`); `—`/`no` for a pure threat mitigation |
 
    Keep the table faithful to the frozen mitigations — don't invent or re-scope.
-   The org rules the generator retrieved back the mitigations during the loop but
-   are **not** surfaced at this gate; they live in the transient `## Org rules`
-   section and are deleted at finalize.
+   The **Follows rules** column shows the compact rule ids each mitigation follows
+   (from its persisted **Rule refs**); the fuller rule bodies stay in the transient
+   `## Org rules` section and are deleted at finalize.
 
    **Then present one single-choice window per mitigation** asking which
    mitigations to adopt — each window a single include/exclude decision for that
-   mitigation, labeled by its short title + the threat tag(s) it addresses.
+   mitigation, labeled by its short title + the threat tag(s) it addresses (or
+   `general` when it addresses no specific threat).
    Where the host caps how many windows show at once, batch them in table order.
    The user may include any subset, including none (exclude every window).
 
