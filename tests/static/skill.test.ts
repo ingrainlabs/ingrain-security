@@ -15,6 +15,8 @@ const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/assessment-fil
 const TRIAGE_REF = `${ROOT}skills/ingrain-security/references/ingrain-relevance-triage.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
+const SESSION_START = `${ROOT}hooks/start/session-start`;
+const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
 
 const WORKERS = [
   "ingrain-relevance-triage",
@@ -165,6 +167,34 @@ Deno.test("SKILL.md: mitigation step retrieves rules", async () => {
   const md = await Deno.readTextFile(SKILL);
   // Step 5 folds rule retrieval into the mitigation step.
   assertStringIncludes(md, "ingrain context security_rules");
+});
+
+// The assessment file must be written to the ABSOLUTE `assessment_abs`. A relative path
+// is resolved by whoever receives it, and a worker subagent has no project root in view —
+// it resolves against the file it was reading and creates a stray ingrain-security/ folder
+// there. These fence the wording so a later doc edit cannot quietly reintroduce that.
+
+Deno.test("SKILL.md: dispatches workers with the absolute assessment_abs", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  assertStringIncludes(md, "assessment_abs");
+  // The worker dispatch template must not hand out the relative path as a write target.
+  assertStringIncludes(md, "<the minted assessment_abs — the ABSOLUTE path, pasted in full>");
+});
+
+Deno.test("session-start: points the orchestrator at assessment_abs", async () => {
+  const hook = await Deno.readTextFile(SESSION_START);
+  assertStringIncludes(hook, "assessment_abs");
+});
+
+Deno.test("assessment-path: emits an instruction and anchors on the git repo root", async () => {
+  const script = await Deno.readTextFile(PATH_SCRIPT);
+  assertStringIncludes(script, '"instruction":"%s"');
+  assertStringIncludes(script, "rev-parse --show-toplevel");
+});
+
+Deno.test("assessment-file.md: names assessment_abs as the write target", async () => {
+  const md = await Deno.readTextFile(ASSESSMENT_REF);
+  assertStringIncludes(md, "assessment_abs");
 });
 
 Deno.test("hook.json: valid JSON configuring a SessionStart hook", async () => {

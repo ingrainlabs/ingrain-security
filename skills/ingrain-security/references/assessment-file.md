@@ -11,9 +11,16 @@ shape.
   root — it is **both** the living working copy the workers write during the run **and**
   its persisted record, so there is no separate temp file and no finalize copy. The
   orchestrator does not hand-build it: it runs the `scripts/assessment-path` script
-  (`mint` subcommand) once at review start and reuses its `assessment_path` throughout —
-  see SKILL.md → **The assessment file**. The name is deterministic in the branch + task:
-  `ingrain-security/assessment-<branch-slug>-<task-slug>.md`. The script resolves
+  (`mint` subcommand) once at review start and reuses its **`assessment_abs`** — the
+  absolute path — as the write target throughout; the relative `assessment_path` is a
+  display form for prose and links only. **Every write goes to the absolute path.** A
+  relative one is resolved by whoever receives it, and a worker subagent (or a later
+  implementing agent) has no project root in view, so it resolves against the file it is
+  editing and creates a stray `ingrain-security/` folder there.
+  See SKILL.md → **The assessment file**. The name is deterministic in the branch + task:
+  `<project_root>/ingrain-security/assessment-<branch-slug>-<task-slug>.md`. The script
+  resolves `<project_root>` from the git repo root — so it may be run from any
+  subdirectory — resolves
   `<branch-slug>` from the current git branch (`git branch --show-current`, not
   `.git/HEAD`, unreliable in a worktree/submodule), lowercased and reduced to `[a-z0-9-]`,
   and derives `<task-slug>` from the `## Task` Title by the same rule. Because the name
@@ -161,6 +168,13 @@ Cite only rules actually retrieved — never invent a rule or an `id`.
 
 ### `## Maintenance (for the implementing agent)`
 - Instruction to keep the file in sync as the implementation evolves.
+- **How that agent locates this file.** It runs in a later session and has no minted path
+  in context, so it must **re-run** the `assessment-path` mint command from its
+  `INGRAIN-ASSESSMENT-PATHS` session context and write to the `assessment_abs` it
+  returns. Re-minting is deterministic in branch + title, so it resolves to this same
+  file. It must never resolve a relative `ingrain-security/…` string against the file it
+  is editing, and must never create the folder — that is exactly how a stray
+  `docs/ingrain-security/` appears.
 
 ## Template
 
@@ -205,4 +219,9 @@ Update this file whenever the implementation diverges from the analysis — a ne
 surface, a threat's acceptance changes, or a mitigation is added, dropped, or
 altered. Keep the Selection columns and coverage honest against the code you write,
 and keep every enumerated field within its allowed values.
+
+To locate this file, re-run the `assessment-path` mint command from your
+INGRAIN-ASSESSMENT-PATHS session context and write to the absolute `assessment_abs`
+it returns — it resolves back to this same file. Do not resolve a relative path
+against the file you are editing, and do not create an `ingrain-security/` folder.
 ```

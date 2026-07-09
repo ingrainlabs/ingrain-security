@@ -72,9 +72,11 @@ rather than pasting prior output into the prompt:
 Read references/<name>.md and follow it as your system prompt.
 You do no code or repo edits — use only Read/Grep/Glob on the codebase. Your ONE
 permitted write is your own section of the stored analysis file for this run at
-<the run's assessment file — e.g. ingrain-security/assessment-<branch-slug>-<task-slug>.md> (section: <## Section for this worker>),
+<the minted assessment_abs — the ABSOLUTE path, pasted in full> (section: <## Section for this worker>),
 written to the schema in references/assessment-file.md — use exactly its fields and
-enum values.
+enum values. Write to that exact absolute path: never shorten it, never resolve it
+against a file you happen to be reading, and never create an ingrain-security/ folder
+yourself — the one for this repo already exists.
 Scope tightly: include only findings genuinely relevant to THIS plan — if an item
 would not change how this specific change is reviewed or implemented, omit it.
 INPUT:
@@ -178,10 +180,18 @@ root and host already substituted); it takes the form:
 
     bash <plugin>/skills/ingrain-security/scripts/assessment-path <host> mint --title "<task title>"
 
-The script returns a JSON object — use its **`assessment_path`** verbatim as the file path
-for every worker dispatch and at finalize. The path is deterministic in the branch + task:
+The script returns a JSON object. Use its **`assessment_abs`** — the **absolute** path —
+verbatim as the file path for every worker dispatch, every Write/Edit, and at finalize, and
+obey the `instruction` field it carries. The relative `assessment_path` is a **display form**
+only: put it in prose, tables and plan-file links, never in a write target. This distinction
+is the whole guard against a stray `ingrain-security/` folder being created next to whatever
+file an agent is editing — a relative path is resolved by whoever receives it, and a worker
+subagent has no way to know the project root. The script resolves the root from the git repo,
+creates the one folder, and hands you the finished absolute path; there is nothing to rebuild.
 
-    ingrain-security/assessment-<branch-slug>-<task-slug>.md
+The path is deterministic in the branch + task:
+
+    <project_root>/ingrain-security/assessment-<branch-slug>-<task-slug>.md
 
 so it doubles as the task's identity — re-reviewing the **same task on the same branch**
 resolves to the **same file** (the run resumes/updates it in place; `file_exists: true`
@@ -253,15 +263,16 @@ flowchart TD
 ```
 
 Throughout the flow, each worker writes its own section of **the run's assessment
-file** (the `assessment_path` you minted) and you pass the next worker a pointer to the
+file** (the `assessment_abs` you minted) and you pass the next worker a pointer to the
 sections it needs — the file is the shared state, so your own context stays lean.
 
 ## Steps — in strict order
 
 0. **Triage** — dispatch the `ingrain-relevance-triage` worker with the plan, **plus the
    resolved `<branch-slug>` (or "unknown") and the task title**. Instruct it to first
-   **check for a prior analysis** of this task in the assessment folder
-   `ingrain-security/` (matching on branch + task title — a shared branch may
+   **check for a prior analysis** of this task in the assessment folder — pass it the
+   **absolute** folder, `<project_root>/ingrain-security/`, from the mint JSON, so its
+   Glob cannot drift (matching on branch + task title — a shared branch may
    hold other concurrent tasks' assessments, so a loose match returns `none`) before it
    classifies — per `references/ingrain-relevance-triage.md`. If it finds a prior snapshot whose
    `## Threats` are non-empty, it returns a **Prior analysis** pointer (path + threat
@@ -271,7 +282,7 @@ sections it needs — the file is the shared state, so your own context stays le
      into the plan — carry on building it.
    - If the verdict is `major`: keep its **Surfaces** notes — you forward them to
      the generator in Step 1 — and continue to run the full cycle. **Create or open the
-     assessment file** at the minted `assessment_path` (see **The assessment file**;
+     assessment file** at the minted `assessment_abs` (see **The assessment file**;
      `file_exists: true` means you are resuming this task's prior analysis) with its title +
      banner and the `## Task` section; the triage worker's `## Triage` section
      (verdict + Surfaces) is now in it. This is the hand-off medium for every step
@@ -425,18 +436,24 @@ sections it needs — the file is the shared state, so your own context stays le
    covering mitigation — per the `references/assessment-file.md` schema. Then
    **delete the three transient sections — `## Threat critique`, `## Mitigation critique`,
    and `## Org rules`** (heading and body) — they are iteration scratch; the finalized
-   file carries only end results and matches the schema template. The file already lives at its
-   `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path, so there is **no snapshot
-   to copy** — finalizing it *is* persisting it.
+   file carries only end results and matches the schema template. Write to the minted
+   `assessment_abs`; the file already lives there, so there is **no snapshot to copy** —
+   finalizing it *is* persisting it.
 
    Then **write the results into the plan file** (see **The plan file**) — the
    implementation plan the coding agent edits and executes. Incorporate the selected
    threats and adopted mitigations, and fold in two supporting things: (1) a link to
-   the run's assessment file (`ingrain-security/assessment-<branch-slug>-<task-slug>.md`, the
-   living record the maintenance instruction tracks), which is git-ignored by default
-   (share it with `git add -f <file>`); and (2) the
+   the run's assessment file — use the **relative** `assessment_path` here, because a
+   plan file outlives the absolute path and stays valid after a clone or move — noting
+   that it is git-ignored by default (share it with `git add -f <file>`); and (2) the
    maintenance instruction — tell the implementing agent to keep that file in sync as
-   the implementation changes across iteration loops. In plan mode, **name the plan
+   the implementation changes across iteration loops, and to locate it by **re-running
+   the `assessment-path` mint command** from its `INGRAIN-ASSESSMENT-PATHS` session
+   context and writing to the `assessment_abs` it returns. Never tell it to write to the
+   relative link: that agent runs in a later session with no project root in view, and it
+   will resolve the path against whatever file it is editing, creating a stray
+   `ingrain-security/` folder there. Re-minting is deterministic in branch + title, so it
+   resolves to the same file. In plan mode, **name the plan
    file you write to** (e.g. `.${coding_agent_root}/plans/<name>.md`); ad-hoc, this is the inline
    plan you are building.
 
@@ -459,6 +476,8 @@ sections it needs — the file is the shared state, so your own context stays le
 | "The critic flagged issues but it's good enough" | Re-run the generator with the feedback (up to 3 rounds). |
 | "This loop could keep improving forever" | Cap each critic loop at 3 rounds; surface what's unresolved. |
 | "I'll just answer the worker's job myself instead of dispatching" | Each worker runs in its own read-only subagent — dispatch it, don't inline it. |
+| "`ingrain-security/assessment-….md` is clear enough — the worker will find it" | It won't. A relative path is resolved by whoever receives it, and a worker has no project root in view — it resolves against the file it was reading and creates a stray folder there. Pass the absolute `assessment_abs`, always. |
+| "I'll create the `ingrain-security/` folder since it's missing" | It is not missing — the script created it at the repo root and it self-ignores, so `git status` never shows it. If you think it's absent, you resolved the path wrong. Re-run the mint script. |
 | "The `ingrain` CLI errored / isn't configured, so I'll stop the review" | Genuine unavailability (binary absent, unconfigured, no matches) degrades gracefully — proceed without rules, note why, and still propose mitigations. |
 | "The `ingrain` fetch was blocked by the sandbox, so I'll just proceed without rules" | A permission/sandbox denial is recoverable, not graceful-degradation — ask the user for access (native prompt, or the generator's `fetch blocked — permission needed` signal → you prompt and re-dispatch) and retry. Only proceed without rules if the user declines. |
 | "I'll cite a plausible-sounding org rule to back this mitigation" | Cite only rules actually returned by `ingrain context` — never invent a rule or an id. |
@@ -474,7 +493,7 @@ sections it needs — the file is the shared state, so your own context stays le
   assessment artifact; it writes no code.
 - **Read-only on the codebase; two outputs.** Workers make **no code or repo
   edits** — Read/Grep/Glob on the codebase only — and their sole write is their own
-  section of the stored analysis file (the `assessment_path` the orchestrator minted).
+  section of the stored analysis file (the `assessment_abs` the orchestrator minted).
   Restate that constraint in every dispatch, since without tool-level enforcement it
   is advisory. The process produces exactly two things: **the assessment file** (the
   hand-off medium the workers write, section by section, and you finalize) and
