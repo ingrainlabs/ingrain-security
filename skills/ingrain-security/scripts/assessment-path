@@ -147,7 +147,8 @@ escape_for_json() {
 
 # Idempotently ensure the self-ignoring .gitignore (mirrors ensure-assessment-dir M5)
 # so the assessment — which can contain analysis of a private codebase — is never
-# swept into a commit, even if the SessionStart hook did not run.
+# swept into a commit, even if the SessionStart hook did not run. The bare `*` matches
+# this file too, so the whole folder stays out of `git status`; `git add -f` shares one.
 seed_gitignore() {
     local ignore="$1/.gitignore"
     [ -f "${ignore}" ] && return 0
@@ -155,7 +156,6 @@ seed_gitignore() {
         '# Assessments here can contain analysis of a private codebase, so they' \
         '# are ignored by default. Share one explicitly with: git add -f <file>' \
         '*' \
-        '!.gitignore' \
         > "${ignore}" 2>/dev/null || true
 }
 

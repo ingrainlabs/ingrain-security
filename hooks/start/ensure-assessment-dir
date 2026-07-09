@@ -88,8 +88,9 @@ seed_readme() {
 }
 
 # Idempotently ensure the self-ignoring .gitignore (M5) so a routine `git add -A`
-# cannot sweep up the sensitive assessments. "Ensure present" (not "only if new")
-# so a folder created by an earlier version is retrofitted.
+# cannot sweep up the sensitive assessments. The bare `*` matches this file too, so
+# the whole folder — ignore file included — stays out of `git status`; `git add -f`
+# remains the explicit escape hatch for sharing one file.
 seed_gitignore() {
     local ignore="$1/.gitignore"
     [ -f "${ignore}" ] && return 0
@@ -97,7 +98,6 @@ seed_gitignore() {
         '# Assessments here can contain analysis of a private codebase, so they' \
         '# are ignored by default. Share one explicitly with: git add -f <file>' \
         '*' \
-        '!.gitignore' \
         > "${ignore}" 2>/dev/null || true
 }
 

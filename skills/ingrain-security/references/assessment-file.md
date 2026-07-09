@@ -29,10 +29,10 @@ shape.
   call. Any unresolvable segment is dropped
   (branch unknown → `assessment-<task-slug>.md`; no usable title →
   `assessment-<branch-slug>.md`; both absent → `assessment.md`), and the `assessment-`
-  prefix always leads. The folder is **self-ignoring** (an inner `.gitignore` of `*` +
-  `!.gitignore`, seeded by the `ensure-assessment-dir` hook and re-ensured by the script),
-  so the file does not appear in `git status`; sharing it is an explicit
-  `git add -f <file>` opt-in.
+  prefix always leads. The folder is **self-ignoring** (an inner `.gitignore` of a bare `*`,
+  seeded by the `ensure-assessment-dir` hook and re-ensured by the script), so the whole
+  folder — the ignore file included — stays out of `git status`; sharing a file is an
+  explicit `git add -f <file>` opt-in.
 - **Hand-off medium.** Workers write their sections and return to the orchestrator
   only a branch keyword plus a one-line pointer. The orchestrator owns the
   title/banner and the finalize; it moves data between workers by pointer and does
