@@ -161,12 +161,10 @@ Deno.test("ingrain-mitigation-generator.md: documents the ingrain rule-retrieval
   assertStringIncludes(md.toLowerCase(), "proceed without rules");
 });
 
-Deno.test("SKILL.md: mitigation step retrieves rules and Gate 2 displays them", async () => {
+Deno.test("SKILL.md: mitigation step retrieves rules", async () => {
   const md = await Deno.readTextFile(SKILL);
   // Step 5 folds rule retrieval into the mitigation step.
   assertStringIncludes(md, "ingrain context security_rules");
-  // Gate 2 table surfaces the backing rules to the user.
-  assertStringIncludes(md, "| **Rules** |");
 });
 
 Deno.test("hook.json: valid JSON configuring a SessionStart hook", async () => {

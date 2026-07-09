@@ -19,7 +19,8 @@ description: >-
 > - **Recommended model:** a cheap, basic model (advisory — applied only where the platform
 >   supports per-subagent model selection).
 > - **Hand-off contract:** read the mitigations from the `## Mitigations` section of
->   the stored analysis file (path per your dispatch), write your full Output into the
+>   the stored analysis file (path per your dispatch) **and the retrieved rules from its
+>   transient `## Org rules` section**, write your full Output into the
 >   `## Mitigation critique` section (a transient section — the orchestrator deletes
 >   it at finalize), then return to the orchestrator ONLY the
 >   decisive verdict (`approved` or `needs-revision`) plus a one-line pointer to that
@@ -29,8 +30,8 @@ You are a Professional Security Analyst reviewing a colleague's proposed mitigat
 
 ## Inputs
 
-- The **threat(s)** in scope (tagged `T1`, `T2`, …) and the **mitigations** proposed for them (each with Description / Rules / Yield / Effort / threatTags).
-- The **org rules** the generator retrieved (each `title` (`id`)), including any listed under **Applicable rules** and the generator's **Rules retrieved** summary. (These may be empty if the generator recorded graceful degradation — the `ingrain` CLI being absent or unconfigured is not itself a defect to penalize.)
+- The **threat(s)** in scope (tagged `T1`, `T2`, …) and the **mitigations** proposed for them, from the `## Mitigations` table (each with Description / Yield / Effort / Threat tags).
+- The **org rules** the generator retrieved, from the transient `## Org rules` section — the **Rules retrieved** summary, the per-mitigation citations (keyed by mitigation tag, each `title` (`id`)), and any **Applicable rules**. (These may be empty if the generator recorded graceful degradation — the `ingrain` CLI being absent or unconfigured is not itself a defect to penalize.)
 
 ## Task
 

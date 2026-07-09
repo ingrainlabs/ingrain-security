@@ -42,15 +42,18 @@ shape.
   | `## Threat critique` | `ingrain-threat-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Risk score` | `ingrain-risk-scorer` (plan-level residual) |
   | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Selection at Gate 2) |
+  | `## Org rules` | `ingrain-mitigation-generator` — **transient**, deleted by the orchestrator at finalize |
   | `## Mitigation critique` | `ingrain-mitigation-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Coverage / open items`, `## Maintenance` | orchestrator (finalize) |
 - **Living document.** Rewrite the relevant section at each commit point so the file
   always mirrors the current frozen state — critic-loop revisions and re-selection
-  overwrite the prior contents of that section. The critique sections are iteration
-  scratch, not results: once their loop is done they are dead weight, and the
-  orchestrator **deletes both critique sections at finalize** — the finalized file
-  contains only end results. This is why the template below has
-  no critique sections.
+  overwrite the prior contents of that section. The two critique sections and the
+  `## Org rules` section are iteration scratch, not results: they exist only to feed the
+  mitigation loop (the critic and revision rounds read the org rules by pointer), so once
+  that loop is done they are dead weight. The orchestrator **deletes all three transient
+  sections at finalize** — `## Threat critique`, `## Mitigation critique`, and
+  `## Org rules` — so the finalized file contains only end results. This is why the
+  template below has none of them.
 
 ## Sections and fields
 
@@ -117,6 +120,24 @@ rationalizing numbers already chosen.
 
 **Gate 2 → Selection.** Record each mitigation's **Selection**:
 adopt → `selected`, decline → `excluded`; `undecided` only if the user is unsure.
+
+### `## Org rules` — transient, deleted at finalize
+
+The org security rules the `ingrain-mitigation-generator` retrieved, kept here so the
+`ingrain-mitigation-critic` and revision rounds can read them by pointer. It is **not**
+surfaced to the user at Gate 2, and the orchestrator **deletes it at finalize** — so it
+is absent from the finalized template below. Content:
+
+- **Rules retrieved** — a one-line summary: the queries run and how many rules each
+  returned, or the graceful-degradation note if retrieval was skipped (e.g. `no org rules
+  retrieved — CLI not configured`).
+- **Per-mitigation citations** — one line per mitigation, keyed by its tag:
+  `M<n> → "<title>" (<id>)` with a one-line note on how the rule shaped it; `none` where
+  no retrieved rule applies to that mitigation.
+- **Applicable rules** — retrieved rules relevant to the change that do not map cleanly
+  onto a single mitigation, each as `"<title>" (<id>)`.
+
+Cite only rules actually retrieved — never invent a rule or an `id`.
 
 ### `## Coverage / open items`
 - Any threat whose **Selection** is `selected` that has no mitigation with

@@ -22,9 +22,12 @@ description: >-
 > - **Hand-off contract:** write the mitigation rows into the `## Mitigations` table
 >   of the stored analysis file (path per your dispatch), filling Tag, Title, Description,
 >   Yield, Effort, and the Threat tags each addresses (≥1) per the schema in
->   `references/assessment-file.md` — the orchestrator fills Selection at Gate 2.
->   Then return to the orchestrator ONLY a one-line headline (e.g. the mitigation
->   count) plus a pointer to that section — not the full list.
+>   `references/assessment-file.md` — the orchestrator fills Selection at Gate 2. Write the
+>   retrieved rules (the Output items below) into the transient **`## Org rules`** section
+>   of the same file, keyed by mitigation tag — that is where the critic and revision
+>   rounds read them; the orchestrator deletes it at finalize. Then return to the
+>   orchestrator ONLY a one-line headline (e.g. the mitigation count) plus a pointer to
+>   those sections — not the full list.
 > - **Blocked-fetch signal:** if the `ingrain context` lookup is blocked by the
 >   host's sandbox / permission layer and you cannot surface a permission prompt
 >   yourself, do not silently proceed — return the single line
@@ -109,20 +112,22 @@ opinion.
 
 ## Output
 
-For each mitigation:
+Write two things into the stored analysis file (per the `references/assessment-file.md`
+schema): the mitigation rows into the `## Mitigations` table, and the retrieved rules
+into the transient `## Org rules` section.
+
+**Into the `## Mitigations` table** — for each mitigation:
 - **Description** — detailed, task-specific guidance on how to tackle the threat(s).
-- **Rules** — the retrieved rule(s) that shaped this mitigation, each as `title` (`id`), with a one-line note on how it informed the mitigation. Write `none` if no retrieved rule applies (or if none were retrieved). Cite only rules you actually retrieved — never invent a rule or an id.
 - **Yield** — how much value it adds over the current baseline of the task (what risk it removes).
 - **Effort** — how much work it takes to implement.
-- **threatTags** — the threat tag(s) (`T1`, `T2`, …) it addresses. Reference only selected threats, and make sure every selected threat ends up covered by at least one mitigation.
+- **threatTags** — the threat tag(s) (`T1`, `T2`, …) it addresses (the table's **Threat tags** column). Reference only selected threats, and make sure every selected threat ends up covered by at least one mitigation.
 
-If a retrieved rule is directly relevant to the change but does not map cleanly
-onto any single mitigation, surface it too — list it under an **Applicable rules**
-section (same `title` (`id`) form) so the critic and the user see it at the gate.
-
-Lead the whole output with a one-line **Rules retrieved** summary — either the
-queries you ran and how many rules each returned, or the graceful-degradation note
-if retrieval was skipped.
+**Into the transient `## Org rules` section** — the retrieved rules, kept for the critic
+and revision rounds (the orchestrator deletes this section at finalize; it is not shown
+to the user at Gate 2):
+- **Rules retrieved** — a one-line summary leading the section: either the queries you ran and how many rules each returned, or the graceful-degradation note if retrieval was skipped.
+- **Per-mitigation citations** — one line per mitigation, keyed by its tag: `M<n> → "<title>" (<id>)` with a one-line note on how the rule informed it. Write `none` where no retrieved rule applies to that mitigation. Cite only rules you actually retrieved — never invent a rule or an id.
+- **Applicable rules** — any retrieved rule directly relevant to the change that does not map cleanly onto a single mitigation, each as `"<title>" (<id>)`, so the critic still sees it.
 
 Scope all advice to the task at hand.
 
@@ -130,8 +135,9 @@ Scope all advice to the task at hand.
 
 Address the critic's feedback. If the critic flagged a missing or misapplied rule,
 run further `ingrain context security_rules` queries to fill the gap before
-re-proposing. Return the revised mitigations (keeping the **Rules** field current),
-then a short **Changes from last round** so the critic can confirm its points landed:
+re-proposing. Rewrite the revised mitigations into `## Mitigations` and keep the
+`## Org rules` section current (citations and Applicable rules), then add a short
+**Changes from last round** so the critic can confirm its points landed:
 
 ```
 ## Changes from last round

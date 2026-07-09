@@ -357,8 +357,10 @@ sections it needs — the file is the shared state, so your own context stays le
    rules. If instead the rule fetch is **blocked by the sandbox / permission layer**,
    the generator asks for access via the host's native prompt or signals back so you
    can prompt and retry (see **On a `fetch blocked` signal** below) — a permission
-   denial is not silently dropped. The mitigations it returns carry the backing
-   rule(s) they cite.
+   denial is not silently dropped. The generator records the retrieved rules in the
+   transient `## Org rules` section of the assessment file (keyed by mitigation tag),
+   where the critic reads them; that section is deleted at finalize and never shown to
+   the user at Gate 2.
 
    **On a `fetch blocked` signal.** If the generator returns
    `fetch blocked — permission needed` (its `ingrain context` lookup was denied by the
@@ -371,8 +373,9 @@ sections it needs — the file is the shared state, so your own context stays le
    (or no permission channel exists) do you let it proceed with graceful degradation —
    note that no org rules were retrieved because access was declined.
 6. **Critique mitigations** *(loop, max 3)* — dispatch the `ingrain-mitigation-critic`
-   worker, pointing it at `## Mitigations`; re-dispatch `ingrain-mitigation-generator` on
-   `needs-revision`. Then **freeze** the mitigations.
+   worker, pointing it at `## Mitigations` **and the transient `## Org rules` section**
+   (so it can judge the mitigations against the rules they cite); re-dispatch
+   `ingrain-mitigation-generator` on `needs-revision`. Then **freeze** the mitigations.
 7. **Ask user — select which mitigations to adopt (Gate 2).** Follow the
    two-step display-then-ask pattern (see **How to ask the user**).
 
@@ -385,16 +388,13 @@ sections it needs — the file is the shared state, so your own context stays le
    | **Mitigation** | short title of the proposed mitigation |
    | **Addresses** | the threat tag(s) it covers (`T1`, `T3`, …) |
    | **What it does** | the task-specific guidance, from the mitigation's Description |
-   | **Rules** | the backing org rule(s) it cites, as `title` (`id`), from the mitigation's Rules field (`none` if no rule applies) |
    | **Yield** | the risk it removes over the current baseline |
    | **Effort** | how much work it takes to implement |
 
-   Keep the table faithful to the frozen mitigations — don't invent or re-scope,
-   and cite only rules the generator actually retrieved. If the generator recorded
-   graceful degradation (no org rules retrieved), say so in one line above the
-   table and leave the **Rules** column as `none`. If the generator surfaced any
-   **Applicable rules** not tied to a single mitigation, list them in that same
-   one-line note so the user sees them at the gate.
+   Keep the table faithful to the frozen mitigations — don't invent or re-scope.
+   The org rules the generator retrieved back the mitigations during the loop but
+   are **not** surfaced at this gate; they live in the transient `## Org rules`
+   section and are deleted at finalize.
 
    **Then present one single-choice window per mitigation** asking which
    mitigations to adopt — each window a single include/exclude decision for that
@@ -412,9 +412,9 @@ sections it needs — the file is the shared state, so your own context stays le
    `## Mitigations` table (adopt → `selected`, decline → `excluded`), and fill
    `## Coverage / open items` with any `selected` threat left without a `selected`
    covering mitigation — per the `references/assessment-file.md` schema. Then
-   **delete the `## Threat critique` and `## Mitigation critique` sections** (heading
-   and body) — they are iteration scratch; the finalized file carries only end
-   results and matches the schema template. The file already lives at its
+   **delete the three transient sections — `## Threat critique`, `## Mitigation critique`,
+   and `## Org rules`** (heading and body) — they are iteration scratch; the finalized
+   file carries only end results and matches the schema template. The file already lives at its
    `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path, so there is **no snapshot
    to copy** — finalizing it *is* persisting it.
 
