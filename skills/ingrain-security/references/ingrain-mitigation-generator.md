@@ -12,11 +12,11 @@ description: >-
 > other workers or run the review loop yourself.
 >
 > - **Read-only, with one lookup exception.** Use only Read, Grep, and Glob on
->   the codebase, plus a single read-only lookup command — `ingrain context
->   security_rules "<query>"` — to fetch the org's security rules (see
->   **Retrieve org rules** below). Make no edits and run no other or mutating
->   commands. This is advisory: the dispatching platform may not enforce it, so
->   honor it yourself.
+>   the codebase, plus read-only `ingrain` invocations — the `ingrain --version`
+>   availability probe and the `ingrain context security_rules "<query>"` lookup —
+>   to fetch the org's security rules (see **Retrieve org rules** below). Make no
+>   edits and run no other or mutating commands. This is advisory: the dispatching
+>   platform may not enforce it, so honor it yourself.
 > - **Recommended model:** a cheap, basic model (advisory — applied only where the platform
 >   supports per-subagent model selection).
 > - **Hand-off contract:** write the mitigation rows into the `## Mitigations` table
@@ -53,6 +53,13 @@ implement** the security features this change needs. The org's security rules ar
 ingested knowledge — how *this* team implements auth, validation, secrets,
 crypto, etc. — retrieved by semantic search over the `ingrain` CLI.
 
+0. **Check the CLI is available.** Run `ingrain --version` — a local probe that reads no
+   config and makes no network call. If it fails with `command not found`, this repo has
+   no org rules store wired up: skip the rest of this section, record
+   `no org rules retrieved — ingrain CLI not installed` as the **Rules retrieved** line
+   in `## Org rules`, and go straight to §2. Do not stall, and do not ask the user to
+   install it. Any *other* failure — a sandbox denial, or a binary that is present but
+   will not run — is inconclusive: continue to step 1 and let the branches below cover it.
 1. From the plan and the selected threats, reason about which security features or
    implementation questions need org guidance (e.g. "how do we store password
    hashes", "how do we authenticate service-to-service calls").
@@ -95,9 +102,11 @@ degradation:
    owns that decision once the user has been asked.
 
 **Graceful degradation — never block on the CLI.** This applies only to failures the
-user *cannot* fix by granting access: if the `ingrain` binary is absent, unconfigured
-(missing `INGRAIN_SYNC_URL` / API token surfaces as a config error and runs no search),
-the subcommand is unknown even after the version fallback, or a query returns no matches,
+user *cannot* fix by granting access, and catches the ones the step 0 probe cannot
+predict: the CLI is present but unconfigured (missing `INGRAIN_SYNC_URL` / API token
+surfaces as a config error and runs no search), the subcommand is unknown even after the
+version fallback, or a query returns no matches. It also still covers an absent `ingrain`
+binary if you reach a `command not found` here without having probed. In every such case,
 **proceed without rules**. Do not fail or stall the review. In your output, note briefly
 that no org rules were retrieved and why (e.g. "no org rules retrieved — CLI not
 configured"), then propose mitigations from your own analysis as before. A

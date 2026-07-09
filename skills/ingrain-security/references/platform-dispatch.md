@@ -45,7 +45,7 @@ Every worker is read-only, but the `ingrain-mitigation-generator` has one narrow
 exception: it runs the read-only `ingrain context security_rules "<query>"` lookup
 to fetch the org's security rules. Dispatch it with the host's shell/exec tool
 available **in addition to** Read/Grep/Glob (e.g. Claude Code: allow Bash for
-`ingrain context`; Codex: the exec capability). Restate inline that it makes no
+`ingrain`; Codex: the exec capability). Restate inline that it makes no
 edits and runs no other commands. All other workers get no shell access.
 
 **Access denied vs. unavailable — two different failures.** If the `ingrain context`
