@@ -13,10 +13,7 @@ shape.
   orchestrator does not hand-build it: it runs the `scripts/assessment-path` script
   (`mint` subcommand) once at review start and reuses its **`assessment_abs`** — the
   absolute path — as the write target throughout; the relative `assessment_path` is a
-  display form for prose and links only. **Every write goes to the absolute path.** A
-  relative one is resolved by whoever receives it, and a worker subagent (or a later
-  implementing agent) has no project root in view, so it resolves against the file it is
-  editing and creates a stray `ingrain-security/` folder there.
+  display form for prose and links only. **Every write goes to the absolute path.**
   See SKILL.md → **The assessment file**. The name is deterministic in the branch + task:
   `<project_root>/ingrain-security/assessment-<branch-slug>-<task-slug>.md`. The script
   resolves `<project_root>` from the git repo root — so it may be run from any
@@ -173,8 +170,7 @@ Cite only rules actually retrieved — never invent a rule or an `id`.
   `INGRAIN-ASSESSMENT-PATHS` session context and write to the `assessment_abs` it
   returns. Re-minting is deterministic in branch + title, so it resolves to this same
   file. It must never resolve a relative `ingrain-security/…` string against the file it
-  is editing, and must never create the folder — that is exactly how a stray
-  `docs/ingrain-security/` appears.
+  is editing, and must never create the folder. 
 
 ## Template
 

@@ -8,10 +8,9 @@
 # Emits ONE JSON object on stdout; diagnostics go to stderr.
 #
 # `assessment_abs` (absolute) is the CANONICAL write target: it is what every worker
-# dispatch and every Write/Edit must use. Callers that only have the relative
-# `assessment_path` must resolve it themselves, and an agent whose context is full of
-# paths under `docs/` resolves it there — which is how a stray `docs/ingrain-security/`
-# gets created. The emitted `instruction` field says so, with the path interpolated.
+# dispatch and every Write/Edit must use. `assessment_path` is a display-only relative
+# form for prose and links. The emitted `instruction` field restates this, with the
+# path interpolated.
 #
 # Usage:
 #   assessment-path <host> mint --title "<task title>" [--branch-slug <slug>]
@@ -83,7 +82,7 @@ normalize_dir() {
 
 # The root of the git repository containing the current directory; empty when outside a
 # repo. `rev-parse --show-toplevel` answers from ANY subdirectory, which is what pins the
-# assessment folder to the repo root even when the agent runs us from, say, `docs/`.
+# assessment folder to the repo root regardless of where the agent runs us from.
 resolve_git_root() {
     git rev-parse --show-toplevel 2>/dev/null
 }
