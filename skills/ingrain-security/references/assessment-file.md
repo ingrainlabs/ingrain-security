@@ -120,12 +120,15 @@ this table.
 | **Yield** | `high` \| `medium` \| `low` |
 | **Effort** | `high` \| `medium` \| `low` |
 | **Threat tags** | `0..N` threat tags (e.g. `T1, T3`); `—` when the mitigation is a general implementation instruction not tied to a specific threat |
-| **Rule refs** | the org rule id(s) the mitigation follows, `0..N` comma-separated (e.g. `r-auth-01, r-log-03`); `—` when it follows no org rule (a pure threat mitigation). One mitigation may follow multiple rules. Full rule detail lives in the transient `## Org rules` section. |
+| **Rule refs** | the org rule id(s) the mitigation follows, `0..N` comma-separated (e.g. `r-auth-01, r-log-03`); `—` when it follows no org rule (a pure threat mitigation). One mitigation may follow multiple rules. Ids are machine-facing — stored here, **never rendered to the user** (Gate 2 shows rule titles instead). Full rule detail lives in the transient `## Org rules` section. |
 | **Selection** | `selected` \| `excluded` \| `undecided` (optional until Gate 2) |
 
 **Follows org rules is derived, not stored twice.** A mitigation with ≥1 **Rule ref**
 follows org rules; an empty **Rule refs** (`—`) means a pure threat mitigation. Surface
-this as a computed indicator (e.g. at Gate 2) rather than a separate column.
+this as a computed indicator (e.g. at Gate 2) rather than a separate column: the
+indicator is the rule **title(s)**, resolved by looking each **Rule ref** id up in the
+per-mitigation citations of the transient `## Org rules` section. Titles are not stored
+in this table — no title column is added.
 
 **Gate 2 → Selection.** Record each mitigation's **Selection**:
 adopt → `selected`, decline → `excluded`; `undecided` only if the user is unsure.
@@ -133,9 +136,11 @@ adopt → `selected`, decline → `excluded`; `undecided` only if the user is un
 ### `## Org rules` — transient, deleted at finalize
 
 The org security rules the `ingrain-mitigation-generator` retrieved, kept here so the
-`ingrain-mitigation-critic` and revision rounds can read them by pointer. It is **not**
-surfaced to the user at Gate 2, and the orchestrator **deletes it at finalize** — so it
-is absent from the finalized template below. Content:
+`ingrain-mitigation-critic` and revision rounds can read them by pointer. The section
+itself is **never** shown to the user; the orchestrator reads its per-mitigation
+citations at Gate 2 to resolve each **Rule ref** id to a rule title for display, and
+nothing else here (bodies, applicable rules) leaves the file. The orchestrator **deletes
+the section at finalize** — so it is absent from the finalized template below. Content:
 
 - **Rules retrieved** — a one-line summary: the queries run and how many rules each
   returned, or the graceful-degradation note if retrieval was skipped (e.g. `no org rules

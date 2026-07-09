@@ -361,10 +361,11 @@ sections it needs — the file is the shared state, so your own context stays le
    the generator asks for access via the host's native prompt or signals back so you
    can prompt and retry (see **On a `fetch blocked` signal** below) — a permission
    denial is not silently dropped. The generator records **compact Rule refs (rule
-   ids)** on each mitigation row of `## Mitigations` — persisted, part of the plan, and
-   shown at Gate 2 — **plus** the fuller rule detail (bodies, applicable rules) in the
-   transient `## Org rules` section, where the critic reads it; that transient section
-   is deleted at finalize.
+   ids)** on each mitigation row of `## Mitigations` — persisted and part of the plan,
+   but **never shown to the user** — **plus** the fuller rule detail (titles, bodies,
+   applicable rules) in the transient `## Org rules` section, where the critic reads it.
+   Gate 2 renders each mitigation's rule **titles** from that transient section; it is
+   deleted at finalize.
 
    **On a `fetch blocked` signal.** If the generator returns
    `fetch blocked — permission needed` (its `ingrain context` lookup was denied by the
@@ -394,12 +395,16 @@ sections it needs — the file is the shared state, so your own context stays le
    | **What it does** | the task-specific guidance, from the mitigation's Description |
    | **Yield** | the risk it removes over the current baseline |
    | **Effort** | how much work it takes to implement |
-   | **Follows rules** | the org rule id(s) it follows, from the mitigation's **Rule refs** (e.g. `r-auth-01, r-log-03`); `—`/`no` for a pure threat mitigation |
+   | **Follows rules** | the title(s) of the org rule(s) it follows, resolved from that mitigation's citation line in the transient `## Org rules` section (e.g. `Authenticated service calls`); `—` for a pure threat mitigation. Never print rule ids. |
 
    Keep the table faithful to the frozen mitigations — don't invent or re-scope.
-   The **Follows rules** column shows the compact rule ids each mitigation follows
-   (from its persisted **Rule refs**); the fuller rule bodies stay in the transient
-   `## Org rules` section and are deleted at finalize.
+   The **Follows rules** column names the rules by **title**: for each id in the
+   mitigation's **Rule refs**, take the title from its `M<n> → "<title>" (<id>)` citation
+   in `## Org rules`. The rule **ids** stay in the persisted **Rule refs** column of
+   `## Mitigations` — machine-facing, never shown to the user. The rule **bodies** stay in
+   `## Org rules` and are deleted at finalize. If a **Rule ref** id has no matching
+   citation, no title is available: print the mitigation's rule count (e.g. `2 org rules`)
+   rather than falling back to the id.
 
    **Then present one single-choice window per mitigation** asking which
    mitigations to adopt — each window a single include/exclude decision for that

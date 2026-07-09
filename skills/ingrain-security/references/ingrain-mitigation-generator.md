@@ -135,10 +135,10 @@ into the transient `## Org rules` section.
 - **Rule refs** — the id(s) of the org rules this mitigation follows (**one mitigation may follow multiple rules**); `—` if it follows none (a pure threat mitigation). Each id must match a rule you recorded in `## Org rules` — never invent one.
 
 **Into the transient `## Org rules` section** — the retrieved rules, kept for the critic
-and revision rounds (the orchestrator deletes this section at finalize; it is not shown
-to the user at Gate 2):
+and revision rounds (the orchestrator deletes this section at finalize; the section itself
+is never shown to the user — only the rule titles it records reach Gate 2):
 - **Rules retrieved** — a one-line summary leading the section: either the queries you ran and how many rules each returned, or the graceful-degradation note if retrieval was skipped.
-- **Per-mitigation citations** — one line per mitigation, keyed by its tag: `M<n> → "<title>" (<id>)` with a one-line note on how the rule informed it. Write `none` where no retrieved rule applies to that mitigation. Cite only rules you actually retrieved — never invent a rule or an id.
+- **Per-mitigation citations** — one line per mitigation, keyed by its tag: `M<n> → "<title>" (<id>)` with a one-line note on how the rule informed it. Write `none` where no retrieved rule applies to that mitigation. Cite only rules you actually retrieved — never invent a rule or an id. The `<title>` is the retrieved rule's title **verbatim**, and it is what the user sees at Gate 2 — so every id you write into **Rule refs** must appear in a citation line here, or the orchestrator has no title to render.
 - **Applicable rules** — any retrieved rule directly relevant to the change that does not map cleanly onto a single mitigation, each as `"<title>" (<id>)`, so the critic still sees it.
 
 Scope all advice to the task at hand.
