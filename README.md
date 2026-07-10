@@ -124,7 +124,7 @@ by default. To share a snapshot, force-add it: `git add -f <file>`.
 
 ## For contributors
 
-- Release process and versioning: [`.github/README.md`](.github/README.md)
+- Release process and versioning: [`.github/RELEASING.md`](.github/RELEASING.md)
 - Test suite (Deno-based): [`tests/README.md`](tests/README.md)
 
 ## License
