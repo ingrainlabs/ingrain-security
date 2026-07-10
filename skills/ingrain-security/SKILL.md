@@ -10,8 +10,10 @@ description: >-
   only runs the full review for security-relevant ("major") changes: threats →
   0-100 risk score → user selects which threats to address (0–N) → mitigations →
   user selects which mitigations to adopt, with critic-driven improvement loops,
-  via dedicated read-only subagents. The selected threats and adopted mitigations
-  become part of the plan you produce.
+  via dedicated read-only subagents. Mitigations are informed by the org's own
+  security rules, retrieved through the ingrain CLI, so they reflect established
+  org practice for how to implement the fix. The selected threats and adopted
+  mitigations become part of the plan you produce.
 ---
 
 <SUBAGENT-STOP>
@@ -70,9 +72,11 @@ rather than pasting prior output into the prompt:
 Read references/<name>.md and follow it as your system prompt.
 You do no code or repo edits — use only Read/Grep/Glob on the codebase. Your ONE
 permitted write is your own section of the stored analysis file for this run at
-<the run's assessment file — e.g. ingrain-security/assessment-<branch-slug>-<task-slug>.md> (section: <## Section for this worker>),
+<the minted assessment_abs — the ABSOLUTE path, pasted in full> (section: <## Section for this worker>),
 written to the schema in references/assessment-file.md — use exactly its fields and
-enum values.
+enum values. Write to that exact absolute path: never shorten it, never resolve it
+against a file you happen to be reading, and never create an ingrain-security/ folder
+yourself — the one for this repo already exists.
 Scope tightly: include only findings genuinely relevant to THIS plan — if an item
 would not change how this specific change is reviewed or implemented, omit it.
 INPUT:
@@ -95,6 +99,19 @@ own context during the loop. Hold only the compact statuses/pointers workers ret
 Read a bounded slice of the file only when you must — at Gate 1 and Gate 2, to render
 the prepared table for the user, and at finalize. This keeps your context lean across
 the whole review.
+
+**One exception to the read-only constraint:** the `ingrain-mitigation-generator`
+is additionally allowed to run the read-only `ingrain context security_rules
+"<query>"` CLI lookup to fetch the org's security rules — dispatch it with the
+Bash/exec tool available in addition to Read/Grep/Glob, and say so in its
+dispatch. It still makes no edits and runs no other commands. **Every other
+worker stays strictly Read/Grep/Glob.** If the CLI is genuinely unavailable or
+unconfigured, the generator degrades gracefully and proceeds without rules. But a
+**sandbox / permission denial is recoverable** — the generator first relies on the
+host's native "allow this command?" prompt to the user, and where it cannot surface
+one it returns a `fetch blocked — permission needed` signal so **you** ask the user
+for access and re-dispatch it (see **On a `fetch blocked` signal** under step 5, and
+`references/platform-dispatch.md`).
 
 ## Model tiers
 
@@ -163,10 +180,18 @@ root and host already substituted); it takes the form:
 
     bash <plugin>/skills/ingrain-security/scripts/assessment-path <host> mint --title "<task title>"
 
-The script returns a JSON object — use its **`assessment_path`** verbatim as the file path
-for every worker dispatch and at finalize. The path is deterministic in the branch + task:
+The script returns a JSON object. Use its **`assessment_abs`** — the **absolute** path —
+verbatim as the file path for every worker dispatch, every Write/Edit, and at finalize, and
+obey the `instruction` field it carries. The relative `assessment_path` is a **display form**
+only: put it in prose, tables and plan-file links, never in a write target. This distinction
+is the whole guard against a stray `ingrain-security/` folder being created next to whatever
+file an agent is editing — a relative path is resolved by whoever receives it, and a worker
+subagent has no way to know the project root. The script resolves the root from the git repo,
+creates the one folder, and hands you the finished absolute path; there is nothing to rebuild.
 
-    ingrain-security/assessment-<branch-slug>-<task-slug>.md
+The path is deterministic in the branch + task:
+
+    <project_root>/ingrain-security/assessment-<branch-slug>-<task-slug>.md
 
 so it doubles as the task's identity — re-reviewing the **same task on the same branch**
 resolves to the **same file** (the run resumes/updates it in place; `file_exists: true`
@@ -225,7 +250,7 @@ flowchart TD
     freezeThreats --> riskScorer[ingrain-risk-scorer]
     riskScorer --> gate1{Gate 1: select threats 0–N}
     gate1 -->|none selected| done([Fold results into the plan; keep planning])
-    gate1 -->|1+ selected| mitGen[ingrain-mitigation-generator]
+    gate1 -->|1+ selected| mitGen[ingrain-mitigation-generator<br/>+ retrieve org rules via ingrain CLI]
 
     mitGen --> mitCritic[ingrain-mitigation-critic]
     mitCritic --> mitsOk{mitigations ok?}
@@ -238,15 +263,16 @@ flowchart TD
 ```
 
 Throughout the flow, each worker writes its own section of **the run's assessment
-file** (the `assessment_path` you minted) and you pass the next worker a pointer to the
+file** (the `assessment_abs` you minted) and you pass the next worker a pointer to the
 sections it needs — the file is the shared state, so your own context stays lean.
 
 ## Steps — in strict order
 
 0. **Triage** — dispatch the `ingrain-relevance-triage` worker with the plan, **plus the
    resolved `<branch-slug>` (or "unknown") and the task title**. Instruct it to first
-   **check for a prior analysis** of this task in the assessment folder
-   `ingrain-security/` (matching on branch + task title — a shared branch may
+   **check for a prior analysis** of this task in the assessment folder — pass it the
+   **absolute** folder, `<project_root>/ingrain-security/`, from the mint JSON, so its
+   Glob cannot drift (matching on branch + task title — a shared branch may
    hold other concurrent tasks' assessments, so a loose match returns `none`) before it
    classifies — per `references/ingrain-relevance-triage.md`. If it finds a prior snapshot whose
    `## Threats` are non-empty, it returns a **Prior analysis** pointer (path + threat
@@ -256,7 +282,7 @@ sections it needs — the file is the shared state, so your own context stays le
      into the plan — carry on building it.
    - If the verdict is `major`: keep its **Surfaces** notes — you forward them to
      the generator in Step 1 — and continue to run the full cycle. **Create or open the
-     assessment file** at the minted `assessment_path` (see **The assessment file**;
+     assessment file** at the minted `assessment_abs` (see **The assessment file**;
      `file_exists: true` means you are resuming this task's prior analysis) with its title +
      banner and the `## Task` section; the triage worker's `## Triage` section
      (verdict + Surfaces) is now in it. This is the hand-off medium for every step
@@ -333,11 +359,39 @@ sections it needs — the file is the shared state, so your own context stays le
      `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path — no snapshot copy is
      needed — so just finalize it in place, then continue building the plan.
 5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the
-   user-selected threats — only those; excluded threats are out of scope. It writes the
-   mitigations into the `## Mitigations` section and returns a pointer.
+   user-selected threats — only those; excluded threats are out of scope. It proposes
+   both **threat mitigations** (covering the selected threats) and **general
+   implementation instructions** for the full scoped task that are not tied to a single
+   threat — both belong in the mitigation plan. As part
+   of this step the generator retrieves the org's **security rules** — authoritative
+   guidance on *how to implement* the needed security features — by running
+   `ingrain context security_rules "<query>"`, and folds them into its proposals so
+   the mitigations reflect established org practice, not just generic advice. If the
+   CLI is unavailable or unconfigured it degrades gracefully and proceeds without
+   rules. If instead the rule fetch is **blocked by the sandbox / permission layer**,
+   the generator asks for access via the host's native prompt or signals back so you
+   can prompt and retry (see **On a `fetch blocked` signal** below) — a permission
+   denial is not silently dropped. The generator records **compact Rule refs (rule
+   ids)** on each mitigation row of `## Mitigations` — persisted and part of the plan,
+   but **never shown to the user** — **plus** the fuller rule detail (titles, bodies,
+   applicable rules) in the transient `## Org rules` section, where the critic reads it.
+   Gate 2 renders each mitigation's rule **titles** from that transient section; it is
+   deleted at finalize.
+
+   **On a `fetch blocked` signal.** If the generator returns
+   `fetch blocked — permission needed` (its `ingrain context` lookup was denied by the
+   sandbox and it could not surface a permission prompt itself), do **not** accept the
+   review without org rules yet. **Ask the user for permission** to run the org-rules
+   fetch — using the host's selection-window / question primitive, the same one the
+   gates use (see **How to ask the user** and `references/platform-dispatch.md` →
+   **Selection windows**). On grant, **re-dispatch the `ingrain-mitigation-generator`**
+   with exec access granted so the fetch can complete. Only if the user **declines**
+   (or no permission channel exists) do you let it proceed with graceful degradation —
+   note that no org rules were retrieved because access was declined.
 6. **Critique mitigations** *(loop, max 3)* — dispatch the `ingrain-mitigation-critic`
-   worker, pointing it at `## Mitigations`; re-dispatch `ingrain-mitigation-generator` on
-   `needs-revision`. Then **freeze** the mitigations.
+   worker, pointing it at `## Mitigations` **and the transient `## Org rules` section**
+   (so it can judge the mitigations against the rules they cite); re-dispatch
+   `ingrain-mitigation-generator` on `needs-revision`. Then **freeze** the mitigations.
 7. **Ask user — select which mitigations to adopt (Gate 2).** Follow the
    two-step display-then-ask pattern (see **How to ask the user**).
 
@@ -348,25 +402,25 @@ sections it needs — the file is the shared state, so your own context stays le
    | Column | Contents |
    |--------|----------|
    | **Mitigation** | short title of the proposed mitigation |
-   | **Addresses** | the threat tag(s) it covers (`T1`, `T3`, …) |
+   | **Addresses** | the threat tag(s) it covers (`T1`, `T3`, …), or `— (general)` for a general implementation instruction not tied to a threat |
    | **What it does** | the task-specific guidance, from the mitigation's Description |
    | **Yield** | the risk it removes over the current baseline |
    | **Effort** | how much work it takes to implement |
+   | **Follows rules** | the title(s) of the org rule(s) it follows, resolved from that mitigation's citation line in the transient `## Org rules` section (e.g. `Authenticated service calls`); `—` for a pure threat mitigation. Never print rule ids. |
 
    Keep the table faithful to the frozen mitigations — don't invent or re-scope.
-   In the same message, **name the run's assessment file** (its
-   `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) so the user can open the full
-   analysis behind the table, alongside the plan file mention (see **How to ask
-   the user**).
-
-   To build the table, read the bounded `## Mitigations` slice of the assessment
-   file — not the whole running analysis. Every table cell and every window label
-   comes from that slice; if the slice is empty or missing, stop and re-dispatch
-   the `ingrain-mitigation-generator` rather than rendering an empty table.
+   The **Follows rules** column names the rules by **title**: for each id in the
+   mitigation's **Rule refs**, take the title from its `M<n> → "<title>" (<id>)` citation
+   in `## Org rules`. The rule **ids** stay in the persisted **Rule refs** column of
+   `## Mitigations` — machine-facing, never shown to the user. The rule **bodies** stay in
+   `## Org rules` and are deleted at finalize. If a **Rule ref** id has no matching
+   citation, no title is available: print the mitigation's rule count (e.g. `2 org rules`)
+   rather than falling back to the id.
 
    **Then present one single-choice window per mitigation** asking which
    mitigations to adopt — each window a single include/exclude decision for that
-   mitigation, labeled by its short title + the threat tag(s) it addresses.
+   mitigation, labeled by its short title + the threat tag(s) it addresses (or
+   `general` when it addresses no specific threat).
    Where the host caps how many windows show at once, batch them in table order.
    The user may include any subset, including none (exclude every window).
 
@@ -380,20 +434,26 @@ sections it needs — the file is the shared state, so your own context stays le
    `## Mitigations` table (adopt → `selected`, decline → `excluded`), and fill
    `## Coverage / open items` with any `selected` threat left without a `selected`
    covering mitigation — per the `references/assessment-file.md` schema. Then
-   **delete the `## Threat critique` and `## Mitigation critique` sections** (heading
-   and body) — they are iteration scratch; the finalized file carries only end
-   results and matches the schema template. The file already lives at its
-   `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path, so there is **no snapshot
-   to copy** — finalizing it *is* persisting it.
+   **delete the three transient sections — `## Threat critique`, `## Mitigation critique`,
+   and `## Org rules`** (heading and body) — they are iteration scratch; the finalized
+   file carries only end results and matches the schema template. Write to the minted
+   `assessment_abs`; the file already lives there, so there is **no snapshot to copy** —
+   finalizing it *is* persisting it.
 
    Then **write the results into the plan file** (see **The plan file**) — the
    implementation plan the coding agent edits and executes. Incorporate the selected
    threats and adopted mitigations, and fold in two supporting things: (1) a link to
-   the run's assessment file (`ingrain-security/assessment-<branch-slug>-<task-slug>.md`, the
-   living record the maintenance instruction tracks), which is git-ignored by default
-   (share it with `git add -f <file>`); and (2) the
+   the run's assessment file — use the **relative** `assessment_path` here, because a
+   plan file outlives the absolute path and stays valid after a clone or move — noting
+   that it is git-ignored by default (share it with `git add -f <file>`); and (2) the
    maintenance instruction — tell the implementing agent to keep that file in sync as
-   the implementation changes across iteration loops. In plan mode, **name the plan
+   the implementation changes across iteration loops, and to locate it by **re-running
+   the `assessment-path` mint command** from its `INGRAIN-ASSESSMENT-PATHS` session
+   context and writing to the `assessment_abs` it returns. Never tell it to write to the
+   relative link: that agent runs in a later session with no project root in view, and it
+   will resolve the path against whatever file it is editing, creating a stray
+   `ingrain-security/` folder there. Re-minting is deterministic in branch + title, so it
+   resolves to the same file. In plan mode, **name the plan
    file you write to** (e.g. `.${coding_agent_root}/plans/<name>.md`); ad-hoc, this is the inline
    plan you are building.
 
@@ -415,9 +475,12 @@ sections it needs — the file is the shared state, so your own context stays le
 | "The user excluded T2, but it's important — I'll mitigate it anyway" | Excluded findings are out of scope. Record them as accepted risk and move on. |
 | "The critic flagged issues but it's good enough" | Re-run the generator with the feedback (up to 3 rounds). |
 | "This loop could keep improving forever" | Cap each critic loop at 3 rounds; surface what's unresolved. |
-| "I'll just answer the worker's job myself instead of dispatching" | Each worker runs in its own subagent — dispatch it, don't inline it. |
-| "I'll paste the prior worker's output into the next dispatch" | Hand off by pointer — tell the next worker which section of the assessment file to read; don't thread full content through your context. |
-| "I'll read the whole assessment file to keep track" | Don't. Hold only the compact statuses; read only the bounded gate slices. Reading the full running analysis defeats the context-window discipline. |
+| "I'll just answer the worker's job myself instead of dispatching" | Each worker runs in its own read-only subagent — dispatch it, don't inline it. |
+| "`ingrain-security/assessment-….md` is clear enough — the worker will find it" | It won't. A relative path is resolved by whoever receives it, and a worker has no project root in view — it resolves against the file it was reading and creates a stray folder there. Pass the absolute `assessment_abs`, always. |
+| "I'll create the `ingrain-security/` folder since it's missing" | It is not missing — the script created it at the repo root and it self-ignores, so `git status` never shows it. If you think it's absent, you resolved the path wrong. Re-run the mint script. |
+| "The `ingrain` CLI errored / isn't configured, so I'll stop the review" | Genuine unavailability (binary absent, unconfigured, no matches) degrades gracefully — proceed without rules, note why, and still propose mitigations. |
+| "The `ingrain` fetch was blocked by the sandbox, so I'll just proceed without rules" | A permission/sandbox denial is recoverable, not graceful-degradation — ask the user for access (native prompt, or the generator's `fetch blocked — permission needed` signal → you prompt and re-dispatch) and retry. Only proceed without rules if the user declines. |
+| "I'll cite a plausible-sounding org rule to back this mitigation" | Cite only rules actually returned by `ingrain context` — never invent a rule or an id. |
 | "I'll put all the detail in the window options and skip the table" | Display the findings as a table first, then present the single-choice windows — never the windows alone. |
 | "I'm in plan mode / keeping output lean, so I'll skip printing the gate table" | The gate table is mandatory visible output in every mode. Read the bounded slice of the assessment file — that read is the one the context-window discipline permits — and print the table before any window. |
 
@@ -430,7 +493,7 @@ sections it needs — the file is the shared state, so your own context stays le
   assessment artifact; it writes no code.
 - **Read-only on the codebase; two outputs.** Workers make **no code or repo
   edits** — Read/Grep/Glob on the codebase only — and their sole write is their own
-  section of the stored analysis file (the `assessment_path` the orchestrator minted).
+  section of the stored analysis file (the `assessment_abs` the orchestrator minted).
   Restate that constraint in every dispatch, since without tool-level enforcement it
   is advisory. The process produces exactly two things: **the assessment file** (the
   hand-off medium the workers write, section by section, and you finalize) and

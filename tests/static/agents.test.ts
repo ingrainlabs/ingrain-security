@@ -60,6 +60,16 @@ for (const name of WORKERS) {
       assertStringIncludes(body, "path your dispatch specifies");
     });
 
+    // The mitigation-generator is the one worker with a read-only CLI exception:
+    // it runs `ingrain context security_rules` to fetch org rules, but still edits
+    // nothing. Guard that the exception is documented in its ROLE header.
+    if (name === "ingrain-mitigation-generator") {
+      await t.step("mitigation-generator documents the read-only ingrain CLI exception", () => {
+        assertStringIncludes(body, "ingrain context security_rules");
+        assertStringIncludes(body.toLowerCase(), "exception");
+      });
+    }
+
     await t.step("ROLE header carries a recommended model", () => {
       assertStringIncludes(body, "Recommended model:");
     });
