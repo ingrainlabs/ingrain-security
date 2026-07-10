@@ -7,7 +7,7 @@
  * SKILLN.md` (case-sensitive, dev-only scratch files, git-ignored). To trigger-test a variant we
  * stage a throwaway copy of the plugin whose target `SKILL.md` is the variant's
  * content, then point `claude --plugin-dir` at it — so both the `SessionStart`
- * hook injection (`hooks/session-start` reads the file at runtime) and the skill
+ * hook injection (`hooks/start/session-start` reads the file at runtime) and the skill
  * description come from the variant.
  */
 

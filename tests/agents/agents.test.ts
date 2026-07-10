@@ -104,9 +104,11 @@ const CASES: AgentCase[] = [
   },
   {
     // ingrain-mitigation-generator (sonnet): proposes mitigations for the selected threats,
-    // each with Yield / Effort / threatTags fields.
+    // each with Yield / Effort / threatTags fields. Dispatched with read-only tools only
+    // (no Bash), so the `ingrain context` rule lookup can't run — this exercises the
+    // graceful-degradation path: the worker must still produce mitigations without the CLI.
     worker: "ingrain-mitigation-generator",
-    label: "ingrain-mitigation-generator :: selected threats",
+    label: "ingrain-mitigation-generator :: selected threats (no CLI, graceful degradation)",
     input: SELECTED_THREATS,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {

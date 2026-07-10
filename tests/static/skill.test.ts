@@ -11,7 +11,12 @@ import { assertOrder, parseFrontmatter } from "../lib/matchers.ts";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
+const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/assessment-file.md`;
+const TRIAGE_REF = `${ROOT}skills/ingrain-security/references/ingrain-relevance-triage.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
+const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
+const SESSION_START = `${ROOT}hooks/start/session-start`;
+const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
 
 const WORKERS = [
   "ingrain-relevance-triage",
@@ -62,6 +67,83 @@ Deno.test("SKILL.md: documents the read-reference dispatch mechanism", async () 
   assertStringIncludes(md.toLowerCase(), "read-only");
 });
 
+Deno.test("SKILL.md: documents the assessment file, its path, and living-document behavior", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  // Dedicated section, and the single file written straight into ingrain-security/.
+  assertStringIncludes(md, "## The assessment file");
+  assertStringIncludes(md, "ingrain-security/assessment-<branch-slug>-<task-slug>.md");
+  // The host-root variable is still defined (used for the plan-file path).
+  assertStringIncludes(md, "${coding_agent_root}");
+  // It is written/updated as a living document.
+  assertStringIncludes(md.toLowerCase(), "living document");
+  // The file's schema/template is defined in a dedicated reference file.
+  assertStringIncludes(md, "references/assessment-file.md");
+  // The path is minted by the bundled script (mint), not hand-built.
+  assertStringIncludes(md, "scripts/assessment-path");
+  assertStringIncludes(md, "mint");
+  assertStringIncludes(md, "assessment_path");
+});
+
+Deno.test("assessment-file.md: defines the strict on-disk format and its allowed values", async () => {
+  const md = await Deno.readTextFile(ASSESSMENT_REF);
+  // The single in-repo artifact path.
+  assertStringIncludes(md, "ingrain-security/assessment-<branch-slug>-<task-slug>.md");
+  // Enumerated fields carry their exact allowed values.
+  assertStringIncludes(md, "very high"); // likelihood
+  for (const v of ["selected", "excluded", "undecided"]) {
+    assertStringIncludes(md, v); // selection status
+  }
+  // Key constraints from the format are stated.
+  assertStringIncludes(md, "256"); // justification max length
+  assertStringIncludes(md, "3–6 rows"); // threat count: soft target, not a hard limit
+  // The path is obtained from the bundled path-minting script.
+  assertStringIncludes(md, "scripts/assessment-path");
+});
+
+Deno.test("SKILL.md + assessment-file.md: the assessment file name is keyed by branch + task", async () => {
+  const skill = await Deno.readTextFile(SKILL);
+  const ref = await Deno.readTextFile(ASSESSMENT_REF);
+  // Deterministic branch+task name (no timestamp) in both the skill and its schema ref.
+  const NAME = "ingrain-security/assessment-<branch-slug>-<task-slug>.md";
+  assertStringIncludes(skill, NAME);
+  assertStringIncludes(ref, "assessment-<branch-slug>-<task-slug>.md");
+  // Branch is resolved with git (not the unreliable .git/HEAD read).
+  assertStringIncludes(skill, "git branch --show-current");
+  // The unknown-branch fallback keeps the task-only name.
+  assertStringIncludes(skill, "assessment-<task-slug>.md");
+});
+
+Deno.test("triage: instructs a prior-analysis lookup that seeds the generator", async () => {
+  const skill = await Deno.readTextFile(SKILL);
+  const triage = await Deno.readTextFile(TRIAGE_REF);
+  // The triage worker scans the durable folder for a prior analysis of this task.
+  assertStringIncludes(triage.toLowerCase(), "check for prior analysis");
+  assertStringIncludes(triage, "ingrain-security/assessment-<branch-slug>-*.md");
+  // It compares branch + title and emits a Prior analysis pointer.
+  assertStringIncludes(triage, "Prior analysis");
+  // The orchestrator forwards that pointer to the generator so it seeds prior threats.
+  assertStringIncludes(skill, "Prior analysis pointer");
+  // The schema carries the optional Prior analysis field.
+  assertStringIncludes(await Deno.readTextFile(ASSESSMENT_REF), "Prior analysis");
+});
+
+Deno.test("SKILL.md: documents the pointer-based hand-off and context-window discipline", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  // Workers hand off via pointers, not by pasting full content.
+  assertStringIncludes(md.toLowerCase(), "pointer");
+  // The orchestrator does not read the full running analysis into its context.
+  assertStringIncludes(md.toLowerCase(), "running analysis");
+});
+
+Deno.test("SKILL.md: folds the assessment link + maintenance instruction into the plan", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  // A maintenance instruction is aimed at the downstream implementing agent.
+  assertStringIncludes(md, "Maintenance");
+  assertStringIncludes(md, "implementing agent");
+  // The file is meant to stay in sync as implementation evolves.
+  assertStringIncludes(md.toLowerCase(), "in sync");
+});
+
 Deno.test("platform-dispatch.md: covers the subagent primitive and the fallback", async () => {
   const ref = `${ROOT}skills/ingrain-security/references/platform-dispatch.md`;
   const md = await Deno.readTextFile(ref);
@@ -69,8 +151,65 @@ Deno.test("platform-dispatch.md: covers the subagent primitive and the fallback"
   assertStringIncludes(md.toLowerCase(), "fallback");
 });
 
+Deno.test("ingrain-mitigation-generator.md: documents the ingrain rule-retrieval CLI", async () => {
+  const ref = `${ROOT}skills/ingrain-security/references/ingrain-mitigation-generator.md`;
+  const md = await Deno.readTextFile(ref);
+  // The retrieval command and its output shape.
+  assertStringIncludes(md, "ingrain context security_rules");
+  // Version fallback for older CLIs (pre-rename #98).
+  assertStringIncludes(md, "ingrain context decisions");
+  // Graceful degradation when the CLI is absent/unconfigured.
+  assertStringIncludes(md.toLowerCase(), "graceful degradation");
+  assertStringIncludes(md.toLowerCase(), "proceed without rules");
+});
+
+Deno.test("SKILL.md: mitigation step retrieves rules", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  // Step 5 folds rule retrieval into the mitigation step.
+  assertStringIncludes(md, "ingrain context security_rules");
+});
+
+// The assessment file must be written to the ABSOLUTE `assessment_abs`. A relative path
+// is resolved by whoever receives it, and a worker subagent has no project root in view —
+// it resolves against the file it was reading and creates a stray ingrain-security/ folder
+// there. These fence the wording so a later doc edit cannot quietly reintroduce that.
+
+Deno.test("SKILL.md: dispatches workers with the absolute assessment_abs", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  assertStringIncludes(md, "assessment_abs");
+  // The worker dispatch template must not hand out the relative path as a write target.
+  assertStringIncludes(md, "<the minted assessment_abs — the ABSOLUTE path, pasted in full>");
+});
+
+Deno.test("session-start: points the orchestrator at assessment_abs", async () => {
+  const hook = await Deno.readTextFile(SESSION_START);
+  assertStringIncludes(hook, "assessment_abs");
+});
+
+Deno.test("assessment-path: emits an instruction and anchors on the git repo root", async () => {
+  const script = await Deno.readTextFile(PATH_SCRIPT);
+  assertStringIncludes(script, '"instruction":"%s"');
+  assertStringIncludes(script, "rev-parse --show-toplevel");
+});
+
+Deno.test("assessment-file.md: names assessment_abs as the write target", async () => {
+  const md = await Deno.readTextFile(ASSESSMENT_REF);
+  assertStringIncludes(md, "assessment_abs");
+});
+
 Deno.test("hook.json: valid JSON configuring a SessionStart hook", async () => {
   const hook = JSON.parse(await Deno.readTextFile(HOOK_JSON));
   const serialized = JSON.stringify(hook);
   assertStringIncludes(serialized, "SessionStart");
+});
+
+Deno.test("hook.json: both platforms pass their host token to session-start", async () => {
+  // session-start needs the host so it can inject a host-correct assessment-path command.
+  const claude = JSON.stringify(JSON.parse(await Deno.readTextFile(HOOK_JSON)));
+  const codex = JSON.stringify(JSON.parse(await Deno.readTextFile(CODEX_HOOK_JSON)));
+  assertStringIncludes(claude, "start/session-start claude");
+  assertStringIncludes(codex, "start/session-start codex");
+  // The assessment-folder hook keeps passing its host token too.
+  assertStringIncludes(claude, "start/ensure-assessment-dir claude");
+  assertStringIncludes(codex, "start/ensure-assessment-dir codex");
 });
