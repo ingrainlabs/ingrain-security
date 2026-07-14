@@ -88,15 +88,23 @@ export const assertHasScore0to100 = (text: string, msg?: string): void => {
  * Risk descends as the threat tag rises: `T1` is the most critical threat, `Tn` the least.
  * The `ingrain-risk-scorer` re-tags the frozen list into this order, so the tags it returns
  * must carry non-increasing risk scores. Reads one `T<n> … risk … <0-100>` pair per line,
- * whichever prose or table shape the model used.
+ * whichever prose or table shape the model used, and enforces two guarantees: every risk
+ * score is a 0-100 value, and risk never rises as the tag index rises.
  */
 export const assertRiskDescendsByTag = (text: string, msg?: string): void => {
   const byTag = new Map<number, number>();
   for (
-    const m of text.matchAll(/^[^\n]*?\bT(\d+)\b[^\n]*?\brisk(?:\s*score)?\b\D{0,12}(\d{1,3})/gim)
+    const m of text.matchAll(/^[^\n]*?\bT(\d+)\b[^\n]*?\brisk(?:\s*score)?\b\D{0,12}(\d{1,3})\b/gim)
   ) {
     const tag = Number(m[1]);
-    if (!byTag.has(tag)) byTag.set(tag, Number(m[2]));
+    const risk = Number(m[2]);
+    if (risk > 100) {
+      throw new AssertionError(
+        `${msg ?? "Expected risk to descend by tag"}: T${tag} has risk ${risk}, outside 0-100\n` +
+          `--- output ---\n${snippet(text)}`,
+      );
+    }
+    if (!byTag.has(tag)) byTag.set(tag, risk);
   }
   const scored = [...byTag.entries()].sort(([a], [b]) => a - b);
   if (scored.length < 2) {

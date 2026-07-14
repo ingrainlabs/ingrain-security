@@ -194,6 +194,17 @@ Deno.test("allow: the heredoc-wrapped command form", async () => {
   });
 });
 
+Deno.test("allow: a bare `apply_patch` wrapper, no heredoc", async () => {
+  await withProject(async (dir) => {
+    // The other legal wrapper: the verb on its own line, the patch fed in as-is. It opens no
+    // heredoc, so nothing may follow the envelope — the guard that keeps the suffix rules
+    // from over-reaching and refusing this form.
+    const patch = ["apply_patch", addFile(`${dir}/.ingrain-security/assessment.md`)].join("\n");
+    const res = await runHook(payload("apply_patch", patch, dir), dir);
+    assertEquals(res.allowed, true);
+  });
+});
+
 Deno.test("allow: hostile-looking patch CONTENT does not taint a legitimate target", async () => {
   await withProject(async (dir) => {
     // What the assessment SAYS is none of this hook's business. A decoy envelope line
@@ -270,6 +281,28 @@ Deno.test("defer: shell riding along outside the patch envelope", async () => {
     for (const command of commands) {
       const res = await runHook(payload("apply_patch", command, dir), dir);
       assertEquals(res.allowed, false, `must not approve: ${command.split("\n")[0]}`);
+    }
+  });
+});
+
+Deno.test("defer: a bareword command riding along outside the patch envelope", async () => {
+  await withProject(async (dir) => {
+    // The sibling case above is only rejected because those payloads contain spaces. A
+    // BAREWORD command — no space, slash or semicolon — is the one shape a lax suffix scan
+    // waves through, and the shell runs it as a second command all the same. The wrapper is
+    // therefore matched structurally: at most one `apply_patch` opener, and a suffix that is
+    // EXACTLY the heredoc delimiter that opener declared.
+    const patch = addFile(`${dir}/.ingrain-security/assessment.md`);
+    const commands = [
+      `${patch}\nreboot`, // trailing command, no heredoc ever opened
+      `apply_patch <<'PATCH'\n${patch}\nPATCH\nreboot`, // trailing command after the terminator
+      `apply_patch <<'PATCH'\n${patch}\nEOF`, // terminator that is not the one opened
+      `apply_patch <<'PATCH'\n${patch}`, // heredoc opened, never closed
+      `apply_patch\napply_patch\n${patch}`, // a second opener is not a wrapper
+    ];
+    for (const command of commands) {
+      const res = await runHook(payload("apply_patch", command, dir), dir);
+      assertEquals(res.allowed, false, `must not approve: ${JSON.stringify(command)}`);
     }
   });
 });

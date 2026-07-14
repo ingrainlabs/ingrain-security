@@ -62,26 +62,30 @@ defer() {
 # Anything unrecognized is a refusal, not a skip: an envelope verb this hook does not know
 # is exactly the case where it must not be guessing.
 collect_patch_paths() {
-    local patch="$1" line region="prefix" count=0 opener_re terminator_re
+    local patch="$1" line region="prefix" count=0 opener_re
+    local saw_opener=0 terminator="" closed=0
 
     # `apply_patch`, optionally opening a heredoc: `apply_patch <<'EOF'`, `<<-"PATCH"`, …
-    opener_re="^apply_patch([[:space:]]+<<-?[\"']?[A-Za-z_][A-Za-z0-9_]*[\"']?)?[[:space:]]*\$"
-    terminator_re='^[A-Za-z_][A-Za-z0-9_]*$'
+    # Group 2 captures the delimiter, so the suffix can be held to the one actually opened.
+    opener_re="^apply_patch([[:space:]]+<<-?[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?)?[[:space:]]*\$"
 
     while IFS= read -r line; do
         line="${line%$'\r'}"
 
         case "${region}" in
-            # Before the patch: only the wrapper Codex may put there — bare `apply_patch`,
-            # or `apply_patch <<'EOF'`. Nothing else, which is what stops a chained shell
-            # command from being approved along with the patch.
+            # Before the patch: ONE wrapper line, and only the wrapper Codex may put there —
+            # bare `apply_patch`, or `apply_patch <<'EOF'`. Nothing else, which is what stops
+            # a chained shell command from being approved along with the patch.
             prefix)
                 [ -z "${line}" ] && continue
                 if [ "${line}" = "*** Begin Patch" ]; then
                     region="body"
                     continue
                 fi
+                [ "${saw_opener}" -eq 0 ] || return 1
                 [[ "${line}" =~ ${opener_re} ]] || return 1
+                saw_opener=1
+                terminator="${BASH_REMATCH[2]}"
                 ;;
 
             body)
@@ -101,10 +105,17 @@ collect_patch_paths() {
                 esac
                 ;;
 
-            # After the patch: at most the heredoc terminator that closed the wrapper.
+            # After the patch: EXACTLY the delimiter the wrapper opened, once, and nothing
+            # after it. A wrapper that opened no heredoc leaves nothing legal here at all —
+            # otherwise a bareword line like `reboot`, which needs no argument and so carries
+            # none of the spaces the envelope check would catch, is a second shell command
+            # riding along on the patch's approval.
             suffix)
                 [ -z "${line}" ] && continue
-                [[ "${line}" =~ ${terminator_re} ]] || return 1
+                [ -n "${terminator}" ] || return 1
+                [ "${closed}" -eq 0 ] || return 1
+                [ "${line}" = "${terminator}" ] || return 1
+                closed=1
                 ;;
         esac
     done < <(printf '%s\n' "${patch}")
@@ -112,6 +123,8 @@ collect_patch_paths() {
     # A truncated patch, or one that touches nothing, is not something to approve.
     [ "${region}" = "suffix" ] || return 1
     [ "${count}" -gt 0 ] || return 1
+    # Likewise a heredoc that was opened and never closed: a truncated command, not a patch.
+    [ -z "${terminator}" ] || [ "${closed}" -eq 1 ] || return 1
 }
 
 main() {
