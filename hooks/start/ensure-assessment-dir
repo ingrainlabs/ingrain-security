@@ -18,8 +18,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# Project-root resolution and the .gitignore seed are shared with
-# scripts/assessment-path. A missing lib is a silent no-op: this hook must
+# Project-root resolution and the .gitignore seed are shared with the PreToolUse hook
+# and with scripts/assessment-path. A missing lib is a silent no-op: this hook must
 # never abort the user's session.
 # shellcheck source=../lib/project-root.sh
 . "${SCRIPT_DIR}/../lib/project-root.sh" 2>/dev/null || exit 0

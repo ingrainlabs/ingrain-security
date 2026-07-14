@@ -6,7 +6,6 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { exists } from "@std/fs";
 import { fromFileUrl } from "@std/path";
 import { assertOrder, parseFrontmatter } from "../lib/matchers.ts";
 
@@ -14,23 +13,13 @@ const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
 const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/assessment-file.md`;
 const TRIAGE_REF = `${ROOT}skills/ingrain-security/references/ingrain-relevance-triage.md`;
-const README = `${ROOT}README.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
 const SESSION_START = `${ROOT}hooks/start/session-start`;
+const ALLOW_HOOK = `${ROOT}hooks/claude/allow-assessment-write`;
+const CODEX_ALLOW_HOOK = `${ROOT}hooks/codex/allow-assessment-write`;
+const ALLOW_LIB = `${ROOT}hooks/lib/assessment-write.sh`;
 const ENSURE_DIR = `${ROOT}hooks/start/ensure-assessment-dir`;
-
-/**
- * The auto-approve hooks, deleted in favour of a `permissions.allow` rule the user adds
- * once. A plugin cannot ship permission rules, so a hook returning `allow` was the only
- * prompt-skipping mechanism available — which is exactly why its return is a standing,
- * plugin-granted write permission, and why its removal is worth fencing.
- */
-const REMOVED_HOOKS = [
-  `${ROOT}hooks/claude/allow-assessment-write`,
-  `${ROOT}hooks/codex/allow-assessment-write`,
-  `${ROOT}hooks/lib/assessment-write.sh`,
-];
 const PROJECT_ROOT_LIB = `${ROOT}hooks/lib/project-root.sh`;
 const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
 
@@ -213,9 +202,9 @@ Deno.test("assessment-path: emits an instruction and anchors on the git repo roo
 });
 
 Deno.test("project-root.sh: is sourced by every script that resolves the project root", async () => {
-  // The lib exists to keep these two in lockstep — a copy drifting back into either of
+  // The lib exists to keep these three in lockstep — a copy drifting back into any of
   // them is the regression this guards.
-  for (const script of [PATH_SCRIPT, ENSURE_DIR]) {
+  for (const script of [PATH_SCRIPT, ENSURE_DIR, ALLOW_HOOK]) {
     assertStringIncludes(await Deno.readTextFile(script), "lib/project-root.sh");
   }
 });
@@ -242,56 +231,52 @@ Deno.test("hook.json: both platforms pass their host token to session-start", as
   assertStringIncludes(codex, "start/ensure-assessment-dir codex");
 });
 
-// The plugin grants itself no write permission. Writes to the assessment file are allowed by
-// the user, once, via a `permissions.allow` rule the README documents — so a re-registered
-// auto-approve hook would quietly restore a standing, plugin-granted permission, and nothing
-// else in the suite would notice.
-
-Deno.test("hook.json: Claude registers no auto-approve hook", async () => {
+Deno.test("hook.json: Claude registers the PreToolUse auto-approve hook", async () => {
+  // Without this registration the assessment file prompts on every write, which is the
+  // whole reason the hook exists — and nothing else in the suite would notice.
   const hook = JSON.parse(await Deno.readTextFile(HOOK_JSON));
-  assertEquals(hook.hooks?.PreToolUse, undefined, "PreToolUse must not be registered");
-  const serialized = JSON.stringify(hook);
-  assertEquals(serialized.includes("allow-assessment-write"), false);
-  // The hooks that remain: context injection, the assessment folder, the plan-mode nudge.
-  assertStringIncludes(serialized, "SessionStart");
-  assertStringIncludes(serialized, "ExitPlanMode");
+  const pre = hook.hooks?.PreToolUse;
+  assertEquals(Array.isArray(pre), true, "PreToolUse must be registered");
+  const serialized = JSON.stringify(pre);
+  assertStringIncludes(serialized, "claude/allow-assessment-write");
+  // The matcher must cover every file-editing tool the hook itself accepts.
+  for (const tool of ["Write", "Edit", "MultiEdit", "NotebookEdit"]) {
+    assertStringIncludes(serialized, tool);
+  }
 });
 
-Deno.test("hook.json: Codex registers no auto-approve hook", async () => {
+Deno.test("hook.json: Codex registers the PermissionRequest auto-approve hook", async () => {
+  // Codex's prompt-skipping event is PermissionRequest, not PreToolUse — registering the
+  // hook anywhere else would leave the assessment file prompting on every write.
   const hook = JSON.parse(await Deno.readTextFile(CODEX_HOOK_JSON));
-  const serialized = JSON.stringify(hook);
-  assertEquals(
-    hook.hooks?.PermissionRequest,
-    undefined,
-    "PermissionRequest must not be registered",
-  );
-  assertEquals(serialized.includes("allow-assessment-write"), false);
-  assertStringIncludes(serialized, "SessionStart");
-});
-
-Deno.test("hooks/: the auto-approve scripts and their lib are gone", async () => {
-  // Asserted on the filesystem, not just the registrations: a resurrected file is a
-  // resurrected grant waiting to be wired back up.
-  for (const file of REMOVED_HOOKS) {
-    assertEquals(await exists(file), false, `${file} must not exist`);
+  const request = hook.hooks?.PermissionRequest;
+  assertEquals(Array.isArray(request), true, "PermissionRequest must be registered");
+  const serialized = JSON.stringify(request);
+  assertStringIncludes(serialized, "codex/allow-assessment-write");
+  // The matcher must cover every tool name the hook itself accepts. Codex reports
+  // `apply_patch`; Edit and Write are its documented aliases for the same tool.
+  for (const tool of ["apply_patch", "Edit", "Write"]) {
+    assertStringIncludes(serialized, tool);
   }
 });
 
-Deno.test("README.md: documents the allow rule and claims no auto-approval", async () => {
-  const md = await Deno.readTextFile(README);
-  // The one-time setup step that replaces the hooks — both tools, since Edit and Write are
-  // separate permission rules and a review uses both.
-  assertStringIncludes(md, "Edit(.ingrain-security/**)");
-  assertStringIncludes(md, "Write(.ingrain-security/**)");
-  for (const phrase of ["allow-assessment-write", "PreToolUse", "PermissionRequest"]) {
-    assertEquals(md.includes(phrase), false, `README still mentions ${phrase}`);
-  }
-});
+Deno.test("allow-assessment-write: both hooks only ever allow, never deny", async () => {
+  // The hooks' core safety property, asserted on the sources themselves: they can remove a
+  // permission prompt but must never introduce a block. A "deny" verdict appearing here
+  // would mean the plugin can silently veto a user's edit.
+  const claude = await Deno.readTextFile(ALLOW_HOOK);
+  assertStringIncludes(claude, '"permissionDecision":"allow"');
+  assertEquals(claude.includes('"permissionDecision":"deny"'), false);
 
-Deno.test("assessment-file.md: documents permissions without claiming pre-approval", async () => {
-  const md = await Deno.readTextFile(ASSESSMENT_REF);
-  assertStringIncludes(md, "permissions.allow");
-  for (const phrase of ["Pre-approved", "allow-assessment-write"]) {
-    assertEquals(md.includes(phrase), false, `assessment-file.md still says "${phrase}"`);
-  }
+  const codex = await Deno.readTextFile(CODEX_ALLOW_HOOK);
+  assertStringIncludes(codex, '"behavior":"allow"');
+  assertEquals(codex.includes('"behavior":"deny"'), false);
+  // Only additive patch verbs are approved: a delete or a move is outside the grant.
+  assertEquals(codex.includes("Delete File: "), false);
+
+  // Both hosts get their grant from the same shared test, so they cannot drift apart on it:
+  // the minter's naming, directly inside the assessment folder.
+  const lib = await Deno.readTextFile(ALLOW_LIB);
+  assertStringIncludes(lib, "assessment*.md");
+  assertStringIncludes(lib, "/.ingrain-security");
 });

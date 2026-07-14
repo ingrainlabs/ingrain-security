@@ -33,15 +33,14 @@ shape.
   seeded by the `ensure-assessment-dir` hook and re-ensured by the script), so the whole
   folder — the ignore file included — stays out of `git status`; sharing a file is an
   explicit `git add -f <file>` opt-in.
-- **Permissions.** A review writes this file many times, so the user is expected to allow
-  those writes once rather than approve each one. On Claude Code that is a
-  `permissions.allow` pair — `Edit(.ingrain-security/**)` and `Write(.ingrain-security/**)`
-  — in their `settings.json`; a plugin cannot ship permission rules, so this is a one-time
-  setup step documented in the plugin README, and subagent writes inherit it. On Codex the
-  project directory is already writable under the `workspace-write` sandbox. Where the user
-  has not set the rule up, each write simply prompts as normal — nothing breaks, the run just
-  asks. Writing anywhere other than `assessment_abs` is outside the grant and will prompt, so
-  that is one more reason to write there and nowhere else.
+- **Pre-approved.** An `allow-assessment-write` hook auto-approves writes to this file on
+  both hosts — `PreToolUse` on Claude Code, `PermissionRequest` on Codex — so expect **no
+  permission prompt** when writing it. The grant covers only `assessment*.md` directly
+  inside `.ingrain-security/` — which is exactly `assessment_abs`, and one more reason to
+  write there and nowhere else. Any other path you write still prompts the user and stalls
+  the run. On Codex the approval is per **patch**, not per file: a patch that touches the
+  assessment *and* any other file prompts as a whole, so keep assessment edits in their own
+  patch.
 - **Hand-off medium.** Workers write their sections and return to the orchestrator
   only a branch keyword plus a one-line pointer. The orchestrator owns the
   title/banner and the finalize; it moves data between workers by pointer and does
