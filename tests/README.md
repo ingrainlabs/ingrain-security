@@ -71,7 +71,8 @@ This is always on for the live tiers — Deno streams each test's output live (w
   present, so a broken scan can't leave the tier green but vacuous. Lint settings come from the
   repo-root `.shellcheckrc`, whose `source-path=SCRIPTDIR` is what lets ShellCheck follow the
   `# shellcheck source=...` directives the hooks use to pull in their shared libs. CI installs a
-  pinned ShellCheck rather than trusting the runner image to preinstall one.
+  pinned ShellCheck rather than trusting the runner image to preinstall one, and lints the same
+  scripts from its own workflow step rather than through this tier — see **CI** below.
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
   `skills/ingrain-security/references/<name>.md` body as the system prompt with
   `--allowed-tools Read,Grep,Glob`. The test asserts the output's _shape_ (a verdict keyword, a
@@ -95,7 +96,9 @@ deno task test:offline       # the default tier — static + hooks + shell
 deno task test:static        # just the offline lint of the skill/worker/hook files
 deno task test:hooks         # just the hook + path scripts, executed under bash
 deno task test:shell         # just the shell scripts, checked with shellcheck
-deno task ci                 # what CI runs: lint + fmt:check + test:offline
+deno task test:ts            # the offline TS tests only — static + hooks, no shellcheck needed
+deno task ci                 # everything offline: lint + fmt:check + test:offline
+deno task ci:no-shell        # what CI's Deno step runs: lint + fmt:check + test:ts
 ```
 
 **Needs an agent** — spawns `claude`, requires auth, costs model calls, can flake:
@@ -117,10 +120,19 @@ invocations rather than merging their permission sets.
 
 ## CI
 
-`.github/workflows/ci.yml` runs `deno task ci` (from `tests/`) on pull requests into `main` and
-`development`, and on pushes to `main`. That is the **no-agent** tier only — the agent tiers need
-credentials and cost model calls, so they stay local: run `deno task test:agent` yourself before
-opening a PR.
+`.github/workflows/ci.yml` runs the **no-agent** tier on pull requests into `main` and
+`development`, and on pushes to `main`, in two steps:
+
+- a **ShellCheck** step that discovers and lints the committed shell scripts inline, so a bad script
+  fails on its own line in the log. It mirrors this suite's discovery rule (git-tracked, `*.sh` or a
+  bash/sh shebang, minus the `hooks/run-hook.cmd` polyglot) and refuses to pass if the scan turns up
+  fewer scripts than expected. `shell/shellcheck.test.ts` stays the source of truth for that rule,
+  and remains how you lint shell locally.
+- `deno task ci:no-shell` (from `tests/`) — lint + fmt:check + static + hooks. It skips `test:shell`
+  precisely because the step above already covered it.
+
+The agent tiers need credentials and cost model calls, so they stay local: run
+`deno task test:agent` yourself before opening a PR.
 
 ## Comparing skill variants (trigger-comparison harness)
 
@@ -174,8 +186,10 @@ earlier mode's transcript in its own subdir.
 | `test:static`            | no              | 0                      | < 1s      | no   |
 | `test:hooks`             | no              | 0                      | < 1s      | no   |
 | `test:shell`             | no              | 0                      | < 1s      | no   |
+| `test:ts`                | no              | 0                      | < 1s      | no   |
 | `test:offline`           | no              | 0                      | < 1s      | no   |
 | `ci` (+ lint, fmt:check) | no              | 0                      | a few s   | no   |
+| `ci:no-shell`            | no              | 0                      | a few s   | no   |
 | `test:agent`             | yes             | ~8 (6 workers + 2)     | a few min | yes  |
 | `test:integration`       | yes             | + full cycle to Gate 1 | 5–20 min  | yes  |
 
