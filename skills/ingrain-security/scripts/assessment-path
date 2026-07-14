@@ -2,7 +2,7 @@
 # Assessment-path minter for the ingrain-security plugin.
 #
 # Single source of truth for the review's assessment-file path, so the orchestrator
-# never hand-builds it. The file is written directly into `ingrain-security/` at the
+# never hand-builds it. The file is written directly into `.ingrain-security/` at the
 # project root and is BOTH the living working copy (workers write it during the run)
 # and its persisted record — there is no separate temp file and no finalize copy.
 # Emits ONE JSON object on stdout; diagnostics go to stderr.
@@ -18,14 +18,14 @@
 #
 #   <host>  the host's config dotfolder base name — "claude" (Claude Code), "codex"
 #           (Codex), or any future coding agent's token. It no longer appears in the
-#           assessment path (that always lives at `ingrain-security/…`); it only
+#           assessment path (that always lives at `.ingrain-security/…`); it only
 #           selects project-root resolution, exactly like `ensure-assessment-dir`.
 #
 # The project root is resolved from the git repo root, so running this from any
 # subdirectory still anchors the folder at the top of the repo.
 #
 # The path is deterministic in the branch + task, so it doubles as the task identity:
-#   ingrain-security/assessment-<branch-slug>-<task-slug>.md
+#   .ingrain-security/assessment-<branch-slug>-<task-slug>.md
 # Re-reviewing the SAME task on the SAME branch resolves to the SAME file (the run
 # resumes/updates it in place — `file_exists` reports this); a different task or branch
 # resolves to a different file. No timestamp, no random token.
@@ -61,7 +61,7 @@ Output (assessment_abs is CANONICAL — the one path to write to; assessment_pat
 relative display form for prose and links). The `instruction` field restates this with
 the path interpolated. The project root comes from the git repo root, so mint may be run
 from any subdirectory:
-  <project_root>/ingrain-security/assessment-<branch-slug>-<task-slug>.md
+  <project_root>/.ingrain-security/assessment-<branch-slug>-<task-slug>.md
   Fallbacks: no branch -> assessment-<task-slug>.md; no title -> assessment-<branch-slug>.md;
   both absent -> assessment.md. The `assessment-` prefix always leads. `file_exists`
   is true when the file already exists (the run resumes the same task's prior analysis).
@@ -152,7 +152,7 @@ cmd_mint() {
 
     task_slug="$(slugify "${title}")"
 
-    assessment_dir="ingrain-security"
+    assessment_dir=".ingrain-security"
 
     # Never write into a symlinked target — a crafted repo could redirect it outside
     # the tree (same guard as ensure-assessment-dir). Then ensure the folder and its
@@ -178,7 +178,7 @@ cmd_mint() {
     # in the same tool result, at the moment the orchestrator is about to dispatch. A
     # static sentence in SKILL.md is read thousands of tokens earlier and gets lost; this
     # one is unmissable and already has the path substituted in.
-    instruction="Write the assessment ONLY to assessment_abs (${assessment_abs}). That folder is this repository's single ingrain-security/ directory and it already exists — never create an ingrain-security/ folder anywhere else, and never resolve the path against the file you happen to be editing. Pass assessment_abs verbatim to every worker dispatch and to every Write/Edit call; assessment_path is a display-only form for prose and links."
+    instruction="Write the assessment ONLY to assessment_abs (${assessment_abs}). That folder is this repository's single .ingrain-security/ directory and it already exists — never create an .ingrain-security/ folder anywhere else, and never resolve the path against the file you happen to be editing. Pass assessment_abs verbatim to every worker dispatch and to every Write/Edit call; assessment_path is a display-only form for prose and links."
 
     printf '{"host":"%s","project_root":"%s","branch":"%s","branch_slug":"%s","branch_known":%s,"task_slug":"%s","assessment_dir":"%s","assessment_path":"%s","assessment_abs":"%s","basename":"%s","file_exists":%s,"instruction":"%s"}\n' \
         "$(escape_for_json "${host_slug}")" \

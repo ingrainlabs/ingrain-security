@@ -64,8 +64,8 @@ This is always on for the live tiers — Deno streams each test's output live (w
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
   `skills/ingrain-security/references/<name>.md` body as the system prompt with
   `--allowed-tools Read,Grep,Glob`. The test asserts the output's _shape_ (a verdict keyword, a
-  0–100 score, a preserved `T1` tag, required fields). Assertions are loose because live output
-  varies.
+  0–100 score, risk descending by threat tag, required fields). Assertions are loose because live
+  output varies.
 - **skill/** — a full session (skill + agents + hook). `trigger.test.ts` checks a security-relevant
   plan starts the review and a trivial one stops at triage. `orchestration.test.ts`
   (integration-gated) checks the workers fire in order through risk scoring and the run halts at

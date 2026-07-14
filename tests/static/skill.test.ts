@@ -74,9 +74,9 @@ Deno.test("SKILL.md: documents the read-reference dispatch mechanism", async () 
 
 Deno.test("SKILL.md: documents the assessment file, its path, and living-document behavior", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // Dedicated section, and the single file written straight into ingrain-security/.
+  // Dedicated section, and the single file written straight into .ingrain-security/.
   assertStringIncludes(md, "## The assessment file");
-  assertStringIncludes(md, "ingrain-security/assessment-<branch-slug>-<task-slug>.md");
+  assertStringIncludes(md, ".ingrain-security/assessment-<branch-slug>-<task-slug>.md");
   // The host-root variable is still defined (used for the plan-file path).
   assertStringIncludes(md, "${coding_agent_root}");
   // It is written/updated as a living document.
@@ -92,7 +92,7 @@ Deno.test("SKILL.md: documents the assessment file, its path, and living-documen
 Deno.test("assessment-file.md: defines the strict on-disk format and its allowed values", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
   // The single in-repo artifact path.
-  assertStringIncludes(md, "ingrain-security/assessment-<branch-slug>-<task-slug>.md");
+  assertStringIncludes(md, ".ingrain-security/assessment-<branch-slug>-<task-slug>.md");
   // Enumerated fields carry their exact allowed values.
   assertStringIncludes(md, "very high"); // likelihood
   for (const v of ["selected", "excluded", "undecided"]) {
@@ -109,7 +109,7 @@ Deno.test("SKILL.md + assessment-file.md: the assessment file name is keyed by b
   const skill = await Deno.readTextFile(SKILL);
   const ref = await Deno.readTextFile(ASSESSMENT_REF);
   // Deterministic branch+task name (no timestamp) in both the skill and its schema ref.
-  const NAME = "ingrain-security/assessment-<branch-slug>-<task-slug>.md";
+  const NAME = ".ingrain-security/assessment-<branch-slug>-<task-slug>.md";
   assertStringIncludes(skill, NAME);
   assertStringIncludes(ref, "assessment-<branch-slug>-<task-slug>.md");
   // Branch is resolved with git (not the unreliable .git/HEAD read).
@@ -123,7 +123,7 @@ Deno.test("triage: instructs a prior-analysis lookup that seeds the generator", 
   const triage = await Deno.readTextFile(TRIAGE_REF);
   // The triage worker scans the durable folder for a prior analysis of this task.
   assertStringIncludes(triage.toLowerCase(), "check for prior analysis");
-  assertStringIncludes(triage, "ingrain-security/assessment-<branch-slug>-*.md");
+  assertStringIncludes(triage, ".ingrain-security/assessment-<branch-slug>-*.md");
   // It compares branch + title and emits a Prior analysis pointer.
   assertStringIncludes(triage, "Prior analysis");
   // The orchestrator forwards that pointer to the generator so it seeds prior threats.
@@ -176,7 +176,7 @@ Deno.test("SKILL.md: mitigation step retrieves rules", async () => {
 
 // The assessment file must be written to the ABSOLUTE `assessment_abs`. A relative path
 // is resolved by whoever receives it, and a worker subagent has no project root in view —
-// it resolves against the file it was reading and creates a stray ingrain-security/ folder
+// it resolves against the file it was reading and creates a stray .ingrain-security/ folder
 // there. These fence the wording so a later doc edit cannot quietly reintroduce that.
 
 Deno.test("SKILL.md: dispatches workers with the absolute assessment_abs", async () => {
@@ -278,5 +278,5 @@ Deno.test("allow-assessment-write: both hooks only ever allow, never deny", asyn
   // the minter's naming, directly inside the assessment folder.
   const lib = await Deno.readTextFile(ALLOW_LIB);
   assertStringIncludes(lib, "assessment*.md");
-  assertStringIncludes(lib, "ingrain-security");
+  assertStringIncludes(lib, "/.ingrain-security");
 });

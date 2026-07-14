@@ -30,7 +30,7 @@ You are a Professional Security Analyst reviewing a colleague's threat model. Th
 ## Inputs
 
 - The **task** (implementation plan).
-- The threat list to critique — each threat tagged `T1`, `T2`, … with the shape the `ingrain-threat-generator` produces:
+- The threat list to critique — each threat tagged `T1`, `T2`, … with the shape the `ingrain-threat-generator` produces. These are **working tags in discovery order**: they carry no priority, so don't read `T1` as more important than `T4`, and don't ask for the list to be reordered or renumbered — the `ingrain-risk-scorer` re-tags it into risk order once you approve it. Key every feedback item to the tag exactly as it appears in the list you were handed.
 
   ```
   ### T1 — <short title>

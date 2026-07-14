@@ -15,7 +15,7 @@
 #
 # The grant is deliberately narrow. A write is approved only when the tool is one of
 # Write / Edit / MultiEdit / NotebookEdit and its target passes `is_assessment_target`
-# (direct child of the project's `ingrain-security/` folder, named `assessment*.md`, no
+# (direct child of the project's `.ingrain-security/` folder, named `assessment*.md`, no
 # symlink anywhere in the way) — see hooks/lib/assessment-write.sh, which holds that test
 # and the payload parsing shared with the Codex hook.
 #

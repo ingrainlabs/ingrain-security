@@ -39,13 +39,13 @@ the pipeline can build on prior work instead of restarting. This is read-only �
 Glob, Grep, and Read:
 
 1. **Glob the assessment folder** for this branch, using the **absolute** folder path the
-   orchestrator passed you (`<project_root>/ingrain-security/`, from the
+   orchestrator passed you (`<project_root>/.ingrain-security/`, from the
    `scripts/assessment-path` script):
-   `<project_root>/ingrain-security/assessment-<branch-slug>-*.md`, where `<branch-slug>` is
+   `<project_root>/.ingrain-security/assessment-<branch-slug>-*.md`, where `<branch-slug>` is
    the `branch_slug` the orchestrator resolved via the same script (so this glob and the
    file names always agree). If the branch is `unknown`, Glob all
-   `<project_root>/ingrain-security/assessment-*.md` instead. Glob the absolute path, never
-   the bare relative `ingrain-security/…` — you have no project root in view, so a relative
+   `<project_root>/.ingrain-security/assessment-*.md` instead. Glob the absolute path, never
+   the bare relative `.ingrain-security/…` — you have no project root in view, so a relative
    glob silently matches nothing and you would wrongly report `none`.
 2. **Match on the task — strictly.** A shared branch may hold several concurrent tasks'
    assessments, so the glob can return files belonging to *other* work. For each candidate,
@@ -98,8 +98,8 @@ Lead with the verdict word so the orchestrator can branch on it, then hand the n
 - **`major`** — one line on why, plus a short **Surfaces** list naming the security-relevant aspects you spotted (e.g. "new file-upload endpoint", "adds JWT verification", "raw SQL with user input"). The `ingrain-threat-generator` seeds its threat list from these, so name concrete surfaces, not generic categories.
 
 Always include a **Prior analysis** line — the pointer from the lookup above (a prior
-`ingrain-security/…` snapshot path + its threat count, e.g.
-`ingrain-security/assessment-<…>.md — 4 threats`) or `none` when there is no
+`.ingrain-security/…` snapshot path + its threat count, e.g.
+`.ingrain-security/assessment-<…>.md — 4 threats`) or `none` when there is no
 matching threats-bearing prior analysis. Write it into your `## Triage` section and return
 it to the orchestrator alongside the verdict.
 

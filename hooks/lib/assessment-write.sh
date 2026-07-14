@@ -34,7 +34,7 @@ count_matches() {
 #
 # The payload embeds attacker-influenceable text (a Write's `content`, an apply_patch
 # body), so a naive "first match wins" regex could be fooled: content carrying a decoy
-# `"file_path":"…/ingrain-security/assessment.md"` would win the leftmost match while the
+# `"file_path":"…/.ingrain-security/assessment.md"` would win the leftmost match while the
 # tool actually writes somewhere else, turning these hooks into an auto-approve-anything
 # primitive.
 #
@@ -122,12 +122,12 @@ absolutize() {
     printf '%s' "${path}"
 }
 
-# The project's canonical `ingrain-security/` folder for the given host ($1: claude|codex),
+# The project's canonical `.ingrain-security/` folder for the given host ($1: claude|codex),
 # or non-zero when it is missing or is itself a symlink — either could redirect the write
 # outside the tree, the same guard ensure-assessment-dir and assessment-path apply.
 canonical_assessment_dir() {
     local dir
-    dir="$(resolve_project_root "$1")/ingrain-security"
+    dir="$(resolve_project_root "$1")/.ingrain-security"
     [ -L "${dir}" ] && return 1
     physical_dir "${dir}"
 }
@@ -137,7 +137,7 @@ canonical_assessment_dir() {
 # qualifies only when ALL hold:
 #   - its canonical parent IS the assessment folder: a direct child, not a nested path and
 #     not a `..` escape. The parent is canonicalized BEFORE the equality test, so a literal
-#     `…/ingrain-security/../src/app.ts` resolves away rather than passing a prefix check,
+#     `…/.ingrain-security/../src/app.ts` resolves away rather than passing a prefix check,
 #     and equality (not a prefix) means a sibling folder sharing the prefix falls through.
 #   - the basename matches the minter's naming (`assessment*.md`),
 #   - the target is not a symlink, which would follow the link out of the folder.

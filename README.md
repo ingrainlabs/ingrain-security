@@ -57,8 +57,8 @@ flowchart TD
 
 ### Artifacts
 
-- A single **assessment file** written into the `ingrain-security/` folder at your
-  project root — `ingrain-security/assessment-<branch>-<task>.md` (branch- and
+- A single **assessment file** written into the `.ingrain-security/` folder at your
+  project root — `.ingrain-security/assessment-<branch>-<task>.md` (branch- and
   task-keyed, minted by the `scripts/assessment-path` script). It is the workers'
   shared hand-off medium *and* its own persisted record — written in place, no temp
   copy — and is git-ignored by default (share one with `git add -f <file>`).
@@ -67,7 +67,7 @@ flowchart TD
 Writes to that one file are approved automatically — by a `PreToolUse` hook on Claude
 Code and a `PermissionRequest` hook on Codex — so a review does not interrupt you with a
 permission prompt on every edit. The grant is deliberately narrow: only `assessment*.md`
-files sitting directly in the project's `ingrain-security/` folder, and never through a
+files sitting directly in the project's `.ingrain-security/` folder, and never through a
 symlink. On Codex, where an edit is an `apply_patch`, the patch must touch nothing but
 those files and may only add or update them. Everything else — including the folder's own
 `README.md` — still goes through your normal permission prompt, and the hook can only
@@ -133,7 +133,7 @@ that restricts network or command execution, **allow those `ingrain context` CLI
 runs** so org-rule retrieval works. Without it the review still
 completes — it just degrades gracefully and proposes mitigations without your org's rules.
 
-**The assessment folder is git-ignored.** `ingrain-security/` is ignored
+**The assessment folder is git-ignored.** `.ingrain-security/` is ignored
 by default. To share a snapshot, force-add it: `git add -f <file>`.
 
 ## For contributors

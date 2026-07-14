@@ -26,7 +26,7 @@
 #     envelope but an apply_patch/heredoc wrapper, so no `; curl evil` can ride along,
 #   - it only ADDS or UPDATES files — a Delete/Move is outside what the skill ever does,
 #   - every path it touches passes `is_assessment_target` (direct child of the project's
-#     `ingrain-security/` folder, named `assessment*.md`, no symlink in the way).
+#     `.ingrain-security/` folder, named `assessment*.md`, no symlink in the way).
 #
 # This hook NEVER denies: it can only remove a prompt, never introduce a block. Any doubt —
 # a malformed payload, an unrecognized envelope line, a missing folder — falls through to

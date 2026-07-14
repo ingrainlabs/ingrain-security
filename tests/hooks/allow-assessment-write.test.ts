@@ -87,7 +87,7 @@ function payload(
 /** Run `fn` against a fresh throwaway git project with the assessment folder seeded. */
 async function withProject(fn: (dir: string) => Promise<void>): Promise<void> {
   const dir = await Deno.makeTempDir({ prefix: "ingrain-allow-" });
-  await sh(`git init -q "${dir}" && mkdir -p "${dir}/ingrain-security" "${dir}/src"`);
+  await sh(`git init -q "${dir}" && mkdir -p "${dir}/.ingrain-security" "${dir}/src"`);
   try {
     await fn(dir);
   } finally {
@@ -139,7 +139,7 @@ Deno.test("allow: the path the minter actually produces", async () => {
     const res = await runHook(payload("Write", minted.assessment_abs, dir), { projectDir: dir });
     assertEquals(res.allowed, true);
     assertStringIncludes(res.stdout, '"hookEventName":"PreToolUse"');
-    assertStringIncludes(res.stdout, "ingrain-security");
+    assertStringIncludes(res.stdout, "ingrain-security assessment file");
   });
 });
 
@@ -148,7 +148,7 @@ Deno.test("allow: every file-editing tool, on both naming forms", async () => {
     for (const tool of ["Write", "Edit", "MultiEdit", "NotebookEdit"]) {
       for (const name of ["assessment.md", "assessment-main-add-authn.md"]) {
         const res = await runHook(
-          payload(tool, `${dir}/ingrain-security/${name}`, dir),
+          payload(tool, `${dir}/.ingrain-security/${name}`, dir),
           { projectDir: dir },
         );
         assertEquals(res.allowed, true, `${tool} on ${name} should be allowed`);
@@ -160,7 +160,7 @@ Deno.test("allow: every file-editing tool, on both naming forms", async () => {
 Deno.test("allow: a relative file_path, resolved against the payload's cwd", async () => {
   await withProject(async (dir) => {
     const res = await runHook(
-      payload("Write", "ingrain-security/assessment.md", dir),
+      payload("Write", ".ingrain-security/assessment.md", dir),
       { projectDir: dir },
     );
     assertEquals(res.allowed, true);
@@ -172,7 +172,7 @@ Deno.test("allow: project root from the git root when CLAUDE_PROJECT_DIR is unse
     // No projectDir: the hook must fall back to the git root, exactly as the
     // SessionStart hook and the minter do.
     const res = await runHook(
-      payload("Write", `${dir}/ingrain-security/assessment.md`, dir),
+      payload("Write", `${dir}/.ingrain-security/assessment.md`, dir),
       { cwd: dir },
     );
     assertEquals(res.allowed, true);
@@ -187,7 +187,7 @@ Deno.test("defer: a file in the folder that is not an assessment", async () => {
   await withProject(async (dir) => {
     for (const name of ["README.md", ".gitignore", "notes.txt", "assessment.md.bak"]) {
       const res = await runHook(
-        payload("Write", `${dir}/ingrain-security/${name}`, dir),
+        payload("Write", `${dir}/.ingrain-security/${name}`, dir),
         { projectDir: dir },
       );
       assertEquals(res.allowed, false, `${name} must not be auto-approved`);
@@ -197,9 +197,9 @@ Deno.test("defer: a file in the folder that is not an assessment", async () => {
 
 Deno.test("defer: a nested path under the folder", async () => {
   await withProject(async (dir) => {
-    await sh(`mkdir -p "${dir}/ingrain-security/notes"`);
+    await sh(`mkdir -p "${dir}/.ingrain-security/notes"`);
     const res = await runHook(
-      payload("Write", `${dir}/ingrain-security/notes/assessment.md`, dir),
+      payload("Write", `${dir}/.ingrain-security/notes/assessment.md`, dir),
       { projectDir: dir },
     );
     assertEquals(res.allowed, false);
@@ -208,11 +208,11 @@ Deno.test("defer: a nested path under the folder", async () => {
 
 Deno.test("defer: a `..` traversal out of the folder", async () => {
   await withProject(async (dir) => {
-    // The literal string contains `<root>/ingrain-security/`, so a naive prefix check
+    // The literal string contains `<root>/.ingrain-security/`, so a naive prefix check
     // would approve a write to the project's source tree. The parent is canonicalized
     // before the containment test precisely to stop this.
     const res = await runHook(
-      payload("Write", `${dir}/ingrain-security/../src/app.ts`, dir),
+      payload("Write", `${dir}/.ingrain-security/../src/app.ts`, dir),
       { projectDir: dir },
     );
     assertEquals(res.allowed, false);
@@ -223,7 +223,7 @@ Deno.test("defer: an assessment path in a DIFFERENT project", async () => {
   await withProject(async (dir) => {
     await withProject(async (other) => {
       const res = await runHook(
-        payload("Write", `${other}/ingrain-security/assessment.md`, dir),
+        payload("Write", `${other}/.ingrain-security/assessment.md`, dir),
         { projectDir: dir },
       );
       assertEquals(res.allowed, false);
@@ -244,9 +244,9 @@ Deno.test("defer: the target is a symlink", async () => {
   await withProject(async (dir) => {
     // Correctly named and in the right folder, but the write would follow the link
     // straight out of the tree.
-    await sh(`ln -s /etc/passwd "${dir}/ingrain-security/assessment-evil.md"`);
+    await sh(`ln -s /etc/passwd "${dir}/.ingrain-security/assessment-evil.md"`);
     const res = await runHook(
-      payload("Write", `${dir}/ingrain-security/assessment-evil.md`, dir),
+      payload("Write", `${dir}/.ingrain-security/assessment-evil.md`, dir),
       { projectDir: dir },
     );
     assertEquals(res.allowed, false);
@@ -257,10 +257,10 @@ Deno.test("defer: the assessment folder itself is a symlink", async () => {
   await withProject(async (dir) => {
     const outside = await Deno.makeTempDir({ prefix: "ingrain-outside-" });
     await sh(
-      `rm -rf "${dir}/ingrain-security" && ln -s "${outside}" "${dir}/ingrain-security"`,
+      `rm -rf "${dir}/.ingrain-security" && ln -s "${outside}" "${dir}/.ingrain-security"`,
     );
     const res = await runHook(
-      payload("Write", `${dir}/ingrain-security/assessment.md`, dir),
+      payload("Write", `${dir}/.ingrain-security/assessment.md`, dir),
       { projectDir: dir },
     );
     assertEquals(res.allowed, false);
@@ -274,7 +274,7 @@ Deno.test("defer: a tool that is not a file-editing tool", async () => {
     // script re-checks the tool name itself.
     for (const tool of ["Bash", "Read", "Task"]) {
       const res = await runHook(
-        payload(tool, `${dir}/ingrain-security/assessment.md`, dir),
+        payload(tool, `${dir}/.ingrain-security/assessment.md`, dir),
         { projectDir: dir },
       );
       assertEquals(res.allowed, false, `${tool} must not be auto-approved`);
@@ -292,7 +292,7 @@ Deno.test("defer: a decoy file_path planted in the tool's content", async () => 
     // decoy `"file_path":"…/assessment.md"` inside it must not win the match and turn
     // the hook into an approve-anything primitive for the REAL target (src/app.ts).
     const hostile = payload("Write", `${dir}/src/app.ts`, dir, {
-      content: `"file_path":"${dir}/ingrain-security/assessment.md"`,
+      content: `"file_path":"${dir}/.ingrain-security/assessment.md"`,
     });
     const res = await runHook(hostile, { projectDir: dir });
     assertEquals(res.allowed, false);
@@ -306,7 +306,7 @@ Deno.test("defer: a decoy file_path key placed BEFORE the real one", async () =>
     // regex would read the assessment path, approve, and let the tool write to
     // src/app.ts instead. The uniqueness guard sees two keys, refuses to guess, defers.
     const hostile = '{"tool_name":"Write","tool_input":{' +
-      `"nested":{"file_path":"${dir}/ingrain-security/assessment.md"},` +
+      `"nested":{"file_path":"${dir}/.ingrain-security/assessment.md"},` +
       `"file_path":"${dir}/src/app.ts"},"cwd":"${dir}"}`;
     const res = await runHook(hostile, { projectDir: dir });
     assertEquals(res.allowed, false);
@@ -320,7 +320,7 @@ Deno.test("allow: hostile-looking content does not taint a legitimate target", a
     // targets the real assessment file, which is exactly the sanctioned action — the
     // content it carries is none of this hook's business.
     const res = await runHook(
-      payload("Write", `${dir}/ingrain-security/assessment.md`, dir, {
+      payload("Write", `${dir}/.ingrain-security/assessment.md`, dir, {
         content: `an assessment discussing "file_path":"/etc/passwd" in a hook`,
       }),
       { projectDir: dir },
@@ -351,7 +351,7 @@ Deno.test("defer: the assessment folder does not exist yet", async () => {
   try {
     await sh(`git init -q "${dir}"`);
     const res = await runHook(
-      payload("Write", `${dir}/ingrain-security/assessment.md`, dir),
+      payload("Write", `${dir}/.ingrain-security/assessment.md`, dir),
       { projectDir: dir },
     );
     assertEquals(res.allowed, false);
@@ -370,12 +370,12 @@ Deno.test("a project path with quotes and backslashes is extracted intact", asyn
   // init — interpolating this path into a shell snippet is what the quote would break.
   const weird = `${parent}/pr"oj\\ekt`;
   try {
-    await Deno.mkdir(`${weird}/ingrain-security`, { recursive: true });
+    await Deno.mkdir(`${weird}/.ingrain-security`, { recursive: true });
     await sh("git init -q .", weird);
     // JSON.stringify escapes the quote and the backslash; the hook must unescape them
     // back to the real path rather than truncating at the embedded quote.
     const res = await runHook(
-      payload("Write", `${weird}/ingrain-security/assessment.md`, weird),
+      payload("Write", `${weird}/.ingrain-security/assessment.md`, weird),
       { projectDir: weird },
     );
     assertEquals(res.allowed, true);

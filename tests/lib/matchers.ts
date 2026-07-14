@@ -84,6 +84,40 @@ export const assertHasScore0to100 = (text: string, msg?: string): void => {
   }
 };
 
+/**
+ * Risk descends as the threat tag rises: `T1` is the most critical threat, `Tn` the least.
+ * The `ingrain-risk-scorer` re-tags the frozen list into this order, so the tags it returns
+ * must carry non-increasing risk scores. Reads one `T<n> … risk … <0-100>` pair per line,
+ * whichever prose or table shape the model used.
+ */
+export const assertRiskDescendsByTag = (text: string, msg?: string): void => {
+  const byTag = new Map<number, number>();
+  for (
+    const m of text.matchAll(/^[^\n]*?\bT(\d+)\b[^\n]*?\brisk(?:\s*score)?\b\D{0,12}(\d{1,3})/gim)
+  ) {
+    const tag = Number(m[1]);
+    if (!byTag.has(tag)) byTag.set(tag, Number(m[2]));
+  }
+  const scored = [...byTag.entries()].sort(([a], [b]) => a - b);
+  if (scored.length < 2) {
+    throw new AssertionError(
+      `${msg ?? "Expected risk to descend by tag"}: found ${scored.length} tagged risk score(s), ` +
+        `need at least 2\n--- output ---\n${snippet(text)}`,
+    );
+  }
+  for (let i = 1; i < scored.length; i++) {
+    const [prevTag, prevRisk] = scored[i - 1];
+    const [tag, risk] = scored[i];
+    if (risk > prevRisk) {
+      throw new AssertionError(
+        `${msg ?? "Expected risk to descend by tag"}: T${tag} (risk ${risk}) outranks ` +
+          `T${prevTag} (risk ${prevRisk}) — the scorer did not re-tag into risk order\n` +
+          `--- output ---\n${snippet(text)}`,
+      );
+    }
+  }
+};
+
 /** The orchestrator started the security review (announce / triage dispatch / Skill). */
 export const assertReviewStarted = (result: RunResult, msg?: string): void => {
   const announced = /using ingrain-security/i.test(result.text);
