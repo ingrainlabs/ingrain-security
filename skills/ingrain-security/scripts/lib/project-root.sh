@@ -24,9 +24,13 @@
 # The `cd && pwd` idiom normalizes the value so mkdir, symlink tests and the printf
 # writes work under Git Bash on Windows, where CLAUDE_PROJECT_DIR is a native backslash
 # path that MSYS does not convert for env vars.
+#
+# The subshell is deliberate: a function body runs in the caller's shell, so a bare `cd`
+# would move the $PWD of every hook that sources this file. The parens confine it while
+# leaving stdout and the exit status untouched.
 normalize_dir() {
     [ -n "${1:-}" ] || return 1
-    cd "$1" 2>/dev/null && pwd
+    (cd "$1" 2>/dev/null && pwd)
 }
 
 # The root of the git repository containing the current directory; empty when outside a

@@ -56,9 +56,13 @@ extract_string() {
 # macOS alone routinely hands out both `/var/…` and `/private/var/…` for one directory.
 # Physical resolution also means a symlinked path component cannot smuggle the target out
 # of the folder while still comparing equal.
+#
+# The `cd` runs in a subshell, so this resolves a path without ever moving the caller.
+# Callers may invoke it bare, and the containment test cannot be made order-dependent by a
+# stray `cd` — which matters because absolutize() resolves a relative path against $PWD.
 physical_dir() {
     [ -n "${1:-}" ] || return 1
-    cd "$1" 2>/dev/null && pwd -P
+    (cd "$1" 2>/dev/null && pwd -P)
 }
 
 # True when the path is absolute: POSIX (`/…`) or a Windows drive (`C:\…`, `C:/…`), which
