@@ -60,7 +60,7 @@ This is always on for the live tiers — Deno streams each test's output live (w
   (**PermissionRequest**, targets read out of an `apply_patch` patch): the assessment file must be
   auto-approved, while every other path — and every malformed, multi-file or decoy payload — must
   fall back to the user's normal permission prompt. Needs `bash` + coreutils (macOS/Linux); the
-  Windows `cd && pwd` normalization can't be exercised on POSIX and stays a manual check.
+  Windows `cd && pwd` normalization can't be exercised on Unix and stays a manual check.
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
   `skills/ingrain-security/references/<name>.md` body as the system prompt with
   `--allowed-tools Read,Grep,Glob`. The test asserts the output's _shape_ (a verdict keyword, a
