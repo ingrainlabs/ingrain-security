@@ -115,10 +115,16 @@ for access and re-dispatch it (see **On a `fetch blocked` signal** under step 5,
 
 ## Model tiers
 
-Dispatch every worker on a **cheap model** — they are narrow, mechanical,
-read-only jobs that don't need a frontier model. You (the orchestrator) stay on
-the session model. This applies only where the host supports per-subagent model
-selection; otherwise ignore it.
+Dispatch workers on a **cheap model** by default — they are narrow, mechanical,
+read-only jobs that don't need a frontier model.
+
+**The one exception is the `ingrain-relevance-triage`: dispatch it on a mid-tier
+model.** It is the ungated first stage — a `minor` verdict ends the review with no
+threat analysis at all, and on `major` the surfaces it names seed the
+`ingrain-threat-generator`. 
+
+You (the orchestrator) stay on the session model. This applies only where the host
+supports per-subagent model selection; otherwise ignore it.
 
 ## How to ask the user (the selection windows)
 

@@ -10,7 +10,8 @@
  * which lets ShellCheck follow the `# shellcheck source=...` directives the hooks use to
  * pull in their shared libs.
  *
- * Requires `shellcheck` on PATH (`brew install shellcheck`).
+ * Requires `shellcheck` on PATH (`brew install shellcheck`); CI installs a pinned build before
+ * running `deno task ci`, so this is the only place the shell lint is defined.
  */
 
 import { assert, assertEquals, assertGreaterOrEqual } from "@std/assert";

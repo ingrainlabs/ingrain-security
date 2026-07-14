@@ -97,8 +97,7 @@ deno task test:static        # just the offline lint of the skill/worker/hook fi
 deno task test:hooks         # just the hook + path scripts, executed under bash
 deno task test:shell         # just the shell scripts, checked with shellcheck
 deno task test:ts            # the offline TS tests only — static + hooks, no shellcheck needed
-deno task ci                 # everything offline: lint + fmt:check + test:offline
-deno task ci:no-shell        # what CI's Deno step runs: lint + fmt:check + test:ts
+deno task ci                 # what CI runs: lint + fmt:check + test:offline
 ```
 
 **Needs an agent** — spawns `claude`, requires auth, costs model calls, can flake:
@@ -121,15 +120,13 @@ invocations rather than merging their permission sets.
 ## CI
 
 `.github/workflows/ci.yml` runs the **no-agent** tier on pull requests into `main` and
-`development`, and on pushes to `main`, in two steps:
+`development`, and on pushes to `main`, as a single `deno task ci` (from `tests/`) — lint +
+fmt:check + static + hooks + shell. CI runs the same command you do, so it holds no test logic of
+its own that could drift from this suite.
 
-- a **ShellCheck** step that discovers and lints the committed shell scripts inline, so a bad script
-  fails on its own line in the log. It mirrors this suite's discovery rule (git-tracked, `*.sh` or a
-  bash/sh shebang, minus the `hooks/run-hook.cmd` polyglot) and refuses to pass if the scan turns up
-  fewer scripts than expected. `shell/shellcheck.test.ts` stays the source of truth for that rule,
-  and remains how you lint shell locally.
-- `deno task ci:no-shell` (from `tests/`) — lint + fmt:check + static + hooks. It skips `test:shell`
-  precisely because the step above already covered it.
+Its only other step installs **ShellCheck** at a pinned version, because `shell/shellcheck.test.ts`
+shells out to it. Pinning keeps the lint reproducible: the runner image's preinstalled copy could
+vanish, or move to a release whose new checks turn an unrelated PR red.
 
 The agent tiers need credentials and cost model calls, so they stay local: run
 `deno task test:agent` yourself before opening a PR.
@@ -189,7 +186,6 @@ earlier mode's transcript in its own subdir.
 | `test:ts`                | no              | 0                      | < 1s      | no   |
 | `test:offline`           | no              | 0                      | < 1s      | no   |
 | `ci` (+ lint, fmt:check) | no              | 0                      | a few s   | no   |
-| `ci:no-shell`            | no              | 0                      | a few s   | no   |
 | `test:agent`             | yes             | ~8 (6 workers + 2)     | a few min | yes  |
 | `test:integration`       | yes             | + full cycle to Gate 1 | 5–20 min  | yes  |
 

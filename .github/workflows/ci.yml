@@ -1,16 +1,14 @@
 name: ci
 
 # Runs the offline test tier — the tests that need no `claude` CLI, no auth and no
-# model calls — plus lint and format checks:
+# model calls — plus lint and format checks, as the single `deno task ci`:
 #
-#   ShellCheck · lint · fmt:check · tests/static · tests/hooks
+#   lint · fmt:check · tests/static · tests/hooks · tests/shell
 #
-# ShellCheck runs as its own step below, so a bad shell script fails on its own line in
-# the log rather than inside a Deno test run. The Deno step therefore calls
-# `deno task ci:no-shell` (lint · fmt:check · tests/static · tests/hooks) — from the
-# tests/ directory, where deno.json lives — rather than the umbrella `deno task ci`,
-# which also runs tests/shell and would lint the same scripts a second time. Locally,
-# `deno task ci` remains the one command that covers everything offline.
+# That is the same command developers run locally, so CI has no test logic of its own to
+# drift from the suite. Shell linting is one of those tests — tests/shell/shellcheck.test.ts
+# discovers the committed shell scripts and runs ShellCheck over each — which is why the
+# binary is installed below.
 #
 # ShellCheck is installed at a pinned version rather than inherited from the runner
 # image: the preinstalled copy is an unguarded implementation detail that could vanish,
@@ -68,44 +66,5 @@ jobs:
           sudo install -m 0755 "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
           shellcheck --version
 
-      - name: ShellCheck
-        # Discovery mirrors tests/shell/shellcheck.test.ts, the local tier: every file tracked
-        # by git that is a `*.sh` (the sourced libs, which have no shebang) or declares a
-        # bash/sh shebang (the hooks, which are deliberately extensionless — see
-        # hooks/run-hook.cmd for why). A `*.sh` glob alone would miss every hook.
-        #
-        # Runs from the repo root, not the job's `tests` working directory, so the repo-root
-        # .shellcheckrc applies — its `source-path=SCRIPTDIR` is what lets ShellCheck follow the
-        # `# shellcheck source=...` directives the hooks use to pull in their shared libs.
-        working-directory: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          scripts=()
-          while IFS= read -r -d '' path; do
-            # `git ls-files` lists staged-but-deleted paths; mid-rename those would otherwise
-            # reach ShellCheck as a "does not exist" fatal.
-            [ -f "$path" ] || continue
-            case "$path" in
-              hooks/run-hook.cmd) continue ;;              # bat/bash polyglot, not lintable bash
-              *.sh) scripts+=("$path"); continue ;;
-            esac
-            # An `&&` chain here would end the loop body on a non-match, and `set -e` would
-            # take that as the loop failing.
-            if head -n 1 -- "$path" | grep -qE '^#!.*\b(bash|sh)\b'; then
-              scripts+=("$path")
-            fi
-          done < <(git ls-files -z)
-
-          # A discovery bug must fail loudly rather than lint nothing and report green.
-          if [ "${#scripts[@]}" -lt 4 ]; then
-            echo "discovered only ${#scripts[@]} shell scripts — discovery has regressed" >&2
-            exit 1
-          fi
-
-          printf 'linting %s scripts:\n' "${#scripts[@]}"
-          printf '  %s\n' "${scripts[@]}"
-          shellcheck "${scripts[@]}"
-
       - name: Lint, format check and offline tests
-        # Shell is linted by the step above, so this skips tests/shell.
-        run: deno task ci:no-shell
+        run: deno task ci
