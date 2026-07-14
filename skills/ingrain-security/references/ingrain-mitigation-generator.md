@@ -137,11 +137,22 @@ schema): the mitigation rows into the `## Mitigations` table, and the retrieved 
 into the transient `## Org rules` section.
 
 **Into the `## Mitigations` table** — for each mitigation:
+- **Tag** — `M1`, `M2`, … assigned by the priority order below, not by the order you thought of them.
 - **Description** — detailed, task-specific guidance on how to tackle the threat(s) or, for a general instruction, how the whole change should be implemented.
 - **Yield** — how much value it adds over the current baseline of the task (what risk it removes).
 - **Effort** — how much work it takes to implement.
 - **threatTags** — the threat tag(s) (`T1`, `T2`, …) it addresses (the table's **Threat tags** column), or `—` for a general implementation instruction not tied to a threat. Reference only selected threats, and make sure every selected threat ends up covered by at least one **threat** mitigation.
 - **Rule refs** — the id(s) of the org rules this mitigation follows (**one mitigation may follow multiple rules**); `—` if it follows none (a pure threat mitigation). Each id must match a rule you recorded in `## Org rules` — never invent one.
+
+### Order the tags
+
+`M<n>` is a **priority position**, so the user can work the list from `M1` down. Sort the mitigations, then number them **`M1`…`Mn`: contiguous, starting at `M1`, no gaps**:
+
+1. **Threat mitigations first**, ranked by the **lowest-numbered threat tag** each one covers. Threats reach you already sorted by risk, so the lowest tag *is* the highest-risk threat — a mitigation covering `T1` outranks one covering `T3`.
+2. Within the same threat, higher **Yield** first, then lower **Effort** first.
+3. **General implementation instructions** (no threat tag) last, ordered by Yield then Effort among themselves.
+
+You rewrite the whole table every round, so re-derive the numbering each time you write it — and rewrite the `M<n> →` citation keys in `## Org rules` in the same pass, so the two sections never disagree about which mitigation is which.
 
 **Into the transient `## Org rules` section** — the retrieved rules, kept for the critic
 and revision rounds (the orchestrator deletes this section at finalize; the section itself
@@ -156,14 +167,18 @@ Scope all advice to the task at hand.
 
 Address the critic's feedback. If the critic flagged a missing or misapplied rule,
 run further `ingrain context security_rules` queries to fill the gap before
-re-proposing. Rewrite the revised mitigations into `## Mitigations` and keep the
+re-proposing. Rewrite the revised mitigations into `## Mitigations` — re-deriving the
+priority order and the tags, since a dropped or added mitigation shifts them — and keep the
 `## Org rules` section current (citations and Applicable rules), then add a short
 **Changes from last round** so the critic can confirm its points landed:
 
 ```
 ## Changes from last round
-- addressed: <what you changed and why it closes the gap>
-- rejected: <feedback you didn't take, and why>
+- [M2] addressed: <what you changed and why it closes the gap> (now M1)
+- [M4] rejected: <feedback you didn't take, and why>
 ```
+
+Refer to each item by the tag it carried in the table the critic read, and name its new tag
+where it moved — otherwise the critic can't tell a re-ranked mitigation from a new one.
 
 You may push back on feedback — but say so. Silently dropping a critic point is what keeps these loops running the full 3 rounds without converging.

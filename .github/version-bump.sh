@@ -39,11 +39,11 @@ fi
 
 # Highest matching label wins; default to patch when none is set.
 if printf '%s' "${LABELS}" | jq -e 'index("release:major")' >/dev/null; then
-    kind=major
+    kind="major"
 elif printf '%s' "${LABELS}" | jq -e 'index("release:minor")' >/dev/null; then
-    kind=minor
+    kind="minor"
 else
-    kind=patch
+    kind="patch"
 fi
 
 # Always bump from main's current version so the result is idempotent:

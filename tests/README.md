@@ -10,6 +10,8 @@ tools).
 
 - **Deno** ≥ 2 (`deno --version`).
 - **Claude Code CLI** in `PATH` (`claude --version`).
+- For the **shell tier only**: **ShellCheck** in `PATH` (`brew install shellcheck`). CI pins
+  v0.11.0.
 - For the **live tiers only**: `claude` must be authenticated (logged in, or `ANTHROPIC_API_KEY`
   set). The static tier needs neither network nor auth.
 
@@ -20,7 +22,8 @@ Run all commands from this `tests/` directory.
 ```
 lib/      claudeRunner.ts (spawn helper) · matchers.ts (assertions) · sampleInputs.ts (canned plans) · reporter.ts (input/output printer)
 static/   offline lint of worker-reference frontmatter + advisory ROLE + skill/hook structure (no model calls)
-hooks/    assessment-hooks.test.ts — runs the assessment hook scripts under bash against a throwaway project (no model calls)
+hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)
+shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
 agents/   agents.test.ts — table-driven live tests, one case per worker (dispatched via its reference file)
 skill/    trigger.test.ts (review starts / minor stops) · orchestration.test.ts (gated)
 ```
@@ -51,17 +54,30 @@ This is always on for the live tiers — Deno streams each test's output live (w
   edits, recommended model), plus the orchestrator's step ordering, announce/stop phrases, the
   read-reference dispatch mechanism, and a valid SessionStart hook.
 - **hooks/** — offline, no model calls, but unlike `static/` it **executes** the
-  `hooks/start/ensure-assessment-dir` SessionStart hook under `bash` against a
-  `Deno.makeTempDir()` project, asserting the durable folder/README/`.gitignore` are seeded and the
-  `CLAUDE_PROJECT_DIR` / `$PWD` resolution behaves. (The finalize snapshot is now written by the
-  orchestrator via its file tools, not a hook script, so it has no bash test here.) Needs `bash` +
-  coreutils (macOS/Linux); the Windows `cd && pwd`
-  normalization can't be exercised on POSIX and stays a manual check.
+  `hooks/start/ensure-assessment-dir` SessionStart hook under `bash` against a `Deno.makeTempDir()`
+  project, asserting the durable folder/README/`.gitignore` are seeded and the `CLAUDE_PROJECT_DIR`
+  / `$PWD` resolution behaves. (The finalize snapshot is now written by the orchestrator via its
+  file tools, not a hook script, so it has no bash test here.) It also executes both auto-approval
+  hooks, piping each one real hook payloads — `hooks/claude/allow-assessment-write` (**PreToolUse**,
+  target named in `tool_input.file_path`) and `hooks/codex/allow-assessment-write`
+  (**PermissionRequest**, targets read out of an `apply_patch` patch): the assessment file must be
+  auto-approved, while every other path — and every malformed, multi-file or decoy payload — must
+  fall back to the user's normal permission prompt. Needs `bash` + coreutils (macOS/Linux); the
+  Windows `cd && pwd` normalization can't be exercised on Unix and stays a manual check.
+- **shell/** — runs the real `shellcheck` binary once per shell script tracked by git. Discovery is
+  **shebang-based, not a `*.sh` glob**: the hooks are deliberately extensionless (see
+  `hooks/run-hook.cmd`), so a glob would silently lint the three release scripts and skip every
+  hook. A `discovery` test guards exactly that regression — it asserts a known set of scripts is
+  present, so a broken scan can't leave the tier green but vacuous. Lint settings come from the
+  repo-root `.shellcheckrc`, whose `source-path=SCRIPTDIR` is what lets ShellCheck follow the
+  `# shellcheck source=...` directives the hooks use to pull in their shared libs. CI installs a
+  pinned ShellCheck rather than trusting the runner image to preinstall one, and lints the same
+  scripts from its own workflow step rather than through this tier — see **CI** below.
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
   `skills/ingrain-security/references/<name>.md` body as the system prompt with
   `--allowed-tools Read,Grep,Glob`. The test asserts the output's _shape_ (a verdict keyword, a
-  0–100 score, a preserved `T1` tag, required fields). Assertions are loose because live output
-  varies.
+  0–100 score, risk descending by threat tag, required fields). Assertions are loose because live
+  output varies.
 - **skill/** — a full session (skill + agents + hook). `trigger.test.ts` checks a security-relevant
   plan starts the review and a trivial one stops at triage. `orchestration.test.ts`
   (integration-gated) checks the workers fire in order through risk scoring and the run halts at
@@ -69,18 +85,51 @@ This is always on for the live tiers — Deno streams each test's output live (w
 
 ## Running
 
+The tasks are split by **whether they need an agent** — i.e. whether they spawn the `claude` CLI and
+call the model. Every model call in the suite funnels through `runClaude` in `lib/claudeRunner.ts`,
+which only `agents/` and `skill/` reach; `static/` and `hooks/` never do.
+
+**No agent** — deterministic, no auth, no network, sub-second:
+
 ```bash
-deno task test:static        # offline, deterministic, ~0.3s — no auth needed
-deno task test:hooks         # offline, runs the assessment hook scripts under bash — no auth needed
-deno task test               # static + 6 live agents + skill trigger (default tier)
-deno task test:agents        # just the 6 live per-agent tests
-deno task test:integration   # everything, incl. full orchestration (slow)
+deno task test:offline       # the default tier — static + hooks + shell
+deno task test:static        # just the offline lint of the skill/worker/hook files
+deno task test:hooks         # just the hook + path scripts, executed under bash
+deno task test:shell         # just the shell scripts, checked with shellcheck
+deno task test:ts            # the offline TS tests only — static + hooks, no shellcheck needed
+deno task ci                 # what CI runs: lint + fmt:check + test:offline
+```
+
+**Needs an agent** — spawns `claude`, requires auth, costs model calls, can flake:
+
+```bash
+deno task test:agent         # 6 per-worker tests + the 2 skill trigger tests
+deno task test:integration   # everything, incl. the full orchestration cycle (slow)
 
 # one worker only:
 deno test --allow-run=claude --allow-read --allow-env agents/ --filter ingrain-relevance-triage
 ```
 
+Each tier's Deno permissions double as a capability tag: `test:static` gets `--allow-read` only and
+`test:hooks` only `--allow-run=bash`, so a test that reaches for the model from an offline directory
+fails on a permission error instead of quietly calling it. Keep the tiers as separate `deno test`
+invocations rather than merging their permission sets.
+
 `deno task fmt` / `deno task lint` format and lint the suite.
+
+## CI
+
+`.github/workflows/ci.yml` runs the **no-agent** tier on pull requests into `main` and
+`development`, and on pushes to `main`, as a single `deno task ci` (from `tests/`) — lint +
+fmt:check + static + hooks + shell. CI runs the same command you do, so it holds no test logic of
+its own that could drift from this suite.
+
+Its only other step installs **ShellCheck** at a pinned version, because `shell/shellcheck.test.ts`
+shells out to it. Pinning keeps the lint reproducible: the runner image's preinstalled copy could
+vanish, or move to a release whose new checks turn an unrelated PR red.
+
+The agent tiers need credentials and cost model calls, so they stay local: run
+`deno task test:agent` yourself before opening a PR.
 
 ## Comparing skill variants (trigger-comparison harness)
 
@@ -129,12 +178,16 @@ earlier mode's transcript in its own subdir.
 
 ## Tiers & rough cost
 
-| Command            | Model calls            | Time      | Auth |
-| ------------------ | ---------------------- | --------- | ---- |
-| `test:static`      | 0                      | < 1s      | no   |
-| `test:hooks`       | 0                      | < 1s      | no   |
-| `test`             | ~8 (6 agents + 2)      | a few min | yes  |
-| `test:integration` | + full cycle to Gate 1 | 5–20 min  | yes  |
+| Command                  | Needs an agent? | Model calls            | Time      | Auth |
+| ------------------------ | --------------- | ---------------------- | --------- | ---- |
+| `test:static`            | no              | 0                      | < 1s      | no   |
+| `test:hooks`             | no              | 0                      | < 1s      | no   |
+| `test:shell`             | no              | 0                      | < 1s      | no   |
+| `test:ts`                | no              | 0                      | < 1s      | no   |
+| `test:offline`           | no              | 0                      | < 1s      | no   |
+| `ci` (+ lint, fmt:check) | no              | 0                      | a few s   | no   |
+| `test:agent`             | yes             | ~8 (6 workers + 2)     | a few min | yes  |
+| `test:integration`       | yes             | + full cycle to Gate 1 | 5–20 min  | yes  |
 
 ## Notes
 

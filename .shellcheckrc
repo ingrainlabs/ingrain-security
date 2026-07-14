@@ -1,0 +1,10 @@
+# ShellCheck configuration for the plugin's bash (hooks, the assessment-path minter,
+# and the release scripts). Enforced by tests/shell/shellcheck.test.ts and in CI.
+
+# Follow the libs the hooks source, so the helpers they call are checked in context
+# rather than reported as undefined.
+external-sources=true
+
+# Resolve each `# shellcheck source=...` directive relative to the sourcing script's
+# own directory — that is how they are written (e.g. ../../skills/.../lib/foo.sh).
+source-path=SCRIPTDIR

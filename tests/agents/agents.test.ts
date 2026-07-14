@@ -2,7 +2,7 @@
  * Live per-worker tests, table-driven. Each case dispatches one worker the way
  * the orchestrator does — its SKILL.md body as the system prompt, restricted to
  * the read-only tools — and asserts the output's *shape* (a verdict keyword, a
- * 0-100 score, a preserved `T1` tag, required fields). Assertions are loose
+ * 0-100 score, risk descending by tag, required fields). Assertions are loose
  * because live model output varies.
  *
  * The cases live in a single CASES table — mirroring the WORKERS loop in
@@ -10,7 +10,12 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { assertContainsAll, assertContainsAny, assertHasScore0to100 } from "../lib/matchers.ts";
+import {
+  assertContainsAll,
+  assertContainsAny,
+  assertHasScore0to100,
+  assertRiskDescendsByTag,
+} from "../lib/matchers.ts";
 import { AGENT_TIMEOUT_MS, TRIAGE_TIMEOUT_MS, workerDispatchPrompt } from "../lib/claudeRunner.ts";
 import type { RunResult } from "../lib/types.ts";
 import { runChecked } from "../lib/reporter.ts";
@@ -68,7 +73,9 @@ const CASES: AgentCase[] = [
   },
   {
     // ingrain-risk-scorer (sonnet): scores each threat likelihood x impact (0-100), with
-    // an overall criticality band, and preserves the tags.
+    // an overall criticality band, then re-tags the frozen list into descending-risk order.
+    // The fixture's incoming tags are deliberately out of risk order, so a scorer that
+    // leaves them alone fails the ordering assertion.
     worker: "ingrain-risk-scorer",
     label: "ingrain-risk-scorer :: frozen threats",
     input: TASK_AND_FROZEN_THREATS,
@@ -76,7 +83,7 @@ const CASES: AgentCase[] = [
     check: (r) => {
       assertContainsAll(r.text, [/likelihood/i, /impact/i], "expected likelihood & impact labels");
       assertContainsAny(r.text, [/\b(low|medium|high|critical)\b/i], "expected a criticality band");
-      assertContainsAny(r.text, [/\bT1\b/], "expected the T1 tag to be preserved");
+      assertRiskDescendsByTag(r.text, "expected the threats re-tagged into risk order");
     },
   },
   {

@@ -133,24 +133,36 @@ export const workerDispatchPrompt = async (name: string, input: string): Promise
 export const toolNames = (events: StreamEvent[]): string[] =>
   toolUses(events).map((b) => b.name).filter((n): n is string => typeof n === "string");
 
-/** Run `claude -p` with the given prompt and options. */
+/**
+ * Run `claude -p` with the given prompt and options.
+ *
+ * The prompt goes in on stdin, not as a trailing positional argument: variadic
+ * flags like `--allowed-tools` otherwise swallow it, and the CLI then exits 1
+ * with "Input must be provided either through stdin or as a prompt argument".
+ */
 export const runClaude = async (prompt: string, opts: RunOptions = {}): Promise<RunResult> => {
   const args = ["--print", "--dangerously-skip-permissions"];
   args.push("--plugin-dir", opts.pluginDir ?? PLUGIN_DIR);
   if (opts.streamJson) args.push("--output-format", "stream-json", "--verbose");
   if (opts.maxTurns !== undefined) args.push("--max-turns", String(opts.maxTurns));
   if (opts.allowedTools?.length) args.push("--allowed-tools", opts.allowedTools.join(","));
-  args.push(prompt);
 
   const signal = AbortSignal.timeout(opts.timeoutMs ?? AGENT_TIMEOUT_MS);
   const cmd = new Deno.Command("claude", {
     args,
+    stdin: "piped",
     stdout: "piped",
     stderr: "piped",
     signal,
   });
 
-  const out = await cmd.output().catch((e) => {
+  const out = await (async () => {
+    const child = cmd.spawn();
+    const writer = child.stdin.getWriter();
+    await writer.write(new TextEncoder().encode(prompt));
+    await writer.close();
+    return await child.output();
+  })().catch((e) => {
     if (e instanceof DOMException && e.name === "TimeoutError") {
       throw new Error(`claude timed out after ${opts.timeoutMs ?? AGENT_TIMEOUT_MS}ms`);
     }

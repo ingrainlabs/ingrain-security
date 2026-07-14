@@ -70,7 +70,7 @@ never blocks or fails the review.
 At each gate, **first display the findings table in the conversation** (built
 from the bounded gate slice of the assessment file — see SKILL.md → **How to
 ask the user**), and in the same message **name the run's assessment file** (its
-`ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) so the user can open the full analysis
+`.ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) so the user can open the full analysis
 behind the table. This display step is host- and mode-independent: it happens on
 every platform, in plan mode and ad-hoc alike, before any selection mechanism
 below — the windows never substitute for it.
@@ -83,8 +83,9 @@ only the mechanism changes per host:
 
 - **Host with a windowed single-choice primitive** — present each finding in
   its own single-choice window (one window per finding). Where the host caps how
-  many windows it can show per call, present consecutive batches in table order
-  (highest risk first) — e.g. T1–T4, then T5–T8 — and merge the choices.
+  many windows it can show per call, present consecutive batches in table order —
+  which is tag order, and tags run highest-priority-first — e.g. T1–T4, then
+  T5–T8 — and merge the choices.
   Zero-selection is inherent — the user excludes every window — so no extra
   **"None"** option is required.
 - **No windowed primitive — fallback** — ask the user to reply with the tags to
