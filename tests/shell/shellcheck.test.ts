@@ -51,6 +51,28 @@ async function isShellScript(path: string): Promise<boolean> {
 }
 
 /**
+ * Lints one script, returning ShellCheck's exit code and its report.
+ *
+ * Runs from ROOT so the repo-root `.shellcheckrc` applies whatever the runner's cwd.
+ * A missing binary is the one failure worth rewriting: bare `NotFound` says nothing
+ * about which of the two spawned commands vanished, or how to fix it.
+ */
+async function runShellCheck(path: string): Promise<{ code: number; report: string }> {
+  try {
+    const { code, stdout } = await new Deno.Command("shellcheck", { args: [path], cwd: ROOT })
+      .output();
+    return { code, report: new TextDecoder().decode(stdout) };
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) {
+      throw new Error(
+        "`shellcheck` is not on PATH — install it (`brew install shellcheck`) and re-run `deno task test:shell`.",
+      );
+    }
+    throw err;
+  }
+}
+
+/**
  * Every shell script tracked by git. Using `git ls-files` keeps the lint contract at
  * "what is committed", so gitignored scratch scripts under `.helpers/` and
  * `tests/.variant-runs/` are excluded for free.
@@ -85,13 +107,10 @@ Deno.test("discovery: finds the committed shell scripts, and not the polyglot wr
 
 for (const path of scripts) {
   Deno.test(`shellcheck: ${path}`, async () => {
-    const { code, stdout } = await new Deno.Command("shellcheck", {
-      args: [path],
-      cwd: ROOT, // so the root .shellcheckrc applies, whatever the runner's cwd
-    }).output();
+    const { code, report } = await runShellCheck(path);
 
     // ShellCheck's own report already names the line, column and rule, and links its
     // wiki — surface it verbatim rather than restating it.
-    assertEquals(code, 0, `\n${new TextDecoder().decode(stdout)}`);
+    assertEquals(code, 0, `\n${report}`);
   });
 }

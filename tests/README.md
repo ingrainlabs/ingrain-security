@@ -10,6 +10,8 @@ tools).
 
 - **Deno** ≥ 2 (`deno --version`).
 - **Claude Code CLI** in `PATH` (`claude --version`).
+- For the **shell tier only**: **ShellCheck** in `PATH` (`brew install shellcheck`). CI pins
+  v0.11.0.
 - For the **live tiers only**: `claude` must be authenticated (logged in, or `ANTHROPIC_API_KEY`
   set). The static tier needs neither network nor auth.
 
@@ -21,6 +23,7 @@ Run all commands from this `tests/` directory.
 lib/      claudeRunner.ts (spawn helper) · matchers.ts (assertions) · sampleInputs.ts (canned plans) · reporter.ts (input/output printer)
 static/   offline lint of worker-reference frontmatter + advisory ROLE + skill/hook structure (no model calls)
 hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)
+shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
 agents/   agents.test.ts — table-driven live tests, one case per worker (dispatched via its reference file)
 skill/    trigger.test.ts (review starts / minor stops) · orchestration.test.ts (gated)
 ```
@@ -61,6 +64,14 @@ This is always on for the live tiers — Deno streams each test's output live (w
   auto-approved, while every other path — and every malformed, multi-file or decoy payload — must
   fall back to the user's normal permission prompt. Needs `bash` + coreutils (macOS/Linux); the
   Windows `cd && pwd` normalization can't be exercised on Unix and stays a manual check.
+- **shell/** — runs the real `shellcheck` binary once per shell script tracked by git. Discovery is
+  **shebang-based, not a `*.sh` glob**: the hooks are deliberately extensionless (see
+  `hooks/run-hook.cmd`), so a glob would silently lint the three release scripts and skip every
+  hook. A `discovery` test guards exactly that regression — it asserts a known set of scripts is
+  present, so a broken scan can't leave the tier green but vacuous. Lint settings come from the
+  repo-root `.shellcheckrc`, whose `source-path=SCRIPTDIR` is what lets ShellCheck follow the
+  `# shellcheck source=...` directives the hooks use to pull in their shared libs. CI installs a
+  pinned ShellCheck rather than trusting the runner image to preinstall one.
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
   `skills/ingrain-security/references/<name>.md` body as the system prompt with
   `--allowed-tools Read,Grep,Glob`. The test asserts the output's _shape_ (a verdict keyword, a
@@ -80,10 +91,10 @@ which only `agents/` and `skill/` reach; `static/` and `hooks/` never do.
 **No agent** — deterministic, no auth, no network, sub-second:
 
 ```bash
-deno task test               # the default tier — alias for test:offline
-deno task test:offline       # static + hooks
+deno task test:offline       # the default tier — static + hooks + shell
 deno task test:static        # just the offline lint of the skill/worker/hook files
 deno task test:hooks         # just the hook + path scripts, executed under bash
+deno task test:shell         # just the shell scripts, checked with shellcheck
 deno task ci                 # what CI runs: lint + fmt:check + test:offline
 ```
 
@@ -162,7 +173,8 @@ earlier mode's transcript in its own subdir.
 | ------------------------ | --------------- | ---------------------- | --------- | ---- |
 | `test:static`            | no              | 0                      | < 1s      | no   |
 | `test:hooks`             | no              | 0                      | < 1s      | no   |
-| `test` / `test:offline`  | no              | 0                      | < 1s      | no   |
+| `test:shell`             | no              | 0                      | < 1s      | no   |
+| `test:offline`           | no              | 0                      | < 1s      | no   |
 | `ci` (+ lint, fmt:check) | no              | 0                      | a few s   | no   |
 | `test:agent`             | yes             | ~8 (6 workers + 2)     | a few min | yes  |
 | `test:integration`       | yes             | + full cycle to Gate 1 | 5–20 min  | yes  |
