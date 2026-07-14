@@ -70,45 +70,18 @@ Exit codes: 0 ok · 2 usage error · 1 runtime error.
 EOF
 }
 
-# --- helpers (patterns reused from ensure-assessment-dir / session-start) ---------
+# --- helpers ----------------------------------------------------------------------
 
-# Normalize a directory to an absolute, canonical forward-slash path. An empty argument
-# or an unreachable directory yields empty output and a non-zero status, so callers fall
-# through to the next candidate. The `cd && pwd` idiom also normalizes Git Bash paths.
-normalize_dir() {
-    [ -n "${1:-}" ] || return 1
-    cd "$1" 2>/dev/null && pwd
-}
-
-# The root of the git repository containing the current directory; empty when outside a
-# repo. `rev-parse --show-toplevel` answers from ANY subdirectory, which is what pins the
-# assessment folder to the repo root regardless of where the agent runs us from.
-resolve_git_root() {
-    git rev-parse --show-toplevel 2>/dev/null
-}
-
-# Resolve the user's PROJECT root as a normalized forward-slash path, by precedence
-# (shared verbatim with ensure-assessment-dir):
-#   codex:                      git repo root -> $PWD
-#   claude / any future host:   $CLAUDE_PROJECT_DIR -> git repo root -> $PWD
-# Codex exports no project-dir variable and deliberately IGNORES a leaked
-# CLAUDE_PROJECT_DIR — honoring a stray Claude var would seed the folder in the wrong
-# project. On Claude the exported variable outranks git, so a cwd inside a vendored
-# nested repo cannot retarget the folder. $PWD is the last resort (non-git checkouts).
-resolve_project_root() {
-    local root
-    if [ "${1:-}" != "codex" ]; then
-        root="$(normalize_dir "${CLAUDE_PROJECT_DIR:-}")" && [ -n "${root}" ] && {
-            printf '%s' "${root}"
-            return 0
-        }
-    fi
-    root="$(normalize_dir "$(resolve_git_root)")" && [ -n "${root}" ] && {
-        printf '%s' "${root}"
-        return 0
-    }
-    normalize_dir "$PWD"
-}
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# normalize_dir, resolve_git_root, resolve_project_root, seed_gitignore and
+# escape_for_json are shared with the hooks. The three-level hop resolves in both
+# layouts this script ships in: the plugin repo (skills/ingrain-security/scripts ->
+# repo root) and the .helpers/pre-commit mirror (.claude/skills/... -> .claude).
+# shellcheck source=../../../hooks/lib/project-root.sh
+if ! . "${SCRIPT_DIR}/../../../hooks/lib/project-root.sh" 2>/dev/null; then
+    printf 'assessment-path: cannot load hooks/lib/project-root.sh\n' >&2
+    exit 1
+fi
 
 # Resolve the current git branch, anchored to the resolved project root. Uses
 # `branch --show-current` (fallback `rev-parse --abbrev-ref HEAD`) — never `.git/HEAD`,
@@ -131,32 +104,6 @@ slugify() {
     s="${s#-}"
     s="${s%-}"
     printf '%s' "${s}"
-}
-
-# Single-pass JSON string escape (from session-start). Orders of magnitude faster
-# than a char-by-char loop.
-escape_for_json() {
-    local s="$1"
-    s="${s//\\/\\\\}"
-    s="${s//\"/\\\"}"
-    s="${s//$'\n'/\\n}"
-    s="${s//$'\r'/\\r}"
-    s="${s//$'\t'/\\t}"
-    printf '%s' "${s}"
-}
-
-# Idempotently ensure the self-ignoring .gitignore (mirrors ensure-assessment-dir M5)
-# so the assessment — which can contain analysis of a private codebase — is never
-# swept into a commit, even if the SessionStart hook did not run. The bare `*` matches
-# this file too, so the whole folder stays out of `git status`; `git add -f` shares one.
-seed_gitignore() {
-    local ignore="$1/.gitignore"
-    [ -f "${ignore}" ] && return 0
-    printf '%s\n' \
-        '# Assessments here can contain analysis of a private codebase, so they' \
-        '# are ignored by default. Share one explicitly with: git add -f <file>' \
-        '*' \
-        > "${ignore}" 2>/dev/null || true
 }
 
 # --- subcommand -------------------------------------------------------------------

@@ -64,6 +64,16 @@ flowchart TD
   copy — and is git-ignored by default (share one with `git add -f <file>`).
 - The selected findings, **folded into your plan**.
 
+Writes to that one file are approved automatically — by a `PreToolUse` hook on Claude
+Code and a `PermissionRequest` hook on Codex — so a review does not interrupt you with a
+permission prompt on every edit. The grant is deliberately narrow: only `assessment*.md`
+files sitting directly in the project's `ingrain-security/` folder, and never through a
+symlink. On Codex, where an edit is an `apply_patch`, the patch must touch nothing but
+those files and may only add or update them. Everything else — including the folder's own
+`README.md` — still goes through your normal permission prompt, and the hook can only
+*skip* a prompt, never block an edit you asked for. Codex asks you to review and trust the
+hook once, via `/hooks`.
+
 ## Installation
 
 Add the marketplace to your host, then install the `ingrain-security` plugin:

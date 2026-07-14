@@ -20,7 +20,7 @@ Run all commands from this `tests/` directory.
 ```
 lib/      claudeRunner.ts (spawn helper) · matchers.ts (assertions) · sampleInputs.ts (canned plans) · reporter.ts (input/output printer)
 static/   offline lint of worker-reference frontmatter + advisory ROLE + skill/hook structure (no model calls)
-hooks/    assessment-hooks.test.ts — runs the assessment hook scripts under bash against a throwaway project (no model calls)
+hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)
 agents/   agents.test.ts — table-driven live tests, one case per worker (dispatched via its reference file)
 skill/    trigger.test.ts (review starts / minor stops) · orchestration.test.ts (gated)
 ```
@@ -51,12 +51,16 @@ This is always on for the live tiers — Deno streams each test's output live (w
   edits, recommended model), plus the orchestrator's step ordering, announce/stop phrases, the
   read-reference dispatch mechanism, and a valid SessionStart hook.
 - **hooks/** — offline, no model calls, but unlike `static/` it **executes** the
-  `hooks/start/ensure-assessment-dir` SessionStart hook under `bash` against a
-  `Deno.makeTempDir()` project, asserting the durable folder/README/`.gitignore` are seeded and the
-  `CLAUDE_PROJECT_DIR` / `$PWD` resolution behaves. (The finalize snapshot is now written by the
-  orchestrator via its file tools, not a hook script, so it has no bash test here.) Needs `bash` +
-  coreutils (macOS/Linux); the Windows `cd && pwd`
-  normalization can't be exercised on POSIX and stays a manual check.
+  `hooks/start/ensure-assessment-dir` SessionStart hook under `bash` against a `Deno.makeTempDir()`
+  project, asserting the durable folder/README/`.gitignore` are seeded and the `CLAUDE_PROJECT_DIR`
+  / `$PWD` resolution behaves. (The finalize snapshot is now written by the orchestrator via its
+  file tools, not a hook script, so it has no bash test here.) It also executes both auto-approval
+  hooks, piping each one real hook payloads — `hooks/claude/allow-assessment-write` (**PreToolUse**,
+  target named in `tool_input.file_path`) and `hooks/codex/allow-assessment-write`
+  (**PermissionRequest**, targets read out of an `apply_patch` patch): the assessment file must be
+  auto-approved, while every other path — and every malformed, multi-file or decoy payload — must
+  fall back to the user's normal permission prompt. Needs `bash` + coreutils (macOS/Linux); the
+  Windows `cd && pwd` normalization can't be exercised on POSIX and stays a manual check.
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
   `skills/ingrain-security/references/<name>.md` body as the system prompt with
   `--allowed-tools Read,Grep,Glob`. The test asserts the output's _shape_ (a verdict keyword, a

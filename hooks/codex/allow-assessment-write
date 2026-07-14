@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+# PermissionRequest hook for the ingrain-security plugin (Codex only — the Claude Code twin
+# is hooks/claude/allow-assessment-write, on the PreToolUse event).
+#
+# Auto-approves an apply_patch ONLY when every file it touches is the assessment file this
+# plugin mints, so a review can write its analysis without an approval prompt on every
+# edit. Everything else defers to Codex's normal approval flow.
+#
+# Why PermissionRequest and not PreToolUse: on Codex, PreToolUse's `permissionDecision`
+# exists to REWRITE a call (`updatedInput`) or deny it, and its legacy `decision:
+# "approve"` is documented as parsed-but-not-supported. PermissionRequest is the event that
+# skips the prompt — it runs only when Codex is about to ask for approval, and an `allow`
+# lets the request proceed without surfacing the prompt. If no hook decides, the normal
+# approval flow stands.
+#
+# Codex edits files through a single `apply_patch` tool whose patch text arrives in
+# `tool_input.command` — there is no `file_path` field, and ONE patch can touch SEVERAL
+# files. So the targets are read out of the patch envelope, and the approval is all-or-
+# nothing: a patch that edits the assessment and a source file in one shot is deferred
+# whole, because Codex applies it atomically and a partial grant is not available to us.
+#
+# The grant is deliberately narrow. A patch is approved only when ALL hold:
+#   - the tool is apply_patch (or its Edit / Write matcher aliases) — never Bash, where
+#     approving a command string would be a completely different grant,
+#   - the command is a PURE patch: nothing outside the `*** Begin Patch` / `*** End Patch`
+#     envelope but an apply_patch/heredoc wrapper, so no `; curl evil` can ride along,
+#   - it only ADDS or UPDATES files — a Delete/Move is outside what the skill ever does,
+#   - every path it touches passes `is_assessment_target` (direct child of the project's
+#     `ingrain-security/` folder, named `assessment*.md`, no symlink in the way).
+#
+# This hook NEVER denies: it can only remove a prompt, never introduce a block. Any doubt —
+# a malformed payload, an unrecognized envelope line, a missing folder — falls through to
+# "defer" (empty stdout), which leaves Codex's normal approval prompt in place. Failing
+# closed here means failing to an ordinary prompt, never to a blocked session.
+#
+# Registered in hooks/codex/hook.json, dispatched via hooks/run-hook.cmd. Exits 0 always: a
+# hook error must not break the user's tool call.
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../lib/project-root.sh
+. "${SCRIPT_DIR}/../lib/project-root.sh" 2>/dev/null || exit 0
+# shellcheck source=../lib/assessment-write.sh
+. "${SCRIPT_DIR}/../lib/assessment-write.sh" 2>/dev/null || exit 0
+
+# Print nothing and exit 0 — the universal "no opinion, use the normal approval flow"
+# signal. Every rejection path in this hook routes here.
+defer() {
+    exit 0
+}
+
+# Collect the paths an apply_patch command touches, one per line, or return non-zero when
+# the command is anything other than a pure add/update patch.
+#
+# The patch body is attacker-influenceable text, so the parse keys on structure the body
+# cannot forge: envelope lines sit at column 0, while every line of a hunk is prefixed
+# (` `, `+`, `-`). A decoy `*** Add File: /etc/passwd` written INTO an assessment is
+# therefore a `+`-prefixed content line, and is ignored — as it should be, since what the
+# assessment says is none of this hook's business.
+#
+# Anything unrecognized is a refusal, not a skip: an envelope verb this hook does not know
+# is exactly the case where it must not be guessing.
+collect_patch_paths() {
+    local patch="$1" line region="prefix" count=0 opener_re terminator_re
+
+    # `apply_patch`, optionally opening a heredoc: `apply_patch <<'EOF'`, `<<-"PATCH"`, …
+    opener_re="^apply_patch([[:space:]]+<<-?[\"']?[A-Za-z_][A-Za-z0-9_]*[\"']?)?[[:space:]]*\$"
+    terminator_re='^[A-Za-z_][A-Za-z0-9_]*$'
+
+    while IFS= read -r line; do
+        line="${line%$'\r'}"
+
+        case "${region}" in
+            # Before the patch: only the wrapper Codex may put there — bare `apply_patch`,
+            # or `apply_patch <<'EOF'`. Nothing else, which is what stops a chained shell
+            # command from being approved along with the patch.
+            prefix)
+                [ -z "${line}" ] && continue
+                if [ "${line}" = "*** Begin Patch" ]; then
+                    region="body"
+                    continue
+                fi
+                [[ "${line}" =~ ${opener_re} ]] || return 1
+                ;;
+
+            body)
+                if [ "${line}" = "*** End Patch" ]; then
+                    region="suffix"
+                    continue
+                fi
+                # A hunk's own lines are prefixed, so an unprefixed `*** …` is an envelope
+                # line and must be one this hook understands.
+                case "${line}" in
+                    '*** Add File: '* | '*** Update File: '*)
+                        printf '%s\n' "${line#*File: }"
+                        count=$((count + 1))
+                        ;;
+                    '*** End of File') ;;
+                    '***'*) return 1 ;;
+                esac
+                ;;
+
+            # After the patch: at most the heredoc terminator that closed the wrapper.
+            suffix)
+                [ -z "${line}" ] && continue
+                [[ "${line}" =~ ${terminator_re} ]] || return 1
+                ;;
+        esac
+    done < <(printf '%s\n' "${patch}")
+
+    # A truncated patch, or one that touches nothing, is not something to approve.
+    [ "${region}" = "suffix" ] || return 1
+    [ "${count}" -gt 0 ] || return 1
+}
+
+main() {
+    local payload tool patch cwd canon_dir paths path
+
+    payload="$(cat)" || defer
+    [ -n "${payload}" ] || defer
+
+    # The hook.json matcher is a convenience filter, not a security boundary — re-check.
+    # Codex reports `apply_patch`; Edit / Write are its documented matcher aliases and are
+    # accepted in case a future version reports one of them instead.
+    tool="$(extract_string "${payload}" "tool_name")" || defer
+    case "${tool}" in
+        apply_patch | Edit | Write) ;;
+        *) defer ;;
+    esac
+
+    patch="$(extract_string "${payload}" "command")" || defer
+    [ -n "${patch}" ] || defer
+
+    paths="$(collect_patch_paths "${patch}")" || defer
+    [ -n "${paths}" ] || defer
+
+    canon_dir="$(canonical_assessment_dir "codex")" || defer
+    [ -n "${canon_dir}" ] || defer
+
+    # All-or-nothing: one path outside the grant defers the whole patch.
+    cwd="$(extract_string "${payload}" "cwd")" || cwd=""
+    while IFS= read -r path; do
+        [ -n "${path}" ] || defer
+        is_assessment_target "${canon_dir}" "$(absolutize "${path}" "${cwd}")" || defer
+    done < <(printf '%s\n' "${paths}")
+
+    printf '%s\n' \
+        '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
+}
+
+main "$@"
+exit 0

@@ -16,6 +16,11 @@ const TRIAGE_REF = `${ROOT}skills/ingrain-security/references/ingrain-relevance-
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
 const SESSION_START = `${ROOT}hooks/start/session-start`;
+const ALLOW_HOOK = `${ROOT}hooks/claude/allow-assessment-write`;
+const CODEX_ALLOW_HOOK = `${ROOT}hooks/codex/allow-assessment-write`;
+const ALLOW_LIB = `${ROOT}hooks/lib/assessment-write.sh`;
+const ENSURE_DIR = `${ROOT}hooks/start/ensure-assessment-dir`;
+const PROJECT_ROOT_LIB = `${ROOT}hooks/lib/project-root.sh`;
 const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
 
 const WORKERS = [
@@ -189,7 +194,19 @@ Deno.test("session-start: points the orchestrator at assessment_abs", async () =
 Deno.test("assessment-path: emits an instruction and anchors on the git repo root", async () => {
   const script = await Deno.readTextFile(PATH_SCRIPT);
   assertStringIncludes(script, '"instruction":"%s"');
-  assertStringIncludes(script, "rev-parse --show-toplevel");
+  // Root resolution lives in the shared lib the script sources; the anchoring behavior
+  // itself is covered end-to-end by the "run from a subdirectory" cases in
+  // tests/hooks/assessment-path.test.ts.
+  assertStringIncludes(script, "hooks/lib/project-root.sh");
+  assertStringIncludes(await Deno.readTextFile(PROJECT_ROOT_LIB), "rev-parse --show-toplevel");
+});
+
+Deno.test("project-root.sh: is sourced by every script that resolves the project root", async () => {
+  // The lib exists to keep these three in lockstep — a copy drifting back into any of
+  // them is the regression this guards.
+  for (const script of [PATH_SCRIPT, ENSURE_DIR, ALLOW_HOOK]) {
+    assertStringIncludes(await Deno.readTextFile(script), "lib/project-root.sh");
+  }
 });
 
 Deno.test("assessment-file.md: names assessment_abs as the write target", async () => {
@@ -212,4 +229,54 @@ Deno.test("hook.json: both platforms pass their host token to session-start", as
   // The assessment-folder hook keeps passing its host token too.
   assertStringIncludes(claude, "start/ensure-assessment-dir claude");
   assertStringIncludes(codex, "start/ensure-assessment-dir codex");
+});
+
+Deno.test("hook.json: Claude registers the PreToolUse auto-approve hook", async () => {
+  // Without this registration the assessment file prompts on every write, which is the
+  // whole reason the hook exists — and nothing else in the suite would notice.
+  const hook = JSON.parse(await Deno.readTextFile(HOOK_JSON));
+  const pre = hook.hooks?.PreToolUse;
+  assertEquals(Array.isArray(pre), true, "PreToolUse must be registered");
+  const serialized = JSON.stringify(pre);
+  assertStringIncludes(serialized, "claude/allow-assessment-write");
+  // The matcher must cover every file-editing tool the hook itself accepts.
+  for (const tool of ["Write", "Edit", "MultiEdit", "NotebookEdit"]) {
+    assertStringIncludes(serialized, tool);
+  }
+});
+
+Deno.test("hook.json: Codex registers the PermissionRequest auto-approve hook", async () => {
+  // Codex's prompt-skipping event is PermissionRequest, not PreToolUse — registering the
+  // hook anywhere else would leave the assessment file prompting on every write.
+  const hook = JSON.parse(await Deno.readTextFile(CODEX_HOOK_JSON));
+  const request = hook.hooks?.PermissionRequest;
+  assertEquals(Array.isArray(request), true, "PermissionRequest must be registered");
+  const serialized = JSON.stringify(request);
+  assertStringIncludes(serialized, "codex/allow-assessment-write");
+  // The matcher must cover every tool name the hook itself accepts. Codex reports
+  // `apply_patch`; Edit and Write are its documented aliases for the same tool.
+  for (const tool of ["apply_patch", "Edit", "Write"]) {
+    assertStringIncludes(serialized, tool);
+  }
+});
+
+Deno.test("allow-assessment-write: both hooks only ever allow, never deny", async () => {
+  // The hooks' core safety property, asserted on the sources themselves: they can remove a
+  // permission prompt but must never introduce a block. A "deny" verdict appearing here
+  // would mean the plugin can silently veto a user's edit.
+  const claude = await Deno.readTextFile(ALLOW_HOOK);
+  assertStringIncludes(claude, '"permissionDecision":"allow"');
+  assertEquals(claude.includes('"permissionDecision":"deny"'), false);
+
+  const codex = await Deno.readTextFile(CODEX_ALLOW_HOOK);
+  assertStringIncludes(codex, '"behavior":"allow"');
+  assertEquals(codex.includes('"behavior":"deny"'), false);
+  // Only additive patch verbs are approved: a delete or a move is outside the grant.
+  assertEquals(codex.includes("Delete File: "), false);
+
+  // Both hosts get their grant from the same shared test, so they cannot drift apart on it:
+  // the minter's naming, directly inside the assessment folder.
+  const lib = await Deno.readTextFile(ALLOW_LIB);
+  assertStringIncludes(lib, "assessment*.md");
+  assertStringIncludes(lib, "ingrain-security");
 });

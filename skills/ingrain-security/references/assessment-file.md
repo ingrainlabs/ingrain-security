@@ -33,6 +33,14 @@ shape.
   seeded by the `ensure-assessment-dir` hook and re-ensured by the script), so the whole
   folder — the ignore file included — stays out of `git status`; sharing a file is an
   explicit `git add -f <file>` opt-in.
+- **Pre-approved.** An `allow-assessment-write` hook auto-approves writes to this file on
+  both hosts — `PreToolUse` on Claude Code, `PermissionRequest` on Codex — so expect **no
+  permission prompt** when writing it. The grant covers only `assessment*.md` directly
+  inside `ingrain-security/` — which is exactly `assessment_abs`, and one more reason to
+  write there and nowhere else. Any other path you write still prompts the user and stalls
+  the run. On Codex the approval is per **patch**, not per file: a patch that touches the
+  assessment *and* any other file prompts as a whole, so keep assessment edits in their own
+  patch.
 - **Hand-off medium.** Workers write their sections and return to the orchestrator
   only a branch keyword plus a one-line pointer. The orchestrator owns the
   title/banner and the finalize; it moves data between workers by pointer and does
