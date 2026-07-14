@@ -64,16 +64,6 @@ flowchart TD
   copy — and is git-ignored by default (share one with `git add -f <file>`).
 - The selected findings, **folded into your plan**.
 
-Writes to that one file are approved automatically — by a `PreToolUse` hook on Claude
-Code and a `PermissionRequest` hook on Codex — so a review does not interrupt you with a
-permission prompt on every edit. The grant is deliberately narrow: only `assessment*.md`
-files sitting directly in the project's `.ingrain-security/` folder, and never through a
-symlink. On Codex, where an edit is an `apply_patch`, the patch must touch nothing but
-those files and may only add or update them. Everything else — including the folder's own
-`README.md` — still goes through your normal permission prompt, and the hook can only
-*skip* a prompt, never block an edit you asked for. Codex asks you to review and trust the
-hook once, via `/hooks`.
-
 ## Installation
 
 Add the marketplace to your host, then install the `ingrain-security` plugin:
@@ -91,6 +81,33 @@ only ever receive tagged releases.
 
 Full setup — including the `ingrain` CLI binary, API token, and configuration — is
 documented at **[Getting started](https://docs.ingrainlabs.dev/getting-started/)**.
+
+### Allow writes to the assessment folder (Claude Code)
+
+A review writes its assessment many times as it works, so without a standing permission it
+prompts you on every edit. Allow the folder once, in `~/.claude/settings.json` (covers every
+project) or a project's `.claude/settings.json`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Edit(.ingrain-security/**)",
+      "Write(.ingrain-security/**)"
+    ]
+  }
+}
+```
+
+The grant is narrow: the plugin writes nowhere else in your repository, and the folder is
+git-ignored. Subagent writes inherit the rule, so the review's workers are covered too.
+
+Skipping this is safe — you will simply be prompted per write. A plugin cannot ship
+permission rules on your behalf, which is why this is a step you take rather than something
+the plugin does for you.
+
+**Codex** needs no equivalent: the project directory is already writable under its
+`workspace-write` sandbox.
 
 ## Usage
 

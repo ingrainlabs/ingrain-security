@@ -16,18 +16,6 @@
           }
         ]
       }
-    ],
-    "PermissionRequest": [
-      {
-        "matcher": "apply_patch|Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" codex/allow-assessment-write",
-            "statusMessage": "Checking assessment-file write"
-          }
-        ]
-      }
     ]
   }
 }

@@ -7,7 +7,6 @@
 #
 # Sourced by:
 #   hooks/start/ensure-assessment-dir            (SessionStart, both hosts)
-#   hooks/claude/allow-assessment-write          (PreToolUse, Claude only)
 #   skills/ingrain-security/scripts/assessment-path
 #
 # Every function echoes empty and returns non-zero on failure, so callers can
