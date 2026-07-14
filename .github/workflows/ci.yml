@@ -1,0 +1,40 @@
+name: ci
+
+# Runs the offline test tier — the tests that need no `claude` CLI, no auth and no
+# model calls (tests/static + tests/hooks + tests/shell, the last of which runs
+# ShellCheck over every committed bash script) — plus lint and format checks. This is
+# exactly `deno task ci`, run from the tests/ directory where deno.json lives.
+#
+# ShellCheck needs no install step: it is preinstalled on the ubuntu-latest runner.
+#
+# The agent tiers (`deno task test:agent`, `deno task test:integration`) drive the
+# real `claude` CLI: they need credentials, cost model calls and can flake on live
+# output, so they are deliberately not run here. Run them locally before opening a
+# PR.
+
+on:
+  pull_request:
+    branches: [main, development]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # The job name is the status-check name a ruleset would require — keep them identical.
+  test-offline:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # deno.json lives in tests/, and every task assumes that working directory.
+        working-directory: tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+
+      - name: Lint, format check and offline tests
+        run: deno task ci

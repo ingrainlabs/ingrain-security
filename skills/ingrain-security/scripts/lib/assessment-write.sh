@@ -1,8 +1,13 @@
 # Shared helpers for the allow-assessment-write hooks (one per host).
 #
+# The dialect is declared here rather than by a shebang, because this file is sourced,
+# not executed — ShellCheck has no other way to know it is bash.
+# shellcheck shell=bash
+#
 # Sourced — never executed. Sets no shell options: every caller runs `set -uo pipefail`
-# WITHOUT `-e` on purpose, and sourcing must not change that. Requires
-# hooks/lib/project-root.sh to be sourced first (resolve_project_root).
+# WITHOUT `-e` on purpose, and sourcing must not change that. Requires the sibling
+# project-root.sh to be sourced first (resolve_project_root), and jq to read the
+# payload — without jq every decision degrades to "defer".
 #
 # Sourced by:
 #   hooks/claude/allow-assessment-write   (PreToolUse,        Claude Code)
@@ -16,74 +21,30 @@
 # the security-critical half.
 #
 # Every function returns non-zero on anything it cannot represent exactly. Both hooks read
-# that as "defer": no opinion, leave the user's normal permission prompt in place.
+# that as "defer": no opinion, leave the user's normal permission prompt in place. That is
+# also what happens when jq is missing (see extract_string): the plugin still works, the
+# user just keeps their usual permission prompt on every assessment write.
 
-# Count how many times a key regex occurs in the payload. See extract_string: a value that
-# appears more than once is ambiguous and must not be trusted.
-count_matches() {
-    local haystack="$1" pattern="$2" n=0
-    while [[ "${haystack}" =~ ${pattern} ]]; do
-        n=$((n + 1))
-        haystack="${haystack#*"${BASH_REMATCH[0]}"}"
-    done
-    printf '%s' "${n}"
-}
-
-# Pull a top-level-ish JSON string value out of the raw payload without jq, which is not a
-# runtime dependency of this plugin and is not guaranteed on an end user's machine.
+# Pull a JSON string out of the payload at the given jq path ($2, e.g. `.tool_input.cwd`).
 #
-# The payload embeds attacker-influenceable text (a Write's `content`, an apply_patch
-# body), so a naive "first match wins" regex could be fooled: content carrying a decoy
-# `"file_path":"…/.ingrain-security/assessment.md"` would win the leftmost match while the
+# The path is addressed structurally rather than by scanning the raw text for a key, and
+# that is the security-critical part. The payload embeds attacker-influenceable text (a
+# Write's `content`, an apply_patch body), so a text scan could be fooled: content carrying
+# a decoy `"file_path":"…/.ingrain-security/assessment.md"` could win the match while the
 # tool actually writes somewhere else, turning these hooks into an auto-approve-anything
-# primitive.
+# primitive. A decoy at any other position in the tree — inside `content`, or nested one
+# level down — simply is not the value at this path, so it cannot be read as one.
 #
-# The guard is uniqueness: a key that occurs more than once in the payload is ambiguous, so
-# we refuse to guess and defer. A decoy therefore costs the user a permission prompt —
-# never an unearned approval. (An assessment that happens to quote the literal text
-# `"file_path":` degrades the same way, to an ordinary prompt.)
+# `strings` makes the type explicit: a non-string at the path (an object, a number, null)
+# yields no output and a non-zero exit, rather than a stringified approximation of itself.
 #
-# Echoes the unescaped value; returns non-zero when absent, ambiguous, or unparseable.
+# Echoes the decoded value; returns non-zero when jq is unavailable, the payload is not
+# valid JSON, or the path holds no string.
 extract_string() {
-    local payload="$1" key="$2" key_re value_re
-    key_re="\"${key}\"[[:space:]]*:"
-    [ "$(count_matches "${payload}" "${key_re}")" = "1" ] || return 1
-
-    # Value: a JSON string body — any escape pair, or any char that is neither a quote nor
-    # a backslash. This is what stops the match at the true closing quote rather than at an
-    # escaped one.
-    value_re="${key_re}[[:space:]]*\"((\\\\.|[^\"\\\\])*)\""
-    [[ "${payload}" =~ ${value_re} ]] || return 1
-    json_unescape "${BASH_REMATCH[1]}"
-}
-
-# Resolve JSON string escapes. Refuses \uXXXX and any unknown escape by returning
-# non-zero — these hooks approve writes, so an input they cannot represent exactly must
-# defer rather than be approximated.
-json_unescape() {
-    local s="$1" len=${#1} out="" i=0 c n
-    while [ "${i}" -lt "${len}" ]; do
-        c="${s:i:1}"
-        if [ "${c}" != "\\" ]; then
-            out+="${c}"
-            i=$((i + 1))
-            continue
-        fi
-        [ $((i + 1)) -lt "${len}" ] || return 1
-        n="${s:i+1:1}"
-        if   [ "${n}" = '"' ];  then out+='"'
-        elif [ "${n}" = '\' ];  then out+='\'
-        elif [ "${n}" = '/' ];  then out+='/'
-        elif [ "${n}" = 'n' ];  then out+=$'\n'
-        elif [ "${n}" = 'r' ];  then out+=$'\r'
-        elif [ "${n}" = 't' ];  then out+=$'\t'
-        elif [ "${n}" = 'b' ];  then out+=$'\b'
-        elif [ "${n}" = 'f' ];  then out+=$'\f'
-        else return 1
-        fi
-        i=$((i + 2))
-    done
-    printf '%s' "${out}"
+    local payload="$1" path="$2" value
+    command -v jq >/dev/null 2>&1 || return 1
+    value="$(printf '%s' "${payload}" | jq -e -r "${path} | strings" 2>/dev/null)" || return 1
+    printf '%s' "${value}"
 }
 
 # Resolve a directory to its PHYSICAL path, with every symlink component followed

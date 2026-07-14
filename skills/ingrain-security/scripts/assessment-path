@@ -74,12 +74,10 @@ EOF
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # normalize_dir, resolve_git_root, resolve_project_root, seed_gitignore and
-# escape_for_json are shared with the hooks. The three-level hop resolves in both
-# layouts this script ships in: the plugin repo (skills/ingrain-security/scripts ->
-# repo root) and the .helpers/pre-commit mirror (.claude/skills/... -> .claude).
-# shellcheck source=../../../hooks/lib/project-root.sh
-if ! . "${SCRIPT_DIR}/../../../hooks/lib/project-root.sh" 2>/dev/null; then
-    printf 'assessment-path: cannot load hooks/lib/project-root.sh\n' >&2
+# escape_for_json live in the sibling lib, and are shared with the hooks.
+# shellcheck source=lib/project-root.sh
+if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
+    printf 'assessment-path: cannot load lib/project-root.sh\n' >&2
     exit 1
 fi
 

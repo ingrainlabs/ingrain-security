@@ -73,18 +73,43 @@ This is always on for the live tiers — Deno streams each test's output live (w
 
 ## Running
 
+The tasks are split by **whether they need an agent** — i.e. whether they spawn the `claude` CLI and
+call the model. Every model call in the suite funnels through `runClaude` in `lib/claudeRunner.ts`,
+which only `agents/` and `skill/` reach; `static/` and `hooks/` never do.
+
+**No agent** — deterministic, no auth, no network, sub-second:
+
 ```bash
-deno task test:static        # offline, deterministic, ~0.3s — no auth needed
-deno task test:hooks         # offline, runs the assessment hook scripts under bash — no auth needed
-deno task test               # static + 6 live agents + skill trigger (default tier)
-deno task test:agents        # just the 6 live per-agent tests
-deno task test:integration   # everything, incl. full orchestration (slow)
+deno task test               # the default tier — alias for test:offline
+deno task test:offline       # static + hooks
+deno task test:static        # just the offline lint of the skill/worker/hook files
+deno task test:hooks         # just the hook + path scripts, executed under bash
+deno task ci                 # what CI runs: lint + fmt:check + test:offline
+```
+
+**Needs an agent** — spawns `claude`, requires auth, costs model calls, can flake:
+
+```bash
+deno task test:agent         # 6 per-worker tests + the 2 skill trigger tests
+deno task test:integration   # everything, incl. the full orchestration cycle (slow)
 
 # one worker only:
 deno test --allow-run=claude --allow-read --allow-env agents/ --filter ingrain-relevance-triage
 ```
 
+Each tier's Deno permissions double as a capability tag: `test:static` gets `--allow-read` only and
+`test:hooks` only `--allow-run=bash`, so a test that reaches for the model from an offline directory
+fails on a permission error instead of quietly calling it. Keep the tiers as separate `deno test`
+invocations rather than merging their permission sets.
+
 `deno task fmt` / `deno task lint` format and lint the suite.
+
+## CI
+
+`.github/workflows/ci.yml` runs `deno task ci` (from `tests/`) on pull requests into `main` and
+`development`, and on pushes to `main`. That is the **no-agent** tier only — the agent tiers need
+credentials and cost model calls, so they stay local: run `deno task test:agent` yourself before
+opening a PR.
 
 ## Comparing skill variants (trigger-comparison harness)
 
@@ -133,12 +158,14 @@ earlier mode's transcript in its own subdir.
 
 ## Tiers & rough cost
 
-| Command            | Model calls            | Time      | Auth |
-| ------------------ | ---------------------- | --------- | ---- |
-| `test:static`      | 0                      | < 1s      | no   |
-| `test:hooks`       | 0                      | < 1s      | no   |
-| `test`             | ~8 (6 agents + 2)      | a few min | yes  |
-| `test:integration` | + full cycle to Gate 1 | 5–20 min  | yes  |
+| Command                  | Needs an agent? | Model calls            | Time      | Auth |
+| ------------------------ | --------------- | ---------------------- | --------- | ---- |
+| `test:static`            | no              | 0                      | < 1s      | no   |
+| `test:hooks`             | no              | 0                      | < 1s      | no   |
+| `test` / `test:offline`  | no              | 0                      | < 1s      | no   |
+| `ci` (+ lint, fmt:check) | no              | 0                      | a few s   | no   |
+| `test:agent`             | yes             | ~8 (6 workers + 2)     | a few min | yes  |
+| `test:integration`       | yes             | + full cycle to Gate 1 | 5–20 min  | yes  |
 
 ## Notes
 

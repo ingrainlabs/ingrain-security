@@ -18,9 +18,9 @@ const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
 const SESSION_START = `${ROOT}hooks/start/session-start`;
 const ALLOW_HOOK = `${ROOT}hooks/claude/allow-assessment-write`;
 const CODEX_ALLOW_HOOK = `${ROOT}hooks/codex/allow-assessment-write`;
-const ALLOW_LIB = `${ROOT}hooks/lib/assessment-write.sh`;
+const ALLOW_LIB = `${ROOT}skills/ingrain-security/scripts/lib/assessment-write.sh`;
 const ENSURE_DIR = `${ROOT}hooks/start/ensure-assessment-dir`;
-const PROJECT_ROOT_LIB = `${ROOT}hooks/lib/project-root.sh`;
+const PROJECT_ROOT_LIB = `${ROOT}skills/ingrain-security/scripts/lib/project-root.sh`;
 const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
 
 const WORKERS = [
@@ -197,7 +197,7 @@ Deno.test("assessment-path: emits an instruction and anchors on the git repo roo
   // Root resolution lives in the shared lib the script sources; the anchoring behavior
   // itself is covered end-to-end by the "run from a subdirectory" cases in
   // tests/hooks/assessment-path.test.ts.
-  assertStringIncludes(script, "hooks/lib/project-root.sh");
+  assertStringIncludes(script, "lib/project-root.sh");
   assertStringIncludes(await Deno.readTextFile(PROJECT_ROOT_LIB), "rev-parse --show-toplevel");
 });
 

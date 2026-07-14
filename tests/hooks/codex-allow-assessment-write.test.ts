@@ -393,9 +393,10 @@ Deno.test("defer: a tool that is not apply_patch, carrying a valid-looking patch
 Deno.test("defer: a decoy `command` key placed before the real one", async () => {
   await withProject(async (dir) => {
     // Hand-built (not via JSON.stringify) so both `command` keys are genuinely unescaped,
-    // with the decoy first — a leftmost-match regex would read the assessment patch,
-    // approve, and let Codex run the real command instead. The uniqueness guard sees two
-    // keys, refuses to guess, defers.
+    // with the decoy first — a leftmost-match text scan would read the assessment patch,
+    // approve, and let Codex run the real command instead. Addressing
+    // `.tool_input.command` structurally reads the real patch, which touches src/app.ts,
+    // so the hook defers.
     const decoy = JSON.stringify(addFile(`${dir}/.ingrain-security/assessment.md`));
     const real = JSON.stringify(addFile(`${dir}/src/app.ts`));
     const hostile = '{"tool_name":"apply_patch","tool_input":{' +

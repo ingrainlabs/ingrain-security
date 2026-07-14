@@ -39,10 +39,10 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=../lib/project-root.sh
-. "${SCRIPT_DIR}/../lib/project-root.sh" 2>/dev/null || exit 0
-# shellcheck source=../lib/assessment-write.sh
-. "${SCRIPT_DIR}/../lib/assessment-write.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/lib/assessment-write.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/assessment-write.sh" 2>/dev/null || exit 0
 
 # Print nothing and exit 0 — the universal "no opinion, use the normal approval flow"
 # signal. Every rejection path in this hook routes here.
@@ -123,13 +123,13 @@ main() {
     # The hook.json matcher is a convenience filter, not a security boundary — re-check.
     # Codex reports `apply_patch`; Edit / Write are its documented matcher aliases and are
     # accepted in case a future version reports one of them instead.
-    tool="$(extract_string "${payload}" "tool_name")" || defer
+    tool="$(extract_string "${payload}" ".tool_name")" || defer
     case "${tool}" in
         apply_patch | Edit | Write) ;;
         *) defer ;;
     esac
 
-    patch="$(extract_string "${payload}" "command")" || defer
+    patch="$(extract_string "${payload}" ".tool_input.command")" || defer
     [ -n "${patch}" ] || defer
 
     paths="$(collect_patch_paths "${patch}")" || defer
@@ -139,7 +139,7 @@ main() {
     [ -n "${canon_dir}" ] || defer
 
     # All-or-nothing: one path outside the grant defers the whole patch.
-    cwd="$(extract_string "${payload}" "cwd")" || cwd=""
+    cwd="$(extract_string "${payload}" ".cwd")" || cwd=""
     while IFS= read -r path; do
         [ -n "${path}" ] || defer
         is_assessment_target "${canon_dir}" "$(absolutize "${path}" "${cwd}")" || defer

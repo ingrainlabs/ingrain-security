@@ -303,8 +303,9 @@ Deno.test("defer: a decoy file_path key placed BEFORE the real one", async () =>
   await withProject(async (dir) => {
     // The sharpest version of the attack. Hand-built (not via JSON.stringify) so both
     // `file_path` keys are genuinely unescaped, with the decoy first — a leftmost-match
-    // regex would read the assessment path, approve, and let the tool write to
-    // src/app.ts instead. The uniqueness guard sees two keys, refuses to guess, defers.
+    // text scan would read the assessment path, approve, and let the tool write to
+    // src/app.ts instead. Addressing `.tool_input.file_path` structurally reads the real
+    // target, which is outside the grant, so the hook defers.
     const hostile = '{"tool_name":"Write","tool_input":{' +
       `"nested":{"file_path":"${dir}/.ingrain-security/assessment.md"},` +
       `"file_path":"${dir}/src/app.ts"},"cwd":"${dir}"}`;
@@ -315,10 +316,9 @@ Deno.test("defer: a decoy file_path key placed BEFORE the real one", async () =>
 
 Deno.test("allow: hostile-looking content does not taint a legitimate target", async () => {
   await withProject(async (dir) => {
-    // The mirror image, and the reason the guard keys on unescaped occurrences only: a
-    // decoy inside `content` is escaped by JSON, so it is not a second key. The write
-    // targets the real assessment file, which is exactly the sanctioned action — the
-    // content it carries is none of this hook's business.
+    // The mirror image: a decoy sitting inside `content` is just a string value, never a
+    // key the parse looks at. The write targets the real assessment file, which is exactly
+    // the sanctioned action — the content it carries is none of this hook's business.
     const res = await runHook(
       payload("Write", `${dir}/.ingrain-security/assessment.md`, dir, {
         content: `an assessment discussing "file_path":"/etc/passwd" in a hook`,

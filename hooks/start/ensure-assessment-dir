@@ -19,13 +19,17 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Project-root resolution and the .gitignore seed are shared with the PreToolUse hook
-# and with scripts/assessment-path. A missing lib is a silent no-op: this hook must
-# never abort the user's session.
-# shellcheck source=../lib/project-root.sh
-. "${SCRIPT_DIR}/../lib/project-root.sh" 2>/dev/null || exit 0
+# and with scripts/assessment-path, alongside which the lib lives. A missing lib is a
+# silent no-op: this hook must never abort the user's session.
+# shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null || exit 0
 
 # Seed README.md on first creation only — never clobber a user-edited one.
 # printf (not a heredoc) — documented bash 5.3 heredoc hang.
+#
+# The body is literal markdown: its backticks must reach the file verbatim, so the
+# single quotes are deliberate and nothing here is meant to expand.
+# shellcheck disable=SC2016
 seed_readme() {
     local readme="$1/README.md"
     [ -f "${readme}" ] && return 0

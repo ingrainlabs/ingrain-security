@@ -1,5 +1,9 @@
 # Shared project-root helpers for the ingrain-security plugin.
 #
+# The dialect is declared here rather than by a shebang, because this file is sourced,
+# not executed — ShellCheck has no other way to know it is bash.
+# shellcheck shell=bash
+#
 # Sourced — never executed. Sets no shell options: every caller runs
 # `set -uo pipefail` WITHOUT `-e` on purpose (git lookups on a non-git or
 # detached-HEAD checkout must degrade to an empty result, not abort), and
@@ -8,7 +12,7 @@
 # Sourced by:
 #   hooks/start/ensure-assessment-dir            (SessionStart, both hosts)
 #   hooks/claude/allow-assessment-write          (PreToolUse, Claude only)
-#   skills/ingrain-security/scripts/assessment-path
+#   skills/ingrain-security/scripts/assessment-path   (the sibling minter)
 #
 # Every function echoes empty and returns non-zero on failure, so callers can
 # fall through to the next candidate rather than risk acting on a bad path.
