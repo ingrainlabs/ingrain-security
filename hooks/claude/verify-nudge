@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Stop hook for the ingrain-security-test skill (Claude Code).
+#
+# Fires when the agent finishes a turn. If the current task has an
+# ingrain-security assessment with an ADOPTED (selected) mitigation that has not
+# yet been verified, and the working tree has uncommitted changes, it nudges the
+# agent to run the 'ingrain-security-test' skill to verify the implemented
+# mitigations before presenting the change.
+#
+# Deliberately quiet: it emits the nudge ONLY when all guards hold, so a routine
+# turn-end is not interrupted. It respects `stop_hook_active` to avoid a loop.
+#
+# Uses `set -uo pipefail` WITHOUT `-e`: git lookups on a non-git / detached-HEAD
+# checkout must degrade to empty, never abort the user's session. Every path
+# reaches `exit 0`.
+
+set -uo pipefail
+
+HOST="${1:-claude}"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Project-root resolution is shared with the other hooks and scripts/assessment-path.
+# A missing lib is a silent no-op — this hook must never abort the user's session.
+# shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null || exit 0
+
+# Read the hook's stdin JSON; if Claude is already continuing because of a stop
+# hook, do not nudge again (prevents a stop -> continue -> stop loop).
+stdin_json="$(cat 2>/dev/null || true)"
+case "${stdin_json}" in
+    *'"stop_hook_active":true'* | *'"stop_hook_active": true'*) exit 0 ;;
+esac
+
+project_root="$(resolve_project_root "${HOST}")"
+[ -n "${project_root}" ] || exit 0
+assessment_dir="${project_root}/.ingrain-security"
+[ -d "${assessment_dir}" ] || exit 0
+
+# Only nudge when the working tree actually has changes to verify.
+[ -n "$(git -C "${project_root}" status --porcelain 2>/dev/null)" ] || exit 0
+
+# Resolve the current branch slug the same way scripts/assessment-path does, so the
+# glob matches this branch's assessment file(s). An unknown branch widens the glob.
+branch="$(git -C "${project_root}" branch --show-current 2>/dev/null)"
+[ -n "${branch}" ] || branch="$(git -C "${project_root}" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+branch_slug="$(printf '%s' "${branch}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-' '-' | sed -E 's/-+/-/g; s/^-|-$//g')"
+
+shopt -s nullglob
+if [ -n "${branch_slug}" ] && [ "${branch_slug}" != "head" ]; then
+    candidates=("${assessment_dir}"/assessment-"${branch_slug}"-*.md "${assessment_dir}"/assessment-"${branch_slug}".md)
+else
+    candidates=("${assessment_dir}"/assessment-*.md)
+fi
+
+# Nudge if any candidate assessment has an adopted (selected) mitigation row and has
+# not already been verified (Latest stage: review). A selected mitigation row is a
+# `| M<n> | … | selected | …` line in the ## Mitigations table.
+needs_verify=0
+for f in "${candidates[@]}"; do
+    [ -f "${f}" ] || continue
+    grep -q 'Latest stage: review' "${f}" 2>/dev/null && continue
+    if grep -qE '^\| *M[0-9]+ .*\bselected\b' "${f}" 2>/dev/null; then
+        needs_verify=1
+        break
+    fi
+done
+[ "${needs_verify}" -eq 1 ] || exit 0
+
+reason="This task has an ingrain-security assessment with adopted mitigations that have not been verified against the implementation. Before presenting or committing the change, run the 'ingrain-security-test' skill via the Skill tool to verify each adopted mitigation was implemented."
+
+# Stop-hook JSON: a `block` decision keeps the agent going with `reason` as its
+# instruction. Uses printf (not a heredoc) to avoid the bash 5.3 heredoc hang.
+printf '{\n  "decision": "block",\n  "reason": "%s"\n}\n' "$(escape_for_json "${reason}")"
+
+exit 0

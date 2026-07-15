@@ -55,6 +55,26 @@ flowchart TD
     gate2 --> done
 ```
 
+## Verifying the implementation
+
+Planning adopts mitigations; **`ingrain-security-test`** checks they were built. After you
+implement a task whose plan went through the review, this companion skill (spec:
+[`skills/ingrain-security-test/SKILL.md`](skills/ingrain-security-test/SKILL.md)) locates the
+task's assessment file, reviews the **working-tree diff**, and dispatches one read-only
+`ingrain-mitigation-verifier` subagent per adopted mitigation to confirm it is actually
+implemented. It reports back — all verified, or the specific mitigations that are `missing` or
+`insufficient`, with evidence and a fix recommendation — and marks the assessment checked by
+recording each mitigation's **Verified** status and advancing the file's stage to `review`. It
+writes no code.
+
+- **Automatic.** On Claude Code a `Stop` hook nudges the agent to run it once a task with
+  adopted mitigations has uncommitted changes that haven't been verified. On Codex (no
+  turn-end event) the SessionStart context carries the same reminder.
+- **Manual.** Invoke it via the Skill tool after implementing — e.g. *"Use ingrain-security-test
+  to verify the mitigations I just implemented."*
+
+If a task has no assessment (or no adopted mitigations), there is nothing to verify.
+
 ### Artifacts
 
 - A single **assessment file** written into the `.ingrain-security/` folder at your

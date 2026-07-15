@@ -53,7 +53,7 @@ shape.
   | `## Threats` | `ingrain-threat-generator` (descriptive columns, working tags) → `ingrain-risk-scorer` (scoring columns, then re-tags the rows into risk order) → orchestrator (Selection at Gate 1) — **filled in stages** |
   | `## Threat critique` | `ingrain-threat-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Risk score` | `ingrain-risk-scorer` (plan-level residual) |
-  | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Selection at Gate 2) |
+  | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Selection at Gate 2) → `ingrain-security-test` orchestrator (Verified at the review stage) |
   | `## Org rules` | `ingrain-mitigation-generator` — **transient**, deleted by the orchestrator at finalize |
   | `## Mitigation critique` | `ingrain-mitigation-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Coverage / open items`, `## Maintenance` | orchestrator (finalize) |
@@ -74,6 +74,10 @@ must use **exactly one** of the listed values (lower-case, verbatim).
 
 ### `## Task` 
 - **Title** — string.
+- **Latest stage** — `planning` | `development` | `review`. The lifecycle stage the file has
+  reached: `planning`/`development` while the `ingrain-security` review and implementation are
+  in progress; `review` once the `ingrain-security-test` verification has checked the adopted
+  mitigations against the implementation.
 
 ### `## Triage` — the relevance-triage verdict
 - **Verdict** — `minor` | `major`.
@@ -143,6 +147,7 @@ this table.
 | **Threat tags** | `0..N` threat tags (e.g. `T1, T3`); `—` when the mitigation is a general implementation instruction not tied to a specific threat |
 | **Rule refs** | the org rule id(s) the mitigation follows, `0..N` comma-separated (e.g. `r-auth-01, r-log-03`); `—` when it follows no org rule (a pure threat mitigation). One mitigation may follow multiple rules. Ids are machine-facing — stored here, **never rendered to the user** (Gate 2 shows rule titles instead). Full rule detail lives in the transient `## Org rules` section. |
 | **Selection** | `selected` \| `excluded` \| `undecided` (optional until Gate 2) |
+| **Verified** | `verified` \| `insufficient` \| `missing` — the `ingrain-security-test` verification result for a `selected` mitigation. **Optional until that verification runs**; `—` before then and for any row not `selected`. |
 
 **Follows org rules is derived, not stored twice.** A mitigation with ≥1 **Rule ref**
 follows org rules; an empty **Rule refs** (`—`) means a pure threat mitigation. Surface
@@ -153,6 +158,14 @@ in this table — no title column is added.
 
 **Gate 2 → Selection.** Record each mitigation's **Selection**:
 adopt → `selected`, decline → `excluded`; `undecided` only if the user is unsure.
+
+**Verification → Verified.** After implementation, the `ingrain-security-test` skill checks
+each `selected` mitigation against the working-tree diff and records the outcome in
+**Verified**: `verified` (implemented as described), `insufficient` (partial/weak), or
+`missing` (absent). Rows that are not `selected` stay `—`. Writing this column is what
+"marks the assessment checked", alongside setting `## Task` → `Latest stage: review`. The
+`ingrain-security` planning review leaves the column empty/`—`; it is filled only at the
+review stage.
 
 ### `## Org rules` — transient, deleted at finalize
 
@@ -219,10 +232,10 @@ Score: <0–100>
 Criticality: <low|medium|high|critical>
 
 ## Mitigations
-| Tag | Title | Description | Yield | Effort | Threat tags | Rule refs         | Selection |
-|-----|-------|-------------|-------|--------|-------------|-------------------|------------|
-| M1  | …     | …           | high  | medium | T1          | r-auth-01         | selected   |
-| M2  | …     | …           | medium| low    | —           | r-log-03          | selected   |
+| Tag | Title | Description | Yield | Effort | Threat tags | Rule refs | Selection | Verified |
+|-----|-------|-------------|-------|--------|-------------|-----------|-----------|----------|
+| M1  | …     | …           | high  | medium | T1          | r-auth-01 | selected  | verified |
+| M2  | …     | …           | medium| low    | —           | r-log-03  | selected  | —        |
 
 ## Coverage / open items
 - <any selected threat with no selected mitigation covering it>
