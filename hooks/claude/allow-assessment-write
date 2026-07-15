@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# PreToolUse hook for the ingrain-security plugin (Claude Code only — the Codex twin is
+# hooks/codex/allow-assessment-write, on the PermissionRequest event).
+#
+# Auto-approves the file-editing tools ONLY when their target is the assessment file this
+# plugin mints, so a review can write its analysis without a permission prompt on every
+# edit. Everything else defers to the normal permission flow.
+#
+# Why a hook and not a permission rule: a plugin cannot ship `permissions.allow` rules
+# (plugin settings.json supports only `agent` and `subagentStatusLine`), and a PreToolUse
+# `permissionDecision: "allow"` is the one plugin-shippable mechanism that bypasses the
+# prompt. Note this is also why the assessment folder must NOT live under `.claude/`: that
+# is a PROTECTED path whose writes are never auto-approved, and which `permissions.allow`
+# rules cannot pre-approve either.
+#
+# The grant is deliberately narrow. A write is approved only when the tool is one of
+# Write / Edit / MultiEdit / NotebookEdit and its target passes `is_assessment_target`
+# (direct child of the project's `.ingrain-security/` folder, named `assessment*.md`, no
+# symlink anywhere in the way) — see skills/ingrain-security/scripts/lib/assessment-write.sh,
+# which holds that test and the payload parsing shared with the Codex hook.
+#
+# This hook NEVER emits "deny": it can only remove a prompt, never introduce a block. Any
+# doubt — a malformed payload, an ambiguous path, a missing folder — falls through to
+# "defer" (empty stdout), which leaves the user's normal permission prompt in place.
+# Failing closed here means failing to an ordinary prompt, never to a blocked session.
+#
+# Registered in hooks/claude/hook.json, dispatched via hooks/run-hook.cmd. Exits 0 always:
+# a hook error must not break the user's tool call.
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/lib/assessment-write.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/assessment-write.sh" 2>/dev/null || exit 0
+
+# Print nothing and exit 0 — the universal "no opinion, use the normal permission flow"
+# signal. Every rejection path in this hook routes here.
+defer() {
+    exit 0
+}
+
+main() {
+    local payload tool file_path cwd canon_dir
+
+    payload="$(cat)" || defer
+    [ -n "${payload}" ] || defer
+
+    # The hook.json matcher is a convenience filter, not a security boundary — re-check.
+    tool="$(extract_string "${payload}" ".tool_name")" || defer
+    case "${tool}" in
+        Write | Edit | MultiEdit | NotebookEdit) ;;
+        *) defer ;;
+    esac
+
+    file_path="$(extract_string "${payload}" ".tool_input.file_path")" || defer
+    [ -n "${file_path}" ] || defer
+
+    cwd="$(extract_string "${payload}" ".cwd")" || cwd=""
+    file_path="$(absolutize "${file_path}" "${cwd}")"
+
+    canon_dir="$(canonical_assessment_dir "claude")" || defer
+    [ -n "${canon_dir}" ] || defer
+    is_assessment_target "${canon_dir}" "${file_path}" || defer
+
+    printf '%s\n' \
+        '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"ingrain-security assessment file"}}'
+}
+
+main "$@"
+exit 0
