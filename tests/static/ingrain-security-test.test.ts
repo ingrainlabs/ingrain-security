@@ -3,7 +3,7 @@
  * calls. Guards the verification contract the skill relies on: it reads the same
  * per-task assessment file (by ABSOLUTE assessment_abs), dispatches a read-only
  * verifier subagent per adopted mitigation, records a Verified status + advances
- * the stage to review, and is nudged by a Stop hook on Claude.
+ * the stage to review, and is reminded by a Stop hook on both Claude and Codex.
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
@@ -16,8 +16,10 @@ const VERIFIER_REF =
   `${ROOT}skills/ingrain-security-test/references/ingrain-mitigation-verifier.md`;
 const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/assessment-file.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
-const VERIFY_NUDGE = `${ROOT}hooks/claude/verify-nudge`;
-const SESSION_START = `${ROOT}hooks/start/session-start`;
+const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
+const VERIFY_CHECK = `${ROOT}hooks/claude/verify-check`;
+const CODEX_VERIFY_CHECK = `${ROOT}hooks/codex/verify-check`;
+const VERIFY_CHECK_LIB = `${ROOT}skills/ingrain-security/scripts/lib/verify-check.sh`;
 
 Deno.test("SKILL.md: frontmatter name is ingrain-security-test", async () => {
   const fm = parseFrontmatter(await Deno.readTextFile(SKILL));
@@ -112,34 +114,41 @@ async function sourcesLib(script: string, lib: string): Promise<boolean> {
   return source.test(await Deno.readTextFile(script));
 }
 
-Deno.test("hook.json: Claude registers a Stop hook invoking verify-nudge", async () => {
+Deno.test("hook.json: Claude registers a Stop hook invoking verify-check", async () => {
   const hook = JSON.parse(await Deno.readTextFile(HOOK_JSON));
   const stop = hook.hooks?.Stop;
   assertEquals(Array.isArray(stop), true, "Stop must be registered");
   const serialized = JSON.stringify(stop);
-  assertStringIncludes(serialized, "claude/verify-nudge");
+  assertStringIncludes(serialized, "claude/verify-check");
   // The host token is passed, matching the other hooks.
-  assertStringIncludes(serialized, "verify-nudge claude");
+  assertStringIncludes(serialized, "verify-check claude");
 });
 
-Deno.test("verify-nudge: sources the shared project-root lib and guards the nudge", async () => {
-  assertEquals(
-    await sourcesLib(VERIFY_NUDGE, "project-root"),
-    true,
-    "verify-nudge must source the project-root lib",
-  );
-  const src = await Deno.readTextFile(VERIFY_NUDGE);
-  // Only nudges when there is an adopted mitigation not yet verified, on a dirty tree,
-  // and respects the stop-loop guard.
-  assertStringIncludes(src, "status --porcelain");
-  assertStringIncludes(src, "Latest stage: review");
-  assertStringIncludes(src, "stop_hook_active");
-  // It nudges toward the verification skill.
-  assertStringIncludes(src, "ingrain-security-test");
+Deno.test("hook.json: Codex registers a Stop hook invoking verify-check", async () => {
+  const hook = JSON.parse(await Deno.readTextFile(CODEX_HOOK_JSON));
+  const stop = hook.hooks?.Stop;
+  assertEquals(Array.isArray(stop), true, "Codex Stop must be registered");
+  const serialized = JSON.stringify(stop);
+  assertStringIncludes(serialized, "codex/verify-check");
+  // The host token is passed, matching the other Codex hooks.
+  assertStringIncludes(serialized, "verify-check codex");
 });
 
-Deno.test("session-start: injects the Codex post-implementation verify nudge", async () => {
-  const hook = await Deno.readTextFile(SESSION_START);
-  // Codex has no turn-end event, so the SessionStart injection carries the nudge.
-  assertStringIncludes(hook, "ingrain-security-test");
+Deno.test("verify-check: both host wrappers source the shared libs and guard the loop", async () => {
+  // The guard decision lives once in lib/verify-check.sh; each host wrapper sources it
+  // (plus project-root.sh) so the two hosts cannot drift apart on when they remind.
+  for (const hook of [VERIFY_CHECK, CODEX_VERIFY_CHECK]) {
+    assertEquals(await sourcesLib(hook, "project-root"), true, `${hook} must source project-root`);
+    assertEquals(await sourcesLib(hook, "verify-check"), true, `${hook} must source verify-check`);
+    const src = await Deno.readTextFile(hook);
+    // The stop-loop guard and the Stop JSON stay in the wrapper (it owns stdin + output).
+    assertStringIncludes(src, "stop_hook_active");
+    assertStringIncludes(src, '"decision": "block"');
+    assertStringIncludes(src, "verify_check_reason");
+  }
+  // The reminder condition (dirty tree + not-yet-verified adopted mitigation) lives in the lib.
+  const lib = await Deno.readTextFile(VERIFY_CHECK_LIB);
+  assertStringIncludes(lib, "status --porcelain");
+  assertStringIncludes(lib, "Latest stage: review");
+  assertStringIncludes(lib, "ingrain-security-test");
 });

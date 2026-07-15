@@ -28,6 +28,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" codex/verify-check codex",
+            "statusMessage": "Checking mitigation verification"
+          }
+        ]
+      }
     ]
   }
 }

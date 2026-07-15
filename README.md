@@ -67,9 +67,9 @@ implemented. It reports back — all verified, or the specific mitigations that 
 recording each mitigation's **Verified** status and advancing the file's stage to `review`. It
 writes no code.
 
-- **Automatic.** On Claude Code a `Stop` hook nudges the agent to run it once a task with
-  adopted mitigations has uncommitted changes that haven't been verified. On Codex (no
-  turn-end event) the SessionStart context carries the same reminder.
+- **Automatic.** A `Stop` hook (the turn-end event on both Claude Code and Codex) reminds the
+  agent to run it once a task with adopted mitigations has uncommitted changes that haven't been
+  verified. On Codex you approve the hook once via `/hooks` before it fires.
 - **Manual.** Invoke it via the Skill tool after implementing — e.g. *"Use ingrain-security-test
   to verify the mitigations I just implemented."*
 

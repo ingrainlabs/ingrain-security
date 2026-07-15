@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Stop hook for the ingrain-security-test skill (Claude Code — the Codex twin is
+# hooks/codex/verify-check, on the same Stop event with an identical output shape).
+#
+# Fires when the agent finishes a turn. If the current task has an ingrain-security
+# assessment with an ADOPTED (selected) mitigation that has not yet been verified, and
+# the working tree has uncommitted changes, it reminds the agent to run the
+# 'ingrain-security-test' skill to verify the implemented mitigations before presenting
+# the change. The decision itself lives in the shared lib/verify-check.sh; this wrapper
+# only owns stdin (the stop-loop guard) and the Claude Stop JSON.
+#
+# Deliberately quiet: it emits the reminder ONLY when all guards hold, so a routine
+# turn-end is not interrupted. It respects `stop_hook_active` to avoid a loop.
+#
+# Uses `set -uo pipefail` WITHOUT `-e`: git lookups on a non-git / detached-HEAD
+# checkout must degrade to empty, never abort the user's session. Every path
+# reaches `exit 0`.
+
+set -uo pipefail
+
+HOST="${1:-claude}"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Project-root resolution and the reminder decision are shared libs. A missing lib is a
+# silent no-op — this hook must never abort the user's session.
+# shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/lib/verify-check.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/verify-check.sh" 2>/dev/null || exit 0
+
+# Read the hook's stdin JSON; if Claude is already continuing because of a stop
+# hook, do not remind again (prevents a stop -> continue -> stop loop).
+stdin_json="$(cat 2>/dev/null || true)"
+case "${stdin_json}" in
+    *'"stop_hook_active":true'* | *'"stop_hook_active": true'*) exit 0 ;;
+esac
+
+reason="$(verify_check_reason "${HOST}")" || exit 0
+[ -n "${reason}" ] || exit 0
+
+# Stop-hook JSON: a `block` decision keeps the agent going with `reason` as its
+# instruction. Uses printf (not a heredoc) to avoid the bash 5.3 heredoc hang.
+printf '{\n  "decision": "block",\n  "reason": "%s"\n}\n' "$(escape_for_json "${reason}")"
+
+exit 0
