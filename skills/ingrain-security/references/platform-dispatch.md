@@ -67,15 +67,11 @@ never blocks or fails the review.
 
 ## Selection windows (Gate 1 and Gate 2)
 
-At each gate, **first display the findings table in the conversation** (built
-from the bounded gate slice of the assessment file — see SKILL.md → **How to
-ask the user**), and in the same message **name the run's assessment file** (its
-`.ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) so the user can open the full analysis
-behind the table. This display step is host- and mode-independent: it happens on
-every platform, in plan mode and ad-hoc alike, before any selection mechanism
-below — the windows never substitute for it.
+**The gate procedure — display the table first, then ask — lives in SKILL.md →
+How to ask the user. Only the mechanism below is host-specific.** Read this
+section for *how* to show a selection on this host, not for *what* a gate does.
 
-Then present a per-finding selection as **multiple single-choice
+The gate presents a per-finding selection as **multiple single-choice
 windows — one window per finding** — each a binary include/exclude decision
 labeled by tag + short title, with high/critical findings marked recommended.
 The user may select any subset, **including none**. The primitive is generic;
@@ -90,9 +86,3 @@ only the mechanism changes per host:
   **"None"** option is required.
 - **No windowed primitive — fallback** — ask the user to reply with the tags to
   include (e.g. `T1 T3`) or `none`.
-
-Whatever the mechanism, never collapse the gate into a single yes/no over the
-whole set, never fold all findings into one combined list — one window per
-finding. Keep the window labels faithful to the frozen findings, and incorporate
-exactly the selected subset — selecting none incorporates nothing (and at Gate 1
-ends the review).

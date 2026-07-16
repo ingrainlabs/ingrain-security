@@ -9,7 +9,7 @@
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
-import { parseFrontmatter } from "../lib/matchers.ts";
+import { assertChecklistTracksFlow, parseFrontmatter, section } from "../lib/matchers.ts";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
@@ -22,6 +22,21 @@ const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
 const VERIFY_CHECK = `${ROOT}hooks/claude/verify-check`;
 const CODEX_VERIFY_CHECK = `${ROOT}hooks/codex/verify-check`;
 const VERIFY_CHECK_LIB = `${ROOT}skills/ingrain-security/scripts/lib/verify-check.sh`;
+
+/** Phase B carries the same flow/checklist split as Phase A — see skill.test.ts. */
+Deno.test("verification-pass.md: the Phase B checklist tracks every step in the flow", async () => {
+  const md = await Deno.readTextFile(VERIFY);
+  assertChecklistTracksFlow(md, "## Phase B — the flow", "## Phase B — checklist");
+});
+
+Deno.test("verification-pass.md: the flow holds no checkboxes", async () => {
+  const md = await Deno.readTextFile(VERIFY);
+  assertEquals(
+    section(md, "## Phase B — the flow").includes("- [ ]"),
+    false,
+    "The flow contains checkboxes. The flow is the procedure; the checklist tracks it.",
+  );
+});
 
 Deno.test("SKILL.md: one skill, frontmatter name is ingrain-security", async () => {
   const fm = parseFrontmatter(await Deno.readTextFile(SKILL));

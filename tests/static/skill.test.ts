@@ -7,12 +7,18 @@
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
-import { assertOrder, parseFrontmatter } from "../lib/matchers.ts";
+import {
+  assertChecklistTracksFlow,
+  assertOrder,
+  parseFrontmatter,
+  section,
+} from "../lib/matchers.ts";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
 const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/assessment-file.md`;
 const TRIAGE_REF = `${ROOT}skills/ingrain-security/references/ingrain-relevance-triage.md`;
+const PLATFORM_REF = `${ROOT}skills/ingrain-security/references/platform-dispatch.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
 const SESSION_START = `${ROOT}hooks/start/session-start`;
@@ -57,6 +63,48 @@ Deno.test("SKILL.md: workflow steps are in the required order", async () => {
   );
 });
 
+/**
+ * Flow and checklist are separate entities: the flow is the detailed procedure, the checklist
+ * is a terse tracker at the end enforcing that its steps were followed. Keeping them distinct
+ * is the point — a checklist that grows prose stops being scannable and stops being a tracker.
+ */
+Deno.test("SKILL.md: the Phase A checklist tracks every step in the flow", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  assertChecklistTracksFlow(md, "## Phase A — the flow", "## Phase A — checklist");
+});
+
+Deno.test("SKILL.md: the flow holds no checkboxes and the checklist stays terse", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  // The detailed procedure must not wear checkboxes — that conflates the two entities.
+  assertEquals(
+    section(md, "## Phase A — the flow").includes("- [ ]"),
+    false,
+    "The flow contains checkboxes. The flow is the procedure; the checklist tracks it.",
+  );
+  // Every checklist item is ONE line. A caveat that needs a second line belongs in the flow.
+  for (const line of section(md, "## Phase A — checklist").split("\n")) {
+    if (!line.startsWith("- [ ] ")) continue;
+    assertEquals(
+      line.length <= 160,
+      true,
+      `Checklist line is too long to scan — move the detail into the flow:\n${line}`,
+    );
+  }
+});
+
+Deno.test("SKILL.md: both gate checklist lines fence table-before-windows", async () => {
+  const list = section(await Deno.readTextFile(SKILL), "## Phase A — checklist");
+  // The most-guarded behavior in the skill: the findings table is displayed BEFORE any
+  // selection window. The checklist is where that ordering is enforced.
+  for (const gate of list.split("\n").filter((l) => l.includes("Gate "))) {
+    assertEquals(
+      gate.indexOf("table") < gate.indexOf("window") && gate.includes("table"),
+      true,
+      `Gate checklist line must put the table before the windows:\n${gate}`,
+    );
+  }
+});
+
 Deno.test("SKILL.md: contains the announce and minor-stop phrases", async () => {
   const md = await Deno.readTextFile(SKILL);
   assertStringIncludes(md, "Using ingrain-security to assess this plan.");
@@ -73,21 +121,30 @@ Deno.test("SKILL.md: documents the read-reference dispatch mechanism", async () 
   assertStringIncludes(md.toLowerCase(), "read-only");
 });
 
-Deno.test("SKILL.md: documents the assessment file, its path, and living-document behavior", async () => {
+// SKILL.md is an orchestration spine: it owns SEQUENCE and ROUTING, the reference files own
+// DETAIL. So the assessment file's *schema and semantics* are asserted against their owner
+// (assessment-file.md) and only the orchestrator's *action* — mint it, use the absolute form,
+// go read the reference — is fenced here. A restatement creeping back into SKILL.md is the
+// regression these two tests are split to prevent.
+
+Deno.test("SKILL.md: mints the assessment path and defers its schema to the reference", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // Dedicated section, and the single file written straight into .ingrain-security/.
-  assertStringIncludes(md, "## The assessment file");
   assertStringIncludes(md, ".ingrain-security/assessment-<branch-slug>-<task-slug>.md");
   // The host-root variable is still defined (used for the plan-file path).
   assertStringIncludes(md, "${coding_agent_root}");
-  // It is written/updated as a living document.
-  assertStringIncludes(md.toLowerCase(), "living document");
-  // The file's schema/template is defined in a dedicated reference file.
+  // The file's schema/template is defined in a dedicated reference file, and SKILL.md points
+  // at it rather than restating it.
   assertStringIncludes(md, "references/assessment-file.md");
   // The path is minted by the bundled script (mint), not hand-built.
   assertStringIncludes(md, "scripts/assessment-path");
   assertStringIncludes(md, "mint");
   assertStringIncludes(md, "assessment_path");
+});
+
+Deno.test("assessment-file.md: owns the living-document behavior", async () => {
+  const md = await Deno.readTextFile(ASSESSMENT_REF);
+  // The file is written/updated as a living document — stated by its owner, not by SKILL.md.
+  assertStringIncludes(md.toLowerCase(), "living document");
 });
 
 Deno.test("assessment-file.md: defines the strict on-disk format and its allowed values", async () => {
@@ -113,10 +170,42 @@ Deno.test("SKILL.md + assessment-file.md: the assessment file name is keyed by b
   const NAME = ".ingrain-security/assessment-<branch-slug>-<task-slug>.md";
   assertStringIncludes(skill, NAME);
   assertStringIncludes(ref, "assessment-<branch-slug>-<task-slug>.md");
-  // Branch is resolved with git (not the unreliable .git/HEAD read).
-  assertStringIncludes(skill, "git branch --show-current");
-  // The unknown-branch fallback keeps the task-only name.
-  assertStringIncludes(skill, "assessment-<task-slug>.md");
+  // How the name is DERIVED belongs to the schema reference, not the spine: branch resolved
+  // with git (not the unreliable .git/HEAD read), and the unknown-branch fallback that keeps
+  // the task-only name.
+  assertStringIncludes(ref, "git branch --show-current");
+  assertStringIncludes(ref, "assessment-<task-slug>.md");
+});
+
+/**
+ * The ownership rule: SKILL.md owns SEQUENCE and ROUTING; the reference files own DETAIL. A
+ * fact lives in exactly one file — the one that acts on it — and SKILL.md reaches it with a
+ * pointer, never a restatement. Every string fenced below once appeared in BOTH SKILL.md and
+ * its owner; the duplication silently grows back on each edit unless something fails.
+ */
+Deno.test("ownership: SKILL.md does not restate what assessment-file.md owns", async () => {
+  const skill = (await Deno.readTextFile(SKILL)).toLowerCase();
+  // Path derivation and lifecycle are the schema reference's; the spine points at it.
+  for (
+    const fact of ["git branch --show-current", "living document", "assessment-<task-slug>.md"]
+  ) {
+    assertEquals(
+      skill.includes(fact),
+      false,
+      `SKILL.md restates "${fact}", which references/assessment-file.md owns. ` +
+        `Point at the reference instead of restating it.`,
+    );
+  }
+});
+
+Deno.test("ownership: platform-dispatch.md § Selection windows stays mechanism-only", async () => {
+  const md = await Deno.readTextFile(PLATFORM_REF);
+  // The gate PROCEDURE (display the table first, then ask) is SKILL.md's; this file maps the
+  // host MECHANISM only, and points back rather than restating the procedure.
+  assertStringIncludes(md, "lives in SKILL.md");
+  // The mechanism itself must still be here — this is what SKILL.md defers TO.
+  assertStringIncludes(md.toLowerCase(), "one window per finding");
+  assertStringIncludes(md.toLowerCase(), "fallback");
 });
 
 Deno.test("triage: instructs a prior-analysis lookup that seeds the generator", async () => {

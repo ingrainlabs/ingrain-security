@@ -146,7 +146,10 @@ Branch on the verdict word each verifier leads with. Dispatch verifiers for **al
 mitigations (fan them out where the host runs subagents in parallel; run them in tag order
 where it does not).
 
-## Steps — in strict order
+## Phase B — the flow
+
+Each step is one action; the tracker for them is **Phase B — checklist** at the end of this
+file.
 
 0. **Locate the assessment.** Mint the path with the task's `## Task` Title **verbatim** (see
    **The assessment file**). If `file_exists: false`, you minted the wrong title — recover it
@@ -223,30 +226,20 @@ gates in Phase B.
 | "The file is already at `Latest stage: review`, so it's done" | That only means a previous verification ran. If the code changed again, re-verify and overwrite the verdicts — the column records the current implementation. |
 | "I found a gap, I'll fix the code" | Phase B writes no code. Report the gap and ask the coding agent to revisit it. |
 
-## Rules
+## Phase B — checklist
 
-- **Verification, not planning.** Phase B runs *after* code is written, on a task that already
-  has an `.ingrain-security` assessment with adopted mitigations. It writes no code; its only
-  assessment writes are the `Verified` column + `Latest stage: review`. It never falls back to
-  the Phase A planning review.
-- **The title is the key — reuse it verbatim.** Every mint (`assessment-path` and
-  `rules-path`) uses the assessment's `## Task` Title exactly as written. A paraphrase mints a
-  different file and silently loses the task.
-- **Read-only workers.** Verifiers make no code or repo edits — Read/Grep/Glob plus read-only
-  git only, and **no CLI** — and write nothing; they return a verdict. Restate that in every
-  dispatch.
-- **Org rules are supporting context, read from the sidecar.** The adopted mitigations' rule
-  bodies live in the planning-written `rules-<…>.md` sidecar, located by minting `rules_abs`;
-  the orchestrator hands each verifier the rule(s) for its mitigation by pointer. No CLI is
-  involved on either side. The sidecar may be absent (no rules retrieved) — that never blocks
-  verification, and the mitigation Description, not the rule body, is the verification contract.
-  Never modify or delete the sidecar — it is a persistent planning artifact.
-- **Hand off by pointer; keep your context lean.** Point each verifier at its `## Mitigations`
-  row **and, when the sidecar exists, its rule(s) in `rules_abs`**; don't paste the assessment,
-  the sidecar, or the full diff into every dispatch. Read only the bounded slices you need.
-- **The absolute path only.** Every read and the finalize write use the minted **absolute**
-  `assessment_abs`; the relative `assessment_path` is display-only.
-- **Confidence bar.** `verified`/`missing` require ≥80% confidence; otherwise `insufficient`
-  with the concrete gap. Never mark a mitigation verified on a hunch.
-- **Handle the empty cases.** No assessment → stop. Clean working tree → stop. Zero adopted
-  mitigations → mark `Latest stage: review` and stop. Report, never fail silently.
+The procedure is **Phase B — the flow**; this is the tracker. Tick only what is actually
+done. Work top to bottom, and never fall back to the Phase A planning review. Every mint
+(`assessment-path` and `rules-path`) uses the assessment's `## Task` Title **verbatim** — a
+paraphrase mints a different file and silently loses the task. Every read and the finalize
+write use the absolute `assessment_abs`; the relative `assessment_path` is display-only. Hand
+off by pointer: never paste the assessment, the sidecar, or the full diff into a dispatch.
+Report the empty cases, never fail silently.
+
+- [ ] 0. Assessment located — title minted verbatim; no assessment for this task → stop
+- [ ] 1. Diff captured once — clean tree → stop
+- [ ] 2. Adopted mitigations collected (`Selection: selected`) — none → set `Latest stage: review` and stop
+- [ ] 3. Rules sidecar located (`rules_abs`) — absent is expected, never a blocker, never a finding
+- [ ] 4. One read-only verifier dispatched per adopted mitigation — verdict at ≥80% confidence, else `insufficient`
+- [ ] 5. Verdicts written to `Verified` + `Latest stage: review` — YOU write, verifiers don't; sidecar untouched
+- [ ] 6. Reported to the coding agent — gaps named; Phase B writes no code

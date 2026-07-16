@@ -151,3 +151,34 @@ export const parseFrontmatter = (md: string): Record<string, unknown> => {
   if (!hasFrontmatter(md)) throw new AssertionError("No YAML frontmatter found");
   return extractYaml(md).attrs as Record<string, unknown>;
 };
+
+/** The body of a `##` section, from its heading to the next `##` (or end of file). */
+export const section = (md: string, heading: string): string => {
+  const start = md.indexOf(heading);
+  if (start === -1) throw new AssertionError(`Section '${heading}' not found`);
+  const rest = md.slice(start + heading.length);
+  const end = rest.search(/\n## /);
+  return end === -1 ? rest : rest.slice(0, end);
+};
+
+/**
+ * A procedure's checklist must track its flow: same step numbers, same order. The flow is the
+ * single source of truth for HOW; the checklist restates WHAT as a terse tracker. That
+ * restatement is deliberate — and it silently drifts the moment a step is added to one and
+ * not the other, which is exactly what this catches.
+ */
+export const assertChecklistTracksFlow = (
+  md: string,
+  flowHeading: string,
+  checklistHeading: string,
+): void => {
+  const flow = [...section(md, flowHeading).matchAll(/^(\d)\. \*\*/gm)].map((m) => m[1]);
+  const list = [...section(md, checklistHeading).matchAll(/^- \[ \] (\d)\./gm)].map((m) => m[1]);
+  if (flow.length === 0) throw new AssertionError(`'${flowHeading}' has no numbered steps`);
+  if (flow.join(",") !== list.join(",")) {
+    throw new AssertionError(
+      `'${checklistHeading}' drifted from '${flowHeading}': ` +
+        `flow has steps [${flow.join(", ")}], checklist has [${list.join(", ")}]`,
+    );
+  }
+};
