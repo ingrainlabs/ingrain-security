@@ -19,17 +19,19 @@ description: >-
 >   platform may not enforce it, so honor it yourself.
 > - **Recommended model:** a cheap, basic model (advisory — applied only where the platform
 >   supports per-subagent model selection).
-> - **Hand-off contract:** write the mitigation rows into the `## Mitigations` table
->   of the stored analysis file (path per your dispatch), filling Tag, Title, Description,
->   Yield, Effort, the Threat tags each addresses (`0..N` — `—` for a general
->   implementation instruction), and the Rule refs it follows (`0..N` rule ids) per the
->   schema in `references/assessment-file.md` — the orchestrator fills Selection at Gate 2.
->   Write the
->   retrieved rules (the Output items below) into the transient **`## Org rules`** section
->   of the same file, keyed by mitigation tag — that is where the critic and revision
->   rounds read them; the orchestrator deletes it at finalize. Then return to the
->   orchestrator ONLY a one-line headline (e.g. the mitigation count) plus a pointer to
->   those sections — not the full list.
+> - **Hand-off contract:** your dispatch specifies **two** write targets — the stored analysis
+>   file (`assessment_abs`) and the org-rules sidecar (`rules_abs`). Write the mitigation rows
+>   into the `## Mitigations` table of the stored analysis file (path per your dispatch),
+>   filling Tag, Title, Description, Yield, Effort, the Threat tags each addresses (`0..N` — `—`
+>   for a general implementation instruction), and the Rule refs it follows (`0..N` rule ids)
+>   per the schema in `references/assessment-file.md` — the orchestrator fills Selection at
+>   Gate 2. Write the retrieved rules (the Output items below) into the **`rules_abs` sidecar**
+>   per the `references/rules-file.md` schema — id, title, full body, and the per-mitigation
+>   mapping — **only if you retrieved any rules**; that is where the critic, Gate 2, revision
+>   rounds, and the later verification read them. Unlike the assessment's scratch sections the
+>   sidecar **persists** — do not expect it to be deleted. Then return to the orchestrator ONLY
+>   a one-line headline (e.g. the mitigation count) plus a pointer to those files — not the full
+>   list.
 > - **Blocked-fetch signal:** if the `ingrain context` lookup is blocked by the
 >   host's sandbox / permission layer and you cannot surface a permission prompt
 >   yourself, do not silently proceed — return the single line
@@ -55,11 +57,12 @@ crypto, etc. — retrieved by semantic search over the `ingrain` CLI.
 
 0. **Check the CLI is available.** Run `ingrain --version` — a local probe that reads no
    config and makes no network call. If it fails with `command not found`, this repo has
-   no org rules store wired up: skip the rest of this section, record
-   `no org rules retrieved — ingrain CLI not installed` as the **Rules retrieved** line
-   in `## Org rules`, and go straight to §2. Do not stall, and do not ask the user to
-   install it. Any *other* failure — a sandbox denial, or a binary that is present but
-   will not run — is inconclusive: continue to step 1 and let the branches below cover it.
+   no org rules store wired up: skip the rest of this section, **write no rules sidecar**
+   (its absence is the signal that no rules back this task), note
+   `no org rules retrieved — ingrain CLI not installed` in your return headline, and go
+   straight to §2. Do not stall, and do not ask the user to install it. Any *other* failure —
+   a sandbox denial, or a binary that is present but will not run — is inconclusive: continue
+   to step 1 and let the branches below cover it.
 1. From the plan and the selected threats, reason about which security features or
    implementation questions need org guidance (e.g. "how do we store password
    hashes", "how do we authenticate service-to-service calls").
@@ -107,10 +110,10 @@ predict: the CLI is present but unconfigured (missing `INGRAIN_SYNC_URL` / API t
 surfaces as a config error and runs no search), the subcommand is unknown even after the
 version fallback, or a query returns no matches. It also still covers an absent `ingrain`
 binary if you reach a `command not found` here without having probed. In every such case,
-**proceed without rules**. Do not fail or stall the review. In your output, note briefly
-that no org rules were retrieved and why (e.g. "no org rules retrieved — CLI not
-configured"), then propose mitigations from your own analysis as before. A
-permission/sandbox denial is **not** one of these cases — it takes the access-denied
+**proceed without rules** and **write no rules sidecar**. Do not fail or stall the review. In
+your return headline, note briefly that no org rules were retrieved and why (e.g. "no org
+rules retrieved — CLI not configured"), then propose mitigations from your own analysis as
+before. A permission/sandbox denial is **not** one of these cases — it takes the access-denied
 branch above.
 
 ### 2. Propose mitigations
@@ -132,9 +135,10 @@ no backing rule is a pure threat mitigation — leave its Rule refs `—`.
 
 ## Output
 
-Write two things into the stored analysis file (per the `references/assessment-file.md`
-schema): the mitigation rows into the `## Mitigations` table, and the retrieved rules
-into the transient `## Org rules` section.
+Write two things: the mitigation rows into the `## Mitigations` table of the **assessment
+file** (per the `references/assessment-file.md` schema), and — if you retrieved any rules —
+the retrieved rules into the **`rules_abs` sidecar** (per the `references/rules-file.md`
+schema).
 
 **Into the `## Mitigations` table** — for each mitigation:
 - **Tag** — `M1`, `M2`, … assigned by the priority order below, not by the order you thought of them.
@@ -142,7 +146,7 @@ into the transient `## Org rules` section.
 - **Yield** — how much value it adds over the current baseline of the task (what risk it removes).
 - **Effort** — how much work it takes to implement.
 - **threatTags** — the threat tag(s) (`T1`, `T2`, …) it addresses (the table's **Threat tags** column), or `—` for a general implementation instruction not tied to a threat. Reference only selected threats, and make sure every selected threat ends up covered by at least one **threat** mitigation.
-- **Rule refs** — the id(s) of the org rules this mitigation follows (**one mitigation may follow multiple rules**); `—` if it follows none (a pure threat mitigation). Each id must match a rule you recorded in `## Org rules` — never invent one.
+- **Rule refs** — the id(s) of the org rules this mitigation follows (**one mitigation may follow multiple rules**); `—` if it follows none (a pure threat mitigation). Each id must match a rule you recorded in the `rules_abs` sidecar — never invent one.
 
 ### Order the tags
 
@@ -152,14 +156,14 @@ into the transient `## Org rules` section.
 2. Within the same threat, higher **Yield** first, then lower **Effort** first.
 3. **General implementation instructions** (no threat tag) last, ordered by Yield then Effort among themselves.
 
-You rewrite the whole table every round, so re-derive the numbering each time you write it — and rewrite the `M<n> →` citation keys in `## Org rules` in the same pass, so the two sections never disagree about which mitigation is which.
+You rewrite the whole table every round, so re-derive the numbering each time you write it — and rewrite the `M<n> →` mapping keys in the `rules_abs` sidecar in the same pass, so the two files never disagree about which mitigation is which.
 
-**Into the transient `## Org rules` section** — the retrieved rules, kept for the critic
-and revision rounds (the orchestrator deletes this section at finalize; the section itself
-is never shown to the user — only the rule titles it records reach Gate 2):
-- **Rules retrieved** — a one-line summary leading the section: either the queries you ran and how many rules each returned, or the graceful-degradation note if retrieval was skipped.
-- **Per-mitigation citations** — one line per mitigation, keyed by its tag: `M<n> → "<title>" (<id>)` with a one-line note on how the rule informed it. Write `none` where no retrieved rule applies to that mitigation. Cite only rules you actually retrieved — never invent a rule or an id. The `<title>` is the retrieved rule's title **verbatim**, and it is what the user sees at Gate 2 — so every id you write into **Rule refs** must appear in a citation line here, or the orchestrator has no title to render.
-- **Applicable rules** — any retrieved rule directly relevant to the change that does not map cleanly onto a single mitigation, each as `"<title>" (<id>)`, so the critic still sees it.
+**Into the `rules_abs` sidecar** (only when you retrieved rules) — per the
+`references/rules-file.md` schema. It **persists** (it is not deleted at finalize) and is
+never shown to the user directly — only the rule titles it records reach Gate 2:
+- **`## Retrieved rules`** — one `### <id> — <title>` entry per retrieved rule the mitigations follow, with the rule's **full body** verbatim underneath (the org's authoritative how-to). Cite only rules you actually retrieved — never invent a rule, an id, a title, or a body.
+- **`## Per-mitigation mapping`** — one line per mitigation that follows ≥1 rule, keyed by its tag: `M<n> → <id>[, <id>…]` with a one-line note on how the rule informed it. Omit mitigations whose Rule refs is `—`. Every id you write into a mitigation's **Rule refs** must appear both as a `## Retrieved rules` entry and here, or the orchestrator has no title to render at Gate 2.
+- **`## Applicable rules`** (optional) — any retrieved rule directly relevant to the change that does not map cleanly onto a single mitigation, each as `<id> — <title>`, so the critic still sees it.
 
 Scope all advice to the task at hand.
 
@@ -169,7 +173,7 @@ Address the critic's feedback. If the critic flagged a missing or misapplied rul
 run further `ingrain context security_rules` queries to fill the gap before
 re-proposing. Rewrite the revised mitigations into `## Mitigations` — re-deriving the
 priority order and the tags, since a dropped or added mitigation shifts them — and keep the
-`## Org rules` section current (citations and Applicable rules), then add a short
+`rules_abs` sidecar current (retrieved rules, mapping, and applicable rules), then add a short
 **Changes from last round** so the critic can confirm its points landed:
 
 ```

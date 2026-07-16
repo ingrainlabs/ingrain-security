@@ -8,6 +8,8 @@ description: >-
   planning time) carrying adopted mitigations. It locates that assessment for the
   current branch + task, reviews the working-tree diff, and dispatches one read-only
   subagent per adopted mitigation to verify the implementation actually applies it.
+  Each verifier is given the org rule descriptions behind its mitigation, read from the
+  linked `rules-<…>.md` sidecar the planning review persisted (no CLI call).
   It then reports back — all mitigations verified, or the specific ones that are
   missing or insufficiently implemented, with evidence and fix guidance, so you can
   revisit them — and marks the assessment checked (records each mitigation's Verified
@@ -87,6 +89,37 @@ If the working tree is clean (nothing changed), there is nothing to verify — s
 Each verifier re-derives the slice of this diff relevant to its own mitigation; you do not
 paste the whole diff into every dispatch.
 
+## The rules file
+
+Each adopted mitigation carries **Rule ref ids** (the `Rule refs` column of `## Mitigations`)
+but not the rule bodies. The planning review persisted the rule bodies to a **linked sidecar**,
+`.ingrain-security/rules-<branch-slug>-<task-slug>.md` — the twin of the assessment file, keyed
+by the same branch + task slug (schema: `../ingrain-security/references/rules-file.md`). To let
+each verifier judge `verified` vs `insufficient` against *how the org implements* the control —
+not just the mitigation's generic Description — locate that sidecar and hand each verifier the
+rule descriptions for its mitigation. **This reads a file the planning review already wrote;
+there is no CLI call here** — neither you nor the verifiers query `ingrain`.
+
+**Do not hand-build the sidecar path.** Mint it with the bundled **`scripts/rules-path`**
+script, the twin of `assessment-path`; your SessionStart context carries the ready-to-run
+command:
+
+    bash <plugin>/skills/ingrain-security/scripts/rules-path <host> mint --title "<task title>"
+
+Use its **`rules_abs`** (absolute) as the read path. Because it is keyed by the same branch +
+task slug, it resolves to the **same sidecar** the planning review wrote for this task.
+
+- **`file_exists: true`** — the sidecar carries this task's org rules. Read the bounded
+  `## Retrieved rules` / `## Per-mitigation mapping` slices you need to give each verifier the
+  rule(s) behind its mitigation's Rule refs (by pointer — see **How to dispatch a verifier**).
+- **`file_exists: false`** — no org rules were retrieved for this task at planning time (the
+  CLI was absent, unconfigured, or returned nothing). There is nothing to hand the verifiers;
+  they verify from the mitigation Descriptions alone. This is **never** a finding.
+
+The rules are **supporting context only**: their presence sharpens `verified` vs `insufficient`,
+their absence never blocks verification. A mitigation whose `Rule refs` is `—` has no backing
+rule — the verifier works from its Description.
+
 ## How to dispatch a verifier
 
 A verifier is a role defined by a reference file, not a platform-native agent. You never run
@@ -101,20 +134,29 @@ Dispatch every verifier with the same shape. Restate the read-only constraint in
 on hosts without tool-level enforcement it is the only thing enforcing it. The verifier is
 read-only on the codebase — **Read/Grep/Glob only** — with **one narrow exception**: it may
 run **read-only git** (`git diff HEAD`, `git status`, `git show`) to obtain the working-tree
-diff. It makes no edits and runs no other commands. **Hand off by pointer:** point the
-verifier at its mitigation row rather than pasting the assessment file; the verifier
-**returns a verdict and does not write the assessment file** (you record the verdicts, to
-avoid concurrent writes to one table):
+diff. It makes no edits, runs no other commands, and **runs no `ingrain`/CLI commands** — any
+org rule it needs is already in the `rules-<…>.md` sidecar (see **The rules file**). **Hand off
+by pointer:** point the verifier at its mitigation row **and, when the sidecar exists, the
+rule(s) for its Rule refs** rather than pasting the files; the verifier **returns a verdict and
+does not write the assessment file** (you record the verdicts, to avoid concurrent writes to
+one table):
 
 ```
 Read references/ingrain-mitigation-verifier.md and follow it as your system prompt.
 You do no code or repo edits — use only Read/Grep/Glob on the codebase, plus read-only git
-(git diff HEAD, git status, git show) to obtain the working-tree diff. You write NOTHING —
+(git diff HEAD, git status, git show) to obtain the working-tree diff. You run NO ingrain/CLI
+commands — any org rule you need is in the rules sidecar named below. You write NOTHING —
 not the assessment file, not any file; you only return your verdict.
 INPUT:
 - The run's assessment file is at <the minted assessment_abs — the ABSOLUTE path, pasted in full>.
   Read ONLY its `## Mitigations` row <M-tag> (and the threat rows in `## Threats` it covers)
   — the mitigation you must verify, its Description, and the threat(s) it addresses.
+- The org-rules sidecar is at <the minted rules_abs — the ABSOLUTE path — or "none (no rules file for this task)">.
+  If it exists, read ONLY the `## Retrieved rules` entries for <M-tag>'s Rule ref ids (found via
+  the `## Per-mitigation mapping`) — the org rule bodies behind this mitigation. Treat them as
+  SUPPORTING CONTEXT on how the org implements this control; the mitigation Description remains
+  the contract you verify against. If the sidecar is absent, or <M-tag>'s Rule refs is `—`,
+  verify from the Description alone.
 - Verify whether the working-tree diff implements that mitigation as described.
 Return ONLY: the verdict word (verified | insufficient | missing) for <M-tag>, then one line
 of evidence (file:line in the diff) and, if not verified, the concrete gap. Do not return the
@@ -137,16 +179,22 @@ where it does not).
    mitigations to verify", set `Latest stage: review`, and **stop** (nothing to check). If
    threats were selected but every mitigation was declined, note that the selected threats
    were accepted with no adopted mitigation — there is nothing to verify.
-3. **Dispatch verifiers.** Dispatch one `ingrain-mitigation-verifier` per adopted mitigation
-   (see **How to dispatch a verifier**), each pointed at its `M<n>` row and the threat(s) it
-   covers. Collect each verdict (`verified` | `insufficient` | `missing`) plus its one-line
-   evidence/gap.
-4. **Finalize the assessment (you write).** Write each verdict into the new **`Verified`**
+3. **Locate the rules file.** Mint `rules_abs` with the `rules-path` command (see **The rules
+   file**). If `file_exists: true`, it carries this task's org rules — you will hand each
+   verifier the rule(s) for its mitigation by pointer. If `file_exists: false`, no rules were
+   retrieved at planning; verifiers verify from Descriptions alone. This is supporting context
+   only — never a blocker and never a finding. (No CLI is involved.)
+4. **Dispatch verifiers.** Dispatch one `ingrain-mitigation-verifier` per adopted mitigation
+   (see **How to dispatch a verifier**), each pointed at its `M<n>` row, the threat(s) it
+   covers, **and — when the sidecar exists — its rule(s) in `rules_abs`**. Collect each verdict
+   (`verified` | `insufficient` | `missing`) plus its one-line evidence/gap.
+5. **Finalize the assessment (you write).** Write each verdict into the new **`Verified`**
    column of the `## Mitigations` table (per
    `../ingrain-security/references/assessment-file.md`), leaving excluded/undecided rows as
-   `—`, and set `## Task` → `Latest stage: review`. Write to the minted `assessment_abs`. This
-   is the "mark checked" step — the file now records what was verified.
-5. **Report to the coding agent.** Present the findings (see **Reporting format**) and close
+   `—`, and set `## Task` → `Latest stage: review`. Write to the minted `assessment_abs`. The
+   `rules-<…>.md` sidecar is a persistent planning artifact — **do not modify or delete it**.
+   This is the "mark checked" step — the file now records what was verified.
+6. **Report to the coding agent.** Present the findings (see **Reporting format**) and close
    with a one-line verdict. If any mitigation is `insufficient` or `missing`, ask the coding
    agent to revisit exactly those.
 
@@ -183,18 +231,29 @@ gates in this skill.
 | "The verifier can just edit the Verified column itself" | Verifiers are read-only and return verdicts; **you** write the file, to avoid concurrent writes to one table. |
 | "I'll write the results into a fresh file" | Write to the minted `assessment_abs` — the same file the planning review wrote. Never hand-build a path or create an `.ingrain-security/` folder. |
 | "Only threat mitigations matter" | Verify **every** `selected` row — general implementation instructions too. |
+| "I'll query the `ingrain` CLI for the rule bodies" | No CLI here — the rule bodies are in the planning-written `rules-<…>.md` sidecar; mint `rules_abs` and read it. Verifiers never call the CLI either. |
+| "The org rule body overrides the mitigation Description" | The Description is the verification contract; the rule body only sharpens `verified` vs `insufficient`. Never fail a mitigation solely for diverging from a rule the Description did not require. |
+| "No rules sidecar exists, so I can't verify" | The sidecar is absent whenever planning retrieved no org rules — expected, never a finding. Dispatch verifiers with no rule pointer; they verify from Descriptions. |
+| "I'll update the sidecar with what I found" | The `rules-<…>.md` sidecar is a persistent planning artifact — this skill only reads it. Record results in the assessment's `Verified` column instead. |
 | "I found a gap, I'll fix the code" | This skill writes no code. Report the gap and ask the coding agent to revisit it. |
 
 ## Rules
 
 - **Verification, not planning.** Runs *after* code is written, on a task that already has an
-  `.ingrain-security` assessment with adopted mitigations. It writes no code; its only write
-  is the `Verified` column + `Latest stage: review` in the assessment file.
+  `.ingrain-security` assessment with adopted mitigations. It writes no code; its only
+  assessment writes are the `Verified` column + `Latest stage: review`.
 - **Read-only workers.** Verifiers make no code or repo edits — Read/Grep/Glob plus read-only
-  git only — and write nothing; they return a verdict. Restate that in every dispatch.
+  git only, and **no CLI** — and write nothing; they return a verdict. Restate that in every
+  dispatch.
+- **Org rules are supporting context, read from the sidecar.** The adopted mitigations' rule
+  bodies live in the planning-written `rules-<…>.md` sidecar, located by minting `rules_abs`;
+  the orchestrator hands each verifier the rule(s) for its mitigation by pointer. No CLI is
+  involved on either side. The sidecar may be absent (no rules retrieved) — that never blocks
+  verification, and the mitigation Description, not the rule body, is the verification contract.
+  Never modify or delete the sidecar — it is a persistent planning artifact.
 - **Hand off by pointer; keep your context lean.** Point each verifier at its `## Mitigations`
-  row; don't paste the assessment or the full diff into every dispatch. Read only the bounded
-  `## Mitigations`/`## Threats` slices you need.
+  row **and, when the sidecar exists, its rule(s) in `rules_abs`**; don't paste the assessment,
+  the sidecar, or the full diff into every dispatch. Read only the bounded slices you need.
 - **The absolute path only.** Every read and the finalize write use the minted **absolute**
   `assessment_abs`; the relative `assessment_path` is display-only.
 - **Confidence bar.** `verified`/`missing` require ≥80% confidence; otherwise `insufficient`

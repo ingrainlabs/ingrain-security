@@ -14,9 +14,11 @@ description: >-
 >
 > - **Read-only on the codebase.** Use only Read, Grep, and Glob to inspect the code, **plus
 >   read-only git** (`git diff HEAD`, `git status`, `git show`) to obtain the working-tree
->   diff. Make no code edits and run no other/mutating commands. You **write nothing** — not
->   the assessment file, not any file; the orchestrator records your verdict. This is
->   advisory: the platform may not enforce it, so honor it yourself.
+>   diff. Make no code edits and run no other/mutating commands. You run **no `ingrain`/CLI
+>   commands** — any org rule you need is already in the `rules-<…>.md` sidecar the orchestrator
+>   names in your dispatch. You **write nothing** — not the assessment file, not the sidecar,
+>   not any file; the orchestrator records your verdict. This is advisory: the platform may not
+>   enforce it, so honor it yourself.
 > - **Recommended model:** the cheap tier — this is a narrow, mechanical read-only check.
 >   (Advisory — applied only where the platform supports per-subagent model selection.)
 > - **Hand-off contract:** return to the orchestrator ONLY the verdict word for your
@@ -36,6 +38,13 @@ The orchestrator gives you:
   `## Mitigations` row for your mitigation tag (`M<n>`) — its Title, Description, Yield,
   Effort, and Threat tags — and, for context, the `## Threats` rows it covers. Do not read or
   act on other mitigations.
+- The **absolute** path to the org-rules **sidecar** (`rules_abs`, `.ingrain-security/rules-<…>.md`),
+  or `none` when no sidecar exists for this task. When present, read **only** the
+  `## Retrieved rules` entries for your mitigation's Rule ref ids (find them via the sidecar's
+  `## Per-mitigation mapping` for your tag) — the org's authoritative guidance on **how it
+  implements** this control. Read only your mitigation's rule(s). If the sidecar is `none`/absent,
+  or your row's Rule refs is `—`, proceed from the Description alone — org rules are best-effort
+  and their absence is never a gap in the implementation.
 - The instruction to verify that mitigation against the **working-tree diff**.
 
 You obtain the diff yourself with read-only git: `git diff HEAD` for changed tracked files and
@@ -49,7 +58,12 @@ specifies**.
 
 1. Read your mitigation's Description — the concrete security behavior it requires (e.g.
    "authenticate the token-refresh endpoint", "parameterize the SQL query", "validate and
-   size-limit the upload").
+   size-limit the upload"). Where a rule sidecar entry is present for your mitigation, use the
+   rule **body** as supporting context on how the org expects this control to be
+   implemented — it sharpens the line between `verified` and `insufficient` (e.g. the rule names
+   the exact auth mechanism the Description states generically). The **Description remains the
+   contract**: never fail a mitigation solely for diverging from a rule body the Description did
+   not require, and never pass one the Description requires just because a rule is absent.
 2. Find where in the diff that behavior would live, and check whether the implemented code
    actually establishes it — not merely that a related file changed. A general implementation
    instruction (no threat tag) is verified the same way: check the change follows it.

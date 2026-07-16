@@ -15,6 +15,7 @@ const SKILL = `${ROOT}skills/ingrain-security-test/SKILL.md`;
 const VERIFIER_REF =
   `${ROOT}skills/ingrain-security-test/references/ingrain-mitigation-verifier.md`;
 const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/assessment-file.md`;
+const RULES_REF = `${ROOT}skills/ingrain-security/references/rules-file.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
 const VERIFY_CHECK = `${ROOT}hooks/claude/verify-check`;
@@ -71,6 +72,22 @@ Deno.test("SKILL.md: marks the assessment checked (Verified + Latest stage: revi
   assertStringIncludes(md, "Latest stage: review");
   // The verdict enum the orchestrator records.
   for (const v of ["verified", "insufficient", "missing"]) assertStringIncludes(md, v);
+  // The rules sidecar is a persistent planning artifact — this skill must not delete it.
+  assertStringIncludes(md, "do not modify or delete it");
+});
+
+Deno.test("SKILL.md: reads org rules from the rules-*.md sidecar, no CLI", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  // Rules come from the planning-written sidecar, minted with rules-path.
+  assertStringIncludes(md, "rules-path");
+  assertStringIncludes(md, "rules_abs");
+  assertStringIncludes(md, "../ingrain-security/references/rules-file.md");
+  // Existence is the signal; the Rule refs ids are the link into the sidecar.
+  assertStringIncludes(md, "file_exists");
+  assertStringIncludes(md, "Rule refs");
+  // No CLI anywhere in the verification skill.
+  assertEquals(md.includes("ingrain context"), false, "test skill must not query the CLI");
+  assertEquals(md.includes("ingrain --version"), false, "test skill must not probe the CLI");
 });
 
 Deno.test("SKILL.md: announces itself and reports to the coding agent (no user gates)", async () => {
@@ -92,6 +109,17 @@ Deno.test("verifier ref: INTERNAL worker, read-only with a narrow read-only-git 
   for (const v of ["verified", "insufficient", "missing"]) assertStringIncludes(md, v);
 });
 
+Deno.test("verifier ref: reads its rule descriptions from the sidecar, runs no CLI", async () => {
+  const md = await Deno.readTextFile(VERIFIER_REF);
+  // The org rule body is handed to the verifier by pointer via the rules-*.md sidecar.
+  assertStringIncludes(md, "rules_abs");
+  assertStringIncludes(md, "## Retrieved rules");
+  // The mitigation Description stays the verification contract.
+  assertStringIncludes(md, "Description");
+  // The verifier gains no CLI — the orchestrator hands it the sidecar; it never queries.
+  assertEquals(md.includes("ingrain context"), false, "verifier must not run the CLI");
+});
+
 Deno.test("assessment-file.md: defines the optional Verified column and its values", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
   // The new column and its enumerated values.
@@ -102,6 +130,22 @@ Deno.test("assessment-file.md: defines the optional Verified column and its valu
   assertStringIncludes(md, "Latest stage: review");
   // The Verified column is present in the template header.
   assertStringIncludes(md, "| Selection | Verified |");
+  // Org rules now live in the linked sidecar, not a section of this file.
+  assertStringIncludes(md, "references/rules-file.md");
+  assertEquals(md.includes("## Org rules"), false, "the ## Org rules section moved to the sidecar");
+});
+
+Deno.test("rules-file.md: defines the persistent org-rules sidecar schema", async () => {
+  const md = await Deno.readTextFile(RULES_REF);
+  // Keyed by the same slug as the assessment, minted by rules-path.
+  assertStringIncludes(md, "rules-<branch-slug>-<task-slug>.md");
+  assertStringIncludes(md, "rules-path");
+  // Its sections: retrieved rules (id/title/body) + per-mitigation mapping.
+  assertStringIncludes(md, "## Retrieved rules");
+  assertStringIncludes(md, "## Per-mitigation mapping");
+  // It persists (not deleted) and is written only when rules were retrieved.
+  assertStringIncludes(md.toLowerCase(), "persist");
+  assertStringIncludes(md, "only when org rules are retrieved");
 });
 
 /**

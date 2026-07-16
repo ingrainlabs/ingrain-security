@@ -73,150 +73,18 @@ EOF
 # --- helpers ----------------------------------------------------------------------
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# normalize_dir, resolve_git_root, resolve_project_root, seed_gitignore and
-# escape_for_json live in the sibling lib, and are shared with the hooks.
+# resolve_project_root, seed_gitignore and escape_for_json live in project-root.sh (shared
+# with the hooks); resolve_branch, slugify, mint_path and mint_dispatch live in mint-path.sh
+# (shared with the rules-path minter). This script is now just the assessment label + usage.
 # shellcheck source=lib/project-root.sh
 if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
     printf 'assessment-path: cannot load lib/project-root.sh\n' >&2
     exit 1
 fi
+# shellcheck source=lib/mint-path.sh
+if ! . "${SCRIPT_DIR}/lib/mint-path.sh" 2>/dev/null; then
+    printf 'assessment-path: cannot load lib/mint-path.sh\n' >&2
+    exit 1
+fi
 
-# Resolve the current git branch, anchored to the resolved project root. Uses
-# `branch --show-current` (fallback `rev-parse --abbrev-ref HEAD`) — never `.git/HEAD`,
-# unreliable in a worktree/submodule. Detached HEAD or a non-git dir yields empty
-# (git noise swallowed), which callers treat as an unknown branch.
-resolve_branch() {
-    local root="$1" b
-    b="$(git -C "${root}" branch --show-current 2>/dev/null)"
-    [ -n "${b}" ] || b="$(git -C "${root}" rev-parse --abbrev-ref HEAD 2>/dev/null)"
-    [ "${b}" = "HEAD" ] && b=""
-    printf '%s' "${b}"
-}
-
-# Slugify: lowercase, reduce every disallowed char to `-`, collapse `-` runs, trim.
-# So `feature/foo` -> `feature-foo`, `Feature/Foo Bar` -> `feature-foo-bar`.
-slugify() {
-    local s
-    s="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-' '-')"
-    while [[ "${s}" == *--* ]]; do s="${s//--/-}"; done
-    s="${s#-}"
-    s="${s%-}"
-    printf '%s' "${s}"
-}
-
-# --- subcommand -------------------------------------------------------------------
-
-cmd_mint() {
-    local host="$1" host_slug title="" slug_flag="" have_slug="false" project_root
-    local branch branch_slug branch_known task_slug name basename
-    local assessment_dir assessment_path assessment_abs file_exists instruction
-    shift
-
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --title)
-                [ $# -ge 2 ] || { printf 'assessment-path: --title needs a value\n' >&2; return 2; }
-                title="$2"
-                shift 2
-                ;;
-            --branch-slug)
-                [ $# -ge 2 ] || { printf 'assessment-path: --branch-slug needs a value\n' >&2; return 2; }
-                slug_flag="$2"
-                have_slug="true"
-                shift 2
-                ;;
-            *)
-                printf 'assessment-path: unknown mint flag "%s"\n' "$1" >&2
-                return 2
-                ;;
-        esac
-    done
-
-    project_root="$(resolve_project_root "${host}")"
-    [ -n "${project_root}" ] || { printf 'assessment-path: could not resolve project root\n' >&2; return 1; }
-
-    host_slug="$(slugify "${host}")"
-    [ -n "${host_slug}" ] || { printf 'assessment-path: invalid host token "%s"\n' "${host}" >&2; return 2; }
-
-    # Reuse the caller's already-resolved slug when given; otherwise resolve from git.
-    if [ "${have_slug}" = "true" ]; then
-        branch_slug="$(slugify "${slug_flag}")"
-        branch=""
-    else
-        branch="$(resolve_branch "${project_root}")"
-        branch_slug="$(slugify "${branch}")"
-    fi
-    if [ -n "${branch_slug}" ]; then branch_known="true"; else branch_known="false"; fi
-
-    task_slug="$(slugify "${title}")"
-
-    assessment_dir=".ingrain-security"
-
-    # Never write into a symlinked target — a crafted repo could redirect it outside
-    # the tree (same guard as ensure-assessment-dir). Then ensure the folder and its
-    # self-ignoring .gitignore exist before the agent writes the file.
-    if [ -L "${project_root}/${assessment_dir}" ]; then
-        printf 'assessment-path: %s is a symlink; refusing\n' "${assessment_dir}" >&2
-        return 1
-    fi
-    mkdir -p "${project_root}/${assessment_dir}" 2>/dev/null \
-        || { printf 'assessment-path: could not create %s\n' "${assessment_dir}" >&2; return 1; }
-    seed_gitignore "${project_root}/${assessment_dir}"
-
-    name="assessment"
-    [ "${branch_known}" = "true" ] && name="${name}-${branch_slug}"
-    [ -n "${task_slug}" ] && name="${name}-${task_slug}"
-    basename="${name}.md"
-    assessment_path="${assessment_dir}/${basename}"
-    assessment_abs="${project_root}/${assessment_path}"
-
-    if [ -f "${assessment_abs}" ]; then file_exists="true"; else file_exists="false"; fi
-
-    # Carried in the JSON so the absolute path and the rule governing it arrive together,
-    # in the same tool result, at the moment the orchestrator is about to dispatch. A
-    # static sentence in SKILL.md is read thousands of tokens earlier and gets lost; this
-    # one is unmissable and already has the path substituted in.
-    instruction="Write the assessment ONLY to assessment_abs (${assessment_abs}). That folder is this repository's single .ingrain-security/ directory and it already exists — never create an .ingrain-security/ folder anywhere else, and never resolve the path against the file you happen to be editing. Pass assessment_abs verbatim to every worker dispatch and to every Write/Edit call; assessment_path is a display-only form for prose and links."
-
-    printf '{"host":"%s","project_root":"%s","branch":"%s","branch_slug":"%s","branch_known":%s,"task_slug":"%s","assessment_dir":"%s","assessment_path":"%s","assessment_abs":"%s","basename":"%s","file_exists":%s,"instruction":"%s"}\n' \
-        "$(escape_for_json "${host_slug}")" \
-        "$(escape_for_json "${project_root}")" \
-        "$(escape_for_json "${branch}")" \
-        "${branch_slug}" \
-        "${branch_known}" \
-        "${task_slug}" \
-        "${assessment_dir}" \
-        "$(escape_for_json "${assessment_path}")" \
-        "$(escape_for_json "${assessment_abs}")" \
-        "${basename}" \
-        "${file_exists}" \
-        "$(escape_for_json "${instruction}")"
-}
-
-main() {
-    case "${1:-}" in
-        -h|--help)
-            usage
-            return 0
-            ;;
-        "")
-            printf 'assessment-path: missing <host>. Try --help.\n' >&2
-            return 2
-            ;;
-    esac
-
-    local host="$1" subcommand="${2:-}"
-    case "${subcommand}" in
-        mint) shift 2; cmd_mint "${host}" "$@" ;;
-        "")
-            printf 'assessment-path: missing subcommand (mint). Try --help.\n' >&2
-            return 2
-            ;;
-        *)
-            printf 'assessment-path: unknown subcommand "%s" (mint). Try --help.\n' "${subcommand}" >&2
-            return 2
-            ;;
-    esac
-}
-
-main "$@"
+mint_dispatch assessment usage "$@"

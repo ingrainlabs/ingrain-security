@@ -104,11 +104,12 @@ canonical_assessment_dir() {
 #     not a `..` escape. The parent is canonicalized BEFORE the equality test, so a literal
 #     `…/.ingrain-security/../src/app.ts` resolves away rather than passing a prefix check,
 #     and equality (not a prefix) means a sibling folder sharing the prefix falls through.
-#   - the basename matches the minter's naming (`assessment*.md`),
+#   - the basename matches one of the minters' naming (`assessment*.md` or `rules*.md` — the
+#     assessment file and its org-rules sidecar are the only two files this plugin mints),
 #   - the target is not a symlink, which would follow the link out of the folder.
 #
-# A legitimate target's parent already exists — ensure-assessment-dir and assessment-path
-# both create the folder — so a parent that cannot be entered is itself grounds to refuse.
+# A legitimate target's parent already exists — ensure-assessment-dir, assessment-path and
+# rules-path all create the folder — so a parent that cannot be entered is grounds to refuse.
 is_assessment_target() {
     local canon_dir="$1" path="$2" parent base canon_parent
 
@@ -119,7 +120,7 @@ is_assessment_target() {
     [ "${canon_parent}" = "${canon_dir}" ] || return 1
 
     case "${base}" in
-        assessment*.md) ;;
+        assessment*.md | rules*.md) ;;
         *) return 1 ;;
     esac
 

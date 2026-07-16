@@ -25,6 +25,7 @@ import { fromFileUrl } from "@std/path";
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const HOOK = `${ROOT}hooks/codex/allow-assessment-write`;
 const MINT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
+const MINT_RULES = `${ROOT}skills/ingrain-security/scripts/rules-path`;
 
 interface IHookResult {
   code: number;
@@ -160,7 +161,14 @@ Deno.test("allow: the path the minter actually produces", async () => {
 Deno.test("allow: add and update, on both naming forms and every matcher alias", async () => {
   await withProject(async (dir) => {
     for (const tool of ["apply_patch", "Edit", "Write"]) {
-      for (const name of ["assessment.md", "assessment-main-add-authn.md"]) {
+      for (
+        const name of [
+          "assessment.md",
+          "assessment-main-add-authn.md",
+          "rules.md",
+          "rules-main-add-authn.md",
+        ]
+      ) {
         const target = `${dir}/.ingrain-security/${name}`;
         for (const patch of [addFile(target), updateFile(target)]) {
           const res = await runHook(payload(tool, patch, dir), dir);
@@ -168,6 +176,41 @@ Deno.test("allow: add and update, on both naming forms and every matcher alias",
         }
       }
     }
+  });
+});
+
+Deno.test("allow: the rules sidecar path the minter actually produces", async () => {
+  await withProject(async (dir) => {
+    const out = await new Deno.Command("bash", {
+      args: [MINT_RULES, "codex", "mint", "--title", "Add authn"],
+      cwd: dir,
+      clearEnv: true,
+      env: { PATH: Deno.env.get("PATH") ?? "", HOME: Deno.env.get("HOME") ?? "" },
+      stdout: "piped",
+      stderr: "piped",
+    }).output();
+    const minted = JSON.parse(new TextDecoder().decode(out.stdout)) as { rules_abs: string };
+
+    const res = await runHook(payload("apply_patch", addFile(minted.rules_abs), dir), dir);
+    assertEquals(res.allowed, true);
+  });
+});
+
+Deno.test("allow: one patch touching BOTH the assessment and its rules sidecar", async () => {
+  await withProject(async (dir) => {
+    // The planning-time write pattern: the mitigation-generator writes the assessment's
+    // Mitigations rows AND the rules sidecar. Both are grantable, so the whole patch is.
+    const patch = [
+      "*** Begin Patch",
+      `*** Update File: ${dir}/.ingrain-security/assessment.md`,
+      "@@",
+      "+r-auth-01",
+      `*** Add File: ${dir}/.ingrain-security/rules-main-add-authn.md`,
+      "+# Org rules",
+      "*** End Patch",
+    ].join("\n");
+    const res = await runHook(payload("apply_patch", patch, dir), dir);
+    assertEquals(res.allowed, true);
   });
 });
 
@@ -307,15 +350,52 @@ Deno.test("defer: a bareword command riding along outside the patch envelope", a
   });
 });
 
-Deno.test("defer: a file in the folder that is not an assessment", async () => {
+Deno.test("defer: a file in the folder that is neither an assessment nor a rules file", async () => {
   await withProject(async (dir) => {
-    for (const name of ["README.md", ".gitignore", "notes.txt", "assessment.md.bak"]) {
+    for (
+      const name of [
+        "README.md",
+        ".gitignore",
+        "notes.txt",
+        "assessment.md.bak",
+        "rules.md.bak",
+        "evil.md",
+      ]
+    ) {
       const res = await runHook(
         payload("apply_patch", addFile(`${dir}/.ingrain-security/${name}`), dir),
         dir,
       );
       assertEquals(res.allowed, false, `${name} must not be auto-approved`);
     }
+  });
+});
+
+Deno.test("defer: a patch touching a rules file AND a source file", async () => {
+  await withProject(async (dir) => {
+    // The all-or-nothing guard must hold for the rules prefix too: one grantable file does
+    // not launder a src/ write riding in the same atomic patch.
+    const patch = [
+      "*** Begin Patch",
+      `*** Add File: ${dir}/.ingrain-security/rules-main-add-authn.md`,
+      "+# Org rules",
+      `*** Add File: ${dir}/src/app.ts`,
+      "+export const backdoor = true;",
+      "*** End Patch",
+    ].join("\n");
+    const res = await runHook(payload("apply_patch", patch, dir), dir);
+    assertEquals(res.allowed, false);
+  });
+});
+
+Deno.test("defer: a symlinked rules-* target", async () => {
+  await withProject(async (dir) => {
+    await sh(`ln -s /etc/passwd "${dir}/.ingrain-security/rules-evil.md"`);
+    const res = await runHook(
+      payload("apply_patch", updateFile(`${dir}/.ingrain-security/rules-evil.md`), dir),
+      dir,
+    );
+    assertEquals(res.allowed, false);
   });
 });
 

@@ -12,8 +12,10 @@ description: >-
   user selects which mitigations to adopt, with critic-driven improvement loops,
   via dedicated read-only subagents. Mitigations are informed by the org's own
   security rules, retrieved through the ingrain CLI, so they reflect established
-  org practice for how to implement the fix. The selected threats and adopted
-  mitigations become part of the plan you produce.
+  org practice for how to implement the fix; when rules are retrieved they are
+  persisted (id, title, full body) to a linked `rules-<…>.md` sidecar next to the
+  assessment file, so the verification pass can read them without re-querying. The
+  selected threats and adopted mitigations become part of the plan you produce.
 ---
 
 <SUBAGENT-STOP>
@@ -257,7 +259,7 @@ flowchart TD
     freezeThreats --> riskScorer[ingrain-risk-scorer]
     riskScorer --> gate1{Gate 1: select threats 0–N}
     gate1 -->|none selected| done([Fold results into the plan; keep planning])
-    gate1 -->|1+ selected| mitGen[ingrain-mitigation-generator<br/>+ retrieve org rules via ingrain CLI]
+    gate1 -->|1+ selected| mitGen[ingrain-mitigation-generator<br/>+ retrieve org rules via ingrain CLI<br/>→ persist to rules-*.md sidecar]
 
     mitGen --> mitCritic[ingrain-mitigation-critic]
     mitCritic --> mitsOk{mitigations ok?}
@@ -384,10 +386,14 @@ sections it needs — the file is the shared state, so your own context stays le
    can prompt and retry (see **On a `fetch blocked` signal** below) — a permission
    denial is not silently dropped. The generator records **compact Rule refs (rule
    ids)** on each mitigation row of `## Mitigations` — persisted and part of the plan,
-   but **never shown to the user** — **plus** the fuller rule detail (titles, bodies,
-   applicable rules) in the transient `## Org rules` section, where the critic reads it.
-   Gate 2 renders each mitigation's rule **titles** from that transient section; it is
-   deleted at finalize.
+   but **never shown to the user** — **plus** the fuller rule detail (ids, titles, full
+   bodies, and the per-mitigation mapping) in the **persistent `rules-<branch-slug>-<task-slug>.md`
+   sidecar** (see `references/rules-file.md`), where the critic reads it and from which Gate 2
+   renders each mitigation's rule **titles**. Mint that sidecar path with the `rules-path`
+   command from your INGRAIN-ASSESSMENT-PATHS session context and pass its **`rules_abs`** to
+   the generator dispatch alongside `assessment_abs`. The sidecar is written **only if org
+   rules were retrieved**; unlike the transient scratch sections it is **not deleted at
+   finalize** — the `ingrain-security-test` verification reads it in a later session.
 
    **On a `fetch blocked` signal.** If the generator returns
    `fetch blocked — permission needed` (its `ingrain context` lookup was denied by the
@@ -400,9 +406,9 @@ sections it needs — the file is the shared state, so your own context stays le
    (or no permission channel exists) do you let it proceed with graceful degradation —
    note that no org rules were retrieved because access was declined.
 6. **Critique mitigations** *(loop, max 3)* — dispatch the `ingrain-mitigation-critic`
-   worker, pointing it at `## Mitigations` **and the transient `## Org rules` section**
-   (so it can judge the mitigations against the rules they cite); re-dispatch
-   `ingrain-mitigation-generator` on `needs-revision`. Then **freeze** the mitigations.
+   worker, pointing it at `## Mitigations` **and the `rules-<…>.md` sidecar** (so it can judge
+   the mitigations against the rules they cite); re-dispatch `ingrain-mitigation-generator` on
+   `needs-revision`. Then **freeze** the mitigations.
 7. **Ask user — select which mitigations to adopt (Gate 2).** Follow the
    two-step display-then-ask pattern (see **How to ask the user**).
 
@@ -418,16 +424,16 @@ sections it needs — the file is the shared state, so your own context stays le
    | **What it does** | the task-specific guidance, from the mitigation's Description |
    | **Yield** | the risk it removes over the current baseline |
    | **Effort** | how much work it takes to implement |
-   | **Follows rules** | the title(s) of the org rule(s) it follows, resolved from that mitigation's citation line in the transient `## Org rules` section (e.g. `Authenticated service calls`); `—` for a pure threat mitigation. Never print rule ids. |
+   | **Follows rules** | the title(s) of the org rule(s) it follows, resolved from that mitigation's entry in the `rules-<…>.md` sidecar (e.g. `Authenticated service calls`); `—` for a pure threat mitigation. Never print rule ids. |
 
    Keep the table faithful to the frozen mitigations — don't invent or re-scope.
    The **Follows rules** column names the rules by **title**: for each id in the
-   mitigation's **Rule refs**, take the title from its `M<n> → "<title>" (<id>)` citation
-   in `## Org rules`. The rule **ids** stay in the persisted **Rule refs** column of
-   `## Mitigations` — machine-facing, never shown to the user. The rule **bodies** stay in
-   `## Org rules` and are deleted at finalize. If a **Rule ref** id has no matching
-   citation, no title is available: print the mitigation's rule count (e.g. `2 org rules`)
-   rather than falling back to the id.
+   mitigation's **Rule refs**, take the title from its `### <id> — <title>` entry in the
+   `rules-<…>.md` sidecar. The rule **ids** stay in the persisted **Rule refs** column of
+   `## Mitigations` — machine-facing, never shown to the user. The rule **bodies** live in the
+   sidecar, which **persists** (it is not deleted). If a **Rule ref** id has no matching entry
+   in the sidecar (or no sidecar exists), no title is available: print the mitigation's rule
+   count (e.g. `2 org rules`) rather than falling back to the id.
 
    **Then present one single-choice window per mitigation** asking which
    mitigations to adopt — each window a single include/exclude decision for that
@@ -447,18 +453,20 @@ sections it needs — the file is the shared state, so your own context stays le
    `## Mitigations` table (adopt → `selected`, decline → `excluded`), and fill
    `## Coverage / open items` with any `selected` threat left without a `selected`
    covering mitigation — per the `references/assessment-file.md` schema. Then
-   **delete the three transient sections — `## Threat critique`, `## Mitigation critique`,
-   and `## Org rules`** (heading and body) — they are iteration scratch; the finalized
-   file carries only end results and matches the schema template. Write to the minted
-   `assessment_abs`; the file already lives there, so there is **no snapshot to copy** —
-   finalizing it *is* persisting it.
+   **delete the two transient sections — `## Threat critique` and `## Mitigation critique`**
+   (heading and body) — they are iteration scratch; the finalized file carries only end
+   results and matches the schema template. **Leave the `rules-<…>.md` sidecar in place** — it
+   is a persistent, linked artifact, not scratch. Write to the minted `assessment_abs`; the
+   file already lives there, so there is **no snapshot to copy** — finalizing it *is*
+   persisting it.
 
    Then **write the results into the plan file** (see **The plan file**) — the
    implementation plan the coding agent edits and executes. Incorporate the selected
    threats and adopted mitigations, and fold in two supporting things: (1) a link to
    the run's assessment file — use the **relative** `assessment_path` here, because a
    plan file outlives the absolute path and stays valid after a clone or move — noting
-   that it is git-ignored by default (share it with `git add -f <file>`); and (2) the
+   that it is git-ignored by default (share it with `git add -f <file>`), and, **when a
+   `rules-<…>.md` sidecar was written, a link to its relative `rules_path` too**; and (2) the
    maintenance instruction — tell the implementing agent to keep that file in sync as
    the implementation changes across iteration loops, and to locate it by **re-running
    the `assessment-path` mint command** from its `INGRAIN-ASSESSMENT-PATHS` session
@@ -491,6 +499,8 @@ sections it needs — the file is the shared state, so your own context stays le
 | "I'll just answer the worker's job myself instead of dispatching" | Each worker runs in its own read-only subagent — dispatch it, don't inline it. |
 | "`.ingrain-security/assessment-….md` is clear enough — the worker will find it" | It won't. A relative path is resolved by whoever receives it, and a worker has no project root in view — it resolves against the file it was reading and creates a stray folder there. Pass the absolute `assessment_abs`, always. |
 | "I'll create the `.ingrain-security/` folder since it's missing" | It is not missing — the script created it at the repo root and it self-ignores, so `git status` never shows it. If you think it's absent, you resolved the path wrong. Re-run the mint script. |
+| "I'll delete the `rules-<…>.md` sidecar at finalize like the scratch sections" | The rules sidecar is a **persistent** linked artifact, not scratch — the verification skill reads it later. Only the two critique sections are deleted. |
+| "No org rules came back, so I'll write an empty `rules-<…>.md`" | The sidecar is written **only when rules were retrieved**. No rules → no file; its absence is the signal, and Gate 2 / verification fall back to Descriptions. |
 | "The `ingrain` CLI errored / isn't configured, so I'll stop the review" | Genuine unavailability (binary absent, unconfigured, no matches) degrades gracefully — proceed without rules, note why, and still propose mitigations. |
 | "The `ingrain` fetch was blocked by the sandbox, so I'll just proceed without rules" | A permission/sandbox denial is recoverable, not graceful-degradation — ask the user for access (native prompt, or the generator's `fetch blocked — permission needed` signal → you prompt and re-dispatch) and retry. Only proceed without rules if the user declines. |
 | "I'll cite a plausible-sounding org rule to back this mitigation" | Cite only rules actually returned by `ingrain context` — never invent a rule or an id. |

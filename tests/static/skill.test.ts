@@ -22,6 +22,7 @@ const ALLOW_LIB = `${ROOT}skills/ingrain-security/scripts/lib/assessment-write.s
 const ENSURE_DIR = `${ROOT}hooks/start/ensure-assessment-dir`;
 const PROJECT_ROOT_LIB = `${ROOT}skills/ingrain-security/scripts/lib/project-root.sh`;
 const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
+const MINT_LIB = `${ROOT}skills/ingrain-security/scripts/lib/mint-path.sh`;
 
 const WORKERS = [
   "ingrain-relevance-triage",
@@ -193,11 +194,17 @@ Deno.test("session-start: points the orchestrator at assessment_abs", async () =
 
 Deno.test("assessment-path: emits an instruction and anchors on the git repo root", async () => {
   const script = await Deno.readTextFile(PATH_SCRIPT);
-  assertStringIncludes(script, '"instruction":"%s"');
-  // Root resolution lives in the shared lib the script sources; the anchoring behavior
-  // itself is covered end-to-end by the "run from a subdirectory" cases in
-  // tests/hooks/assessment-path.test.ts.
+  // The minting logic (JSON emission included) now lives in the shared mint-path.sh, which
+  // both assessment-path and rules-path source; the thin script just labels + dispatches.
   assertStringIncludes(script, "lib/project-root.sh");
+  assertStringIncludes(script, "lib/mint-path.sh");
+  assertStringIncludes(script, "mint_dispatch assessment usage");
+  const lib = await Deno.readTextFile(MINT_LIB);
+  assertStringIncludes(lib, '"instruction":"%s"');
+  // The label-parameterized JSON keeps the assessment field names byte-identical.
+  assertStringIncludes(lib, '"%s_abs":"%s"');
+  // Root resolution lives in project-root.sh; the anchoring is covered end-to-end by the
+  // "run from a subdirectory" cases in tests/hooks/assessment-path.test.ts.
   assertStringIncludes(await Deno.readTextFile(PROJECT_ROOT_LIB), "rev-parse --show-toplevel");
 });
 

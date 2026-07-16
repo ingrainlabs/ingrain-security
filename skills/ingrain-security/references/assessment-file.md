@@ -54,18 +54,21 @@ shape.
   | `## Threat critique` | `ingrain-threat-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Risk score` | `ingrain-risk-scorer` (plan-level residual) |
   | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Selection at Gate 2) → `ingrain-security-test` orchestrator (Verified at the review stage) |
-  | `## Org rules` | `ingrain-mitigation-generator` — **transient**, deleted by the orchestrator at finalize |
   | `## Mitigation critique` | `ingrain-mitigation-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Coverage / open items`, `## Maintenance` | orchestrator (finalize) |
+
+  The org security rules themselves do **not** live in this file — they are persisted to the
+  **linked `rules-<branch-slug>-<task-slug>.md` sidecar** (see `references/rules-file.md`),
+  written by the `ingrain-mitigation-generator` when rules are retrieved. This file carries
+  only the compact **Rule refs** ids (in `## Mitigations`) as the link into that sidecar.
 - **Living document.** Rewrite the relevant section at each commit point so the file
   always mirrors the current frozen state — critic-loop revisions and re-selection
-  overwrite the prior contents of that section. The two critique sections and the
-  `## Org rules` section are iteration scratch, not results: they exist only to feed the
-  mitigation loop (the critic and revision rounds read the org rules by pointer), so once
-  that loop is done they are dead weight. The orchestrator **deletes all three transient
-  sections at finalize** — `## Threat critique`, `## Mitigation critique`, and
-  `## Org rules` — so the finalized file contains only end results. This is why the
-  template below has none of them.
+  overwrite the prior contents of that section. The two critique sections
+  (`## Threat critique`, `## Mitigation critique`) are iteration scratch, not results, and the
+  orchestrator **deletes both at finalize** — so the finalized file contains only end results.
+  This is why the template below has neither. (The retrieved org rules are **not** scratch in
+  this file at all — they live in the persistent `rules-<…>.md` sidecar, which is never
+  deleted.)
 
 ## Sections and fields
 
@@ -145,7 +148,7 @@ this table.
 | **Yield** | `high` \| `medium` \| `low` |
 | **Effort** | `high` \| `medium` \| `low` |
 | **Threat tags** | `0..N` threat tags (e.g. `T1, T3`); `—` when the mitigation is a general implementation instruction not tied to a specific threat |
-| **Rule refs** | the org rule id(s) the mitigation follows, `0..N` comma-separated (e.g. `r-auth-01, r-log-03`); `—` when it follows no org rule (a pure threat mitigation). One mitigation may follow multiple rules. Ids are machine-facing — stored here, **never rendered to the user** (Gate 2 shows rule titles instead). Full rule detail lives in the transient `## Org rules` section. |
+| **Rule refs** | the org rule id(s) the mitigation follows, `0..N` comma-separated (e.g. `r-auth-01, r-log-03`); `—` when it follows no org rule (a pure threat mitigation). One mitigation may follow multiple rules. Ids are machine-facing — stored here, **never rendered to the user** (Gate 2 shows rule titles instead). Each id is the link into the persistent `rules-<…>.md` sidecar, where the rule's title and full body live (see `references/rules-file.md`). |
 | **Selection** | `selected` \| `excluded` \| `undecided` (optional until Gate 2) |
 | **Verified** | `verified` \| `insufficient` \| `missing` — the `ingrain-security-test` verification result for a `selected` mitigation. **Optional until that verification runs**; `—` before then and for any row not `selected`. |
 
@@ -153,8 +156,8 @@ this table.
 follows org rules; an empty **Rule refs** (`—`) means a pure threat mitigation. Surface
 this as a computed indicator (e.g. at Gate 2) rather than a separate column: the
 indicator is the rule **title(s)**, resolved by looking each **Rule ref** id up in the
-per-mitigation citations of the transient `## Org rules` section. Titles are not stored
-in this table — no title column is added.
+`rules-<…>.md` sidecar (its `## Retrieved rules` entries / `## Per-mitigation mapping`).
+Titles are not stored in this table — no title column is added.
 
 **Gate 2 → Selection.** Record each mitigation's **Selection**:
 adopt → `selected`, decline → `excluded`; `undecided` only if the user is unsure.
@@ -167,25 +170,10 @@ each `selected` mitigation against the working-tree diff and records the outcome
 `ingrain-security` planning review leaves the column empty/`—`; it is filled only at the
 review stage.
 
-### `## Org rules` — transient, deleted at finalize
-
-The org security rules the `ingrain-mitigation-generator` retrieved, kept here so the
-`ingrain-mitigation-critic` and revision rounds can read them by pointer. The section
-itself is **never** shown to the user; the orchestrator reads its per-mitigation
-citations at Gate 2 to resolve each **Rule ref** id to a rule title for display, and
-nothing else here (bodies, applicable rules) leaves the file. The orchestrator **deletes
-the section at finalize** — so it is absent from the finalized template below. Content:
-
-- **Rules retrieved** — a one-line summary: the queries run and how many rules each
-  returned, or the graceful-degradation note if retrieval was skipped (e.g. `no org rules
-  retrieved — CLI not configured`).
-- **Per-mitigation citations** — one line per mitigation, keyed by its tag:
-  `M<n> → "<title>" (<id>)` with a one-line note on how the rule shaped it; `none` where
-  no retrieved rule applies to that mitigation.
-- **Applicable rules** — retrieved rules relevant to the change that do not map cleanly
-  onto a single mitigation, each as `"<title>" (<id>)`.
-
-Cite only rules actually retrieved — never invent a rule or an `id`.
+The retrieved org rules (ids, titles, full bodies, and the per-mitigation mapping) live in
+the **linked `rules-<branch-slug>-<task-slug>.md` sidecar**, not in this file — see
+`references/rules-file.md` for its schema. This file references them only by the compact
+**Rule refs** ids in `## Mitigations`.
 
 ### `## Coverage / open items`
 - Any threat whose **Selection** is `selected` that has no mitigation with
@@ -250,4 +238,8 @@ To locate this file, re-run the `assessment-path` mint command from your
 INGRAIN-ASSESSMENT-PATHS session context and write to the absolute `assessment_abs`
 it returns — it resolves back to this same file. Do not resolve a relative path
 against the file you are editing, and do not create an `.ingrain-security/` folder.
+
+Org rules for this task (if any were retrieved) live in the linked sidecar
+.ingrain-security/rules-<branch-slug>-<task-slug>.md — re-mint it with the `rules-path`
+command; it is persistent, not maintained here.
 ```
