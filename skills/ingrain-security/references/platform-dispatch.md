@@ -65,6 +65,31 @@ nothing — cases the user cannot fix by granting access — the worker **degrad
 gracefully**, proposing mitigations without org rules and noting why. Rule retrieval
 never blocks or fails the review.
 
+## Phase B's two reads
+
+The standing rule above — "your only write is your own section of the stored analysis
+file at the path this dispatch names" — is a **Phase A** rule. Phase B's two worker
+roles (`references/verification-pass.md`) do not fit it, in two ways:
+
+- **They write nothing at all.** Neither the `ingrain-mitigation-verifier` nor the
+  `ingrain-blind-maturity-reviewer` has a section of its own; they return their reasoning
+  and the orchestrator reconciles and records it. So drop the "your only write is…"
+  clause from their dispatches and say **you write nothing** instead. Both get the same
+  narrow read-only-git exception (`git diff HEAD`, `git status`, `git show`) to obtain
+  the working-tree diff, and neither gets shell or CLI access beyond it.
+- **The blind reviewer is the one dispatch that carries no pointer.** Every other
+  dispatch withholds the content and names a path; that one withholds the path too — no
+  assessment file, no rules sidecar, no mitigation or threat data. It is given the task
+  title and nothing else, deliberately, so that its read is independent of the analysis
+  it is checking. See `references/verification-pass.md` → **How to dispatch the blind
+  reviewer**.
+
+On a host with a subagent primitive, fan out the per-mitigation verifiers and the single
+blind reviewer **together** — the blind reviewer depends on nothing they produce. On the
+sequential fallback, run them in the same session one at a time; the blind reviewer still
+gets only the task title, and the discipline of not telling it more is the only thing
+preserving its value there.
+
 ## Selection windows (Gate 1 and Gate 2)
 
 **The gate procedure — display the table first, then ask — lives in SKILL.md →

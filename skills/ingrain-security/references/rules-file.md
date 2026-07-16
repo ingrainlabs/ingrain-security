@@ -80,6 +80,11 @@ none.
 | Plan · finalize | orchestrator | **Leaves it in place** — persistent, never deleted |
 | Review | `ingrain-mitigation-verifier` | Reads its own mitigation's rule description(s) as supporting context for verification |
 
+Phase B's `ingrain-blind-maturity-reviewer` is deliberately **not** a reader of this file — it
+is given no rules and no path to them, so that its read of the implementation is independent of
+the analysis it is checking; see `references/verification-pass.md` → **How to dispatch the blind
+reviewer**.
+
 The file is never shown to the user directly; only the rule **titles** it records reach the
 user at Gate 2.
 

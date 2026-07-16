@@ -11,8 +11,8 @@ description: >-
   threats and adopted mitigations back into the plan you produce.
   **Phase B — verification:** run AFTER you have implemented code for that plan, but
   before you present or commit it. It checks the working-tree diff against the
-  mitigations the plan adopted and reports which are missing or insufficiently
-  implemented. It writes no code.
+  mitigations the plan adopted and reports the maturity level each one reached and
+  which still need work. It writes no code.
   If there is even a 1% chance the change touches security, invoke it — triage decides
   whether a full review is warranted.
 ---
@@ -20,8 +20,8 @@ description: >-
 <SUBAGENT-STOP>
 If you were dispatched as a worker subagent (ingrain-relevance-triage, ingrain-threat-generator,
 ingrain-threat-critic, ingrain-risk-scorer, ingrain-mitigation-generator, ingrain-mitigation-critic,
-ingrain-mitigation-verifier), do the one job you were given and return. Do NOT run this
-orchestration — neither Phase A nor Phase B — you are part of it.
+ingrain-mitigation-verifier, ingrain-blind-maturity-reviewer), do the one job you were given
+and return. Do NOT run this orchestration — neither Phase A nor Phase B — you are part of it.
 </SUBAGENT-STOP>
 
 <EXTREMELY-IMPORTANT>
@@ -45,8 +45,8 @@ code. **Phase B — verification** (`references/verification-pass.md`) runs on t
 plan produced. Decide which one you are in **from repo state, before anything else** — never
 from a guess about what the user meant, and never by reading ahead into the checklist.
 
-**If the user named a phase, that is the answer.** "Verify the mitigations", or the
-Stop-hook reminder, → **Phase B**. "Review this plan" → **Phase A**. Skip the table.
+**If the user named a phase, that is the answer.** "Verify the mitigations" → **Phase B**.
+"Review this plan" → **Phase A**. Skip the table.
 
 Otherwise resolve the state with **the mint call you already have to make**: Phase A mints
 `assessment_abs` at Step 0 anyway, so run it now, keyed on this task's title, and read
@@ -86,9 +86,10 @@ dirty tree.** Anything else is Phase A. Note what is deliberately *not* in the t
   different task's assessment. Take `file_exists` at its word.
 - **`Latest stage` is not a Phase B guard.** An assessment already at `Latest stage: review`
   whose tree is dirty again — the user revised the code after a verification round — is
-  **Phase B again**: re-verify every adopted mitigation and overwrite the `Verified` column.
+  **Phase B again**: re-verify every adopted mitigation and overwrite the `Justification` +
+  `Verification level` columns.
   The plan did not change; the code did. Never re-run Phase A to "re-review" it.
-  (`Latest stage: review` only suppresses the Stop-hook reminder; it does not close the task.)
+  (`Latest stage: review` records that a verification ran; it does not close the task.)
 - **A `minor` triage adopts no mitigations, so it never routes to B.** It lands on row 2. If
   the user explicitly asked to verify, the override sends you to Phase B, which stops at "no
   adopted mitigations to verify" — the correct, cheap answer. Otherwise row 2 resumes Phase A,

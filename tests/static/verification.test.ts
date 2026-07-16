@@ -2,26 +2,39 @@
  * Static checks on the ingrain-security Phase B (verification) pass and its hook wiring.
  * No model calls. Guards the verification contract: Phase B lives in a reference the
  * slim SKILL.md points at, reads the same per-task assessment file (by ABSOLUTE
- * assessment_abs), dispatches a read-only verifier subagent per adopted mitigation,
- * records a Verified status + advances the stage to review, and is reminded by a Stop
- * hook on both Claude and Codex.
+ * assessment_abs), dispatches an INFORMED read-only verifier per adopted mitigation plus
+ * exactly one BLIND reviewer that sees only the diff, reconciles the two by weighing their
+ * justifications, and records a Justification + Verification level + advances the stage to
+ * review. Phase B has no Stop-hook reminder: it runs on the skill's description or an
+ * explicit request, and the tail of this file guards that the hook stays removed.
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
-import { assertChecklistTracksFlow, parseFrontmatter, section } from "../lib/matchers.ts";
+import {
+  assertChecklistTracksFlow,
+  assertOrder,
+  parseFrontmatter,
+  section,
+} from "../lib/matchers.ts";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
 const VERIFY = `${ROOT}skills/ingrain-security/references/verification-pass.md`;
 const VERIFIER_REF = `${ROOT}skills/ingrain-security/references/ingrain-mitigation-verifier.md`;
+const BLIND_REF = `${ROOT}skills/ingrain-security/references/ingrain-blind-maturity-reviewer.md`;
+
+/**
+ * The contents of every fenced code block in `md`, joined. In a dispatch section that is the
+ * prompt text the orchestrator pastes to the subagent — as opposed to the prose around it,
+ * which addresses the orchestrator instead and may legitimately name what NOT to hand over.
+ */
+const fencedBlock = (md: string): string =>
+  [...md.matchAll(/```[^\n]*\n([\s\S]*?)```/g)].map((m) => m[1]).join("\n");
 const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/assessment-file.md`;
 const RULES_REF = `${ROOT}skills/ingrain-security/references/rules-file.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
-const VERIFY_CHECK = `${ROOT}hooks/claude/verify-check`;
-const CODEX_VERIFY_CHECK = `${ROOT}hooks/codex/verify-check`;
-const VERIFY_CHECK_LIB = `${ROOT}skills/ingrain-security/scripts/lib/verify-check.sh`;
 
 /** Phase B carries the same flow/checklist split as Phase A — see skill.test.ts. */
 Deno.test("verification-pass.md: the Phase B checklist tracks every step in the flow", async () => {
@@ -70,10 +83,14 @@ Deno.test("SKILL.md: routes to a phase from repo state, then points at the refer
   assertStringIncludes(md, "it is a pointer, not the procedure");
 });
 
-Deno.test("SKILL.md: the SUBAGENT-STOP block covers the verifier and both phases", async () => {
+Deno.test("SKILL.md: the SUBAGENT-STOP block covers both Phase B reads and both phases", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // The verifier reads the injected SKILL.md, observes a dirty tree, and must not recurse.
-  assertStringIncludes(md, "ingrain-mitigation-verifier), do the one job you were given");
+  // Both Phase B workers read the injected SKILL.md, observe a dirty tree, and must not recurse.
+  assertStringIncludes(md, "ingrain-mitigation-verifier,");
+  assertStringIncludes(
+    md,
+    "ingrain-blind-maturity-reviewer), do the one job you were given",
+  );
   assertStringIncludes(md, "neither Phase A nor Phase B");
 });
 
@@ -126,11 +143,21 @@ Deno.test("verification-pass.md: verifies the working-tree diff and reuses the a
   assertStringIncludes(md, "references/assessment-file.md");
 });
 
-Deno.test("verification-pass.md: marks the assessment checked (Verified + Latest stage: review)", async () => {
+Deno.test("verification-pass.md: marks the assessment checked (Verification level + Latest stage: review)", async () => {
   const md = await Deno.readTextFile(VERIFY);
   assertStringIncludes(md, "Latest stage: review");
-  // The verdict enum the orchestrator records.
-  for (const v of ["verified", "insufficient", "missing"]) assertStringIncludes(md, v);
+  // The two columns the orchestrator records, and the maturity enum it picks from.
+  assertStringIncludes(md, "Verification level");
+  assertStringIncludes(md, "Justification");
+  for (const v of ["`fail`", "`accepted`", "`high`"]) assertStringIncludes(md, v);
+  // The old verdict enum is gone from the schema. Note this pins the ENUM, not the bare
+  // words: the prose and the report's Gap column still legitimately say "insufficient".
+  assertEquals(
+    md.includes("`verified` | `insufficient` | `missing`"),
+    false,
+    "the old verdict enum must be gone",
+  );
+  assertEquals(md.includes("**`Verified`**"), false, "the Verified column is renamed");
   // The rules sidecar is a persistent planning artifact — Phase B must not delete it.
   assertStringIncludes(md, "do not modify or delete it");
 });
@@ -164,8 +191,92 @@ Deno.test("verifier ref: INTERNAL worker, read-only with a narrow read-only-git 
   // Read-only on the codebase, with read-only git to obtain the diff, and writes nothing.
   assertStringIncludes(md.toLowerCase(), "read-only");
   assertStringIncludes(md, "git diff HEAD");
-  // Leads with the verdict word.
-  for (const v of ["verified", "insufficient", "missing"]) assertStringIncludes(md, v);
+  // Grades on the maturity ladder, and leads with the JUSTIFICATION — not the level. The
+  // order is the point: a level written first is one the justification then argues for.
+  for (const v of ["`fail`", "`accepted`", "`high`"]) assertStringIncludes(md, v);
+  assertOrder(md, "JUSTIFICATION", "LEVEL", "the verifier leads with its justification");
+});
+
+Deno.test("verification-pass.md: defines the three maturity levels", async () => {
+  const s = section(await Deno.readTextFile(VERIFY), "## Maturity levels");
+  for (const v of ["`fail`", "`accepted`", "`high`"]) assertStringIncludes(s, v);
+  // `fail` subsumes both old verdicts; the split survives only in the report's Gap column.
+  assertStringIncludes(s.toLowerCase(), "not sufficiently implemented");
+  // `high` is `accepted` PLUS artefacts — not a synonym for "well implemented".
+  assertStringIncludes(s.toLowerCase(), "artefact");
+  assertStringIncludes(s.toLowerCase(), "test");
+});
+
+Deno.test("verification-pass.md: dispatches both reads — informed per mitigation, one blind", async () => {
+  const md = await Deno.readTextFile(VERIFY);
+  assertStringIncludes(md, "Read references/ingrain-blind-maturity-reviewer.md");
+  assertStringIncludes(md, "per adopted mitigation");
+  // The prompt the orchestrator actually pastes names neither minted path — that is what
+  // makes the read blind. Assert on the fenced block alone, not the whole section: the
+  // surrounding prose names both paths deliberately, to say which values NOT to pass.
+  const prompt = fencedBlock(section(md, "## How to dispatch the blind reviewer"));
+  for (const leak of ["assessment_abs", "rules_abs"]) {
+    assertEquals(prompt.includes(leak), false, `the blind dispatch prompt must not carry ${leak}`);
+  }
+  // The task title is the one thing it IS given.
+  assertStringIncludes(prompt, "The task is titled");
+  // The informed dispatch is the contrast: its prompt DOES hand over both paths. Without
+  // this, the assertion above would still pass if the fence were empty or misparsed.
+  const informed = fencedBlock(section(md, "## How to dispatch a verifier"));
+  for (const needed of ["assessment_abs", "rules_abs"]) {
+    assertStringIncludes(informed, needed);
+  }
+});
+
+Deno.test("verification-pass.md: reconciliation weighs justifications, informed is the prior", async () => {
+  const s = section(await Deno.readTextFile(VERIFY), "## Reconciling the two reads");
+  const lower = s.toLowerCase();
+  // Justifications are read and weighed BEFORE the levels — never a mechanical word-compare.
+  assertOrder(lower, "justification", "level", "justifications are weighed before the levels");
+  assertStringIncludes(lower, "do not compare");
+  // The informed read is the prior; blind moves a level only on better `file:line` evidence.
+  assertStringIncludes(lower, "prior");
+  assertStringIncludes(s, "file:line");
+  // Blind silence is not evidence of absence.
+  assertStringIncludes(lower, "never lowers a level");
+  // The conclusion — and the Justification — are the orchestrator's own.
+  assertStringIncludes(lower, "your own");
+  // Unmapped blind findings get a home, and it is not the Gate-2 mitigation table.
+  assertStringIncludes(s, "## Coverage / open items");
+});
+
+Deno.test("blind reviewer ref: INTERNAL worker, read-only, writes nothing", async () => {
+  const md = await Deno.readTextFile(BLIND_REF);
+  const fm = parseFrontmatter(md);
+  assertEquals(fm.name, "ingrain-blind-maturity-reviewer");
+  assertStringIncludes(String(fm.description), "INTERNAL");
+  // Marked internal so it does not self-trigger.
+  assertStringIncludes(md, "do NOT invoke");
+  assertStringIncludes(md.toLowerCase(), "internal worker");
+  assertStringIncludes(md, "do not run the orchestration");
+  // Read-only, with the same narrow read-only-git exception, and it writes NOTHING at all —
+  // unlike a Phase A worker, it has no section of its own.
+  assertStringIncludes(md.toLowerCase(), "read-only");
+  assertStringIncludes(md, "Read, Grep, and Glob");
+  assertStringIncludes(md, "git diff HEAD");
+  assertStringIncludes(md.toLowerCase(), "write nothing");
+  assertStringIncludes(md, "Recommended model:");
+  // Same ladder as the informed read, and the same justification-first contract.
+  for (const v of ["fail", "accepted", "high"]) assertStringIncludes(md, v);
+  assertOrder(md, "JUSTIFICATION", "LEVEL", "the blind reviewer leads with its justification");
+});
+
+Deno.test("blind reviewer ref: is actually blind — no assessment, mitigations, or rules", async () => {
+  const md = await Deno.readTextFile(BLIND_REF);
+  // The whole value of the second read is that it never saw the analysis: handed a pointer to
+  // the assessment or the sidecar it would confirm what it was told to expect, and agreement
+  // for that reason is worth nothing. This assertion is the only thing enforcing the design.
+  for (const leak of ["assessment_abs", "rules_abs", "Selection", "Rule refs", "Threat tags"]) {
+    assertEquals(md.includes(leak), false, `the blind reviewer must never be given ${leak}`);
+  }
+  // It is given exactly two things.
+  assertStringIncludes(md, "task title");
+  assertStringIncludes(md, "working-tree diff");
 });
 
 Deno.test("verifier ref: reads its rule descriptions from the sidecar, runs no CLI", async () => {
@@ -179,16 +290,26 @@ Deno.test("verifier ref: reads its rule descriptions from the sidecar, runs no C
   assertEquals(md.includes("ingrain context"), false, "verifier must not run the CLI");
 });
 
-Deno.test("assessment-file.md: defines the optional Verified column and its values", async () => {
+Deno.test("assessment-file.md: defines the Justification + Verification level columns", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
-  // The new column and its enumerated values.
-  assertStringIncludes(md, "**Verified**");
-  for (const v of ["verified", "insufficient", "missing"]) assertStringIncludes(md, v);
-  // It is the Phase B verification that fills it, at the review stage.
+  // The two columns and the maturity enum.
+  assertStringIncludes(md, "**Verification level**");
+  assertStringIncludes(md, "**Justification**");
+  for (const v of ["`fail`", "`accepted`", "`high`"]) assertStringIncludes(md, v);
+  assertEquals(md.includes("**Verified**"), false, "the Verified column is renamed");
+  // It is the Phase B verification that fills them, at the review stage.
   assertStringIncludes(md, "Phase B");
   assertStringIncludes(md, "Latest stage: review");
-  // The Verified column is present in the template header.
-  assertStringIncludes(md, "| Selection | Verified |");
+  // One string pins all three at once: the rename, the addition, and the ordering —
+  // Justification sits immediately BEFORE the level so reasoning drives the conclusion.
+  assertStringIncludes(md, "| Selection | Justification | Verification level |");
+  assertStringIncludes(md, "Justification leads the Verification level on purpose");
+  // Both Justifications in the file (Threats + Mitigations) carry the same 256-char cap.
+  assertEquals(
+    [...md.matchAll(/≤ 256 characters/g)].length,
+    2,
+    "both Justification columns must be capped at 256 characters",
+  );
   // Org rules now live in the linked sidecar, not a section of this file.
   assertStringIncludes(md, "references/rules-file.md");
   assertEquals(md.includes("## Org rules"), false, "the ## Org rules section moved to the sidecar");
@@ -208,53 +329,34 @@ Deno.test("rules-file.md: defines the persistent org-rules sidecar schema", asyn
 });
 
 /**
- * True when `script` really SOURCES `lib` — a `.` command line, in either style the scripts
- * use. Mirrors the helper in skill.test.ts: a plain substring search would be fooled by the
- * `# shellcheck source=…` directive that precedes every source line.
+ * The Stop-hook reminder was removed: Phase B is no longer nudged at the turn boundary, and
+ * `verify-check` (both host wrappers + the shared decision lib) is gone with it. Phase B now
+ * runs on the skill's own description or an explicit request.
+ *
+ * This guards the removal in both directions. A Stop entry that reappears would fire a hook
+ * whose script no longer exists — failing on every turn end, on a file nobody would think to
+ * look at — so the registration and the scripts have to stay gone together.
  */
-async function sourcesLib(script: string, lib: string): Promise<boolean> {
-  const source = new RegExp(String.raw`^(?:if !\s+)?\.\s+\S*lib/${lib}\.sh`, "m");
-  return source.test(await Deno.readTextFile(script));
-}
-
-Deno.test("hook.json: Claude registers a Stop hook invoking verify-check", async () => {
-  const hook = JSON.parse(await Deno.readTextFile(HOOK_JSON));
-  const stop = hook.hooks?.Stop;
-  assertEquals(Array.isArray(stop), true, "Stop must be registered");
-  const serialized = JSON.stringify(stop);
-  assertStringIncludes(serialized, "claude/verify-check");
-  // The host token is passed, matching the other hooks.
-  assertStringIncludes(serialized, "verify-check claude");
-});
-
-Deno.test("hook.json: Codex registers a Stop hook invoking verify-check", async () => {
-  const hook = JSON.parse(await Deno.readTextFile(CODEX_HOOK_JSON));
-  const stop = hook.hooks?.Stop;
-  assertEquals(Array.isArray(stop), true, "Codex Stop must be registered");
-  const serialized = JSON.stringify(stop);
-  assertStringIncludes(serialized, "codex/verify-check");
-  // The host token is passed, matching the other Codex hooks.
-  assertStringIncludes(serialized, "verify-check codex");
-});
-
-Deno.test("verify-check: both host wrappers source the shared libs and guard the loop", async () => {
-  // The guard decision lives once in lib/verify-check.sh; each host wrapper sources it
-  // (plus project-root.sh) so the two hosts cannot drift apart on when they remind.
-  for (const hook of [VERIFY_CHECK, CODEX_VERIFY_CHECK]) {
-    assertEquals(await sourcesLib(hook, "project-root"), true, `${hook} must source project-root`);
-    assertEquals(await sourcesLib(hook, "verify-check"), true, `${hook} must source verify-check`);
-    const src = await Deno.readTextFile(hook);
-    // The stop-loop guard and the Stop JSON stay in the wrapper (it owns stdin + output).
-    assertStringIncludes(src, "stop_hook_active");
-    assertStringIncludes(src, '"decision": "block"');
-    assertStringIncludes(src, "verify_check_reason");
+Deno.test("hook.json: neither host registers a Stop hook", async () => {
+  for (const [host, path] of [["Claude", HOOK_JSON], ["Codex", CODEX_HOOK_JSON]] as const) {
+    const hook = JSON.parse(await Deno.readTextFile(path));
+    assertEquals(hook.hooks?.Stop, undefined, `${host} must not register a Stop hook`);
+    assertEquals(
+      JSON.stringify(hook).includes("verify-check"),
+      false,
+      `${host} must not reference the removed verify-check script`,
+    );
   }
-  // The reminder condition (dirty tree + not-yet-verified adopted mitigation) lives in the lib.
-  const lib = await Deno.readTextFile(VERIFY_CHECK_LIB);
-  assertStringIncludes(lib, "status --porcelain");
-  assertStringIncludes(lib, "Latest stage: review");
-  // The reminder names the surviving skill and doubles as the explicit Phase B override,
-  // so the auto-invoked path never depends on title-keyed phase detection.
-  assertStringIncludes(lib, "run the 'ingrain-security' skill");
-  assertStringIncludes(lib, "Phase B verification request");
+});
+
+Deno.test("verify-check: the scripts and shared lib are gone", async () => {
+  const removed = [
+    "hooks/claude/verify-check",
+    "hooks/codex/verify-check",
+    "skills/ingrain-security/scripts/lib/verify-check.sh",
+  ];
+  for (const rel of removed) {
+    const exists = await Deno.stat(`${ROOT}${rel}`).then(() => true, () => false);
+    assertEquals(exists, false, `${rel} was removed with the Stop hook and must not return`);
+  }
 });

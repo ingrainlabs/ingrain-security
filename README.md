@@ -62,21 +62,35 @@ has two phases and picks between them from repo state: **Phase A** is the plan r
 run before code; **Phase B** (spec:
 [`skills/ingrain-security/references/verification-pass.md`](skills/ingrain-security/references/verification-pass.md))
 runs after you implement a task whose plan went through that review. It locates the task's
-assessment file, reviews the **working-tree diff**, and dispatches one read-only
-`ingrain-mitigation-verifier` subagent per adopted mitigation to confirm it is actually
-implemented. It reports back — all verified, or the specific mitigations that are `missing` or
-`insufficient`, with evidence and a fix recommendation — and marks the assessment checked by
-recording each mitigation's **Verified** status and advancing the file's stage to `review`. It
-writes no code, runs no user gates, and makes no `ingrain` CLI call: each verifier reads its
-mitigation's org rules back from the `rules-<…>.md` sidecar Phase A persisted.
+assessment file, reviews the **working-tree diff**, and takes **two independent reads** of it:
+one read-only `ingrain-mitigation-verifier` per adopted mitigation, each holding that
+mitigation and the threats it covers; and one `ingrain-blind-maturity-reviewer` that is shown
+only the diff and the task title — no threats, no mitigations, no rules. The blind read exists
+because a verifier handed a mitigation and asked whether it is implemented is under quiet
+pressure to find it; a reader who does not know what was planned is the one who can notice the
+control that is not actually holding, or the one nobody listed.
 
-- **Automatic.** A `Stop` hook (the turn-end event on both Claude Code and Codex) reminds the
-  agent to run it once a task with adopted mitigations has uncommitted changes that haven't been
-  verified. On Codex you approve the hook once via `/hooks` before it fires.
+Both reads justify before they conclude, and the skill **reconciles them by weighing those
+justifications on their evidence** rather than comparing verdict words — the informed read is
+favoured, since it is the one that knew what the mitigation was supposed to be, and the blind
+read moves a level only when it cites concrete code the informed read did not reckon with.
+
+It reports each adopted mitigation's maturity — `fail` (not sufficiently implemented),
+`accepted` (implemented as described), or `high` (implemented broadly *and* backed by artefacts
+such as adversarial tests) — with evidence and a fix recommendation, and marks the assessment
+checked by recording each mitigation's **Justification** + **Verification level** and advancing
+the file's stage to `review`. It writes no code, runs no user gates, and makes no `ingrain` CLI
+call: each verifier reads its mitigation's org rules back from the `rules-<…>.md` sidecar
+Phase A persisted.
+
+- **On the skill's own trigger.** The skill description tells the agent to run Phase B after it
+  implements code for a reviewed plan, before presenting or committing it. Nothing enforces this
+  at the turn boundary — it is the agent acting on the description, so treat it as a strong
+  default rather than a guarantee.
 - **Manual.** Invoke the skill after implementing — e.g. *"Use ingrain-security to verify the
   mitigations I just implemented."* Naming the phase is enough to select it; otherwise the skill
   routes on state (an assessment for this task, carrying adopted mitigations, plus a dirty tree
-  → Phase B).
+  → Phase B). This is the reliable way to run it.
 
 If a task has no assessment (or no adopted mitigations), there is nothing to verify.
 
