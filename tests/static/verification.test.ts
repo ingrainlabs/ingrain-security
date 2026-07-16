@@ -1,9 +1,10 @@
 /**
- * Static checks on the ingrain-security-test skill and its hook wiring. No model
- * calls. Guards the verification contract the skill relies on: it reads the same
- * per-task assessment file (by ABSOLUTE assessment_abs), dispatches a read-only
- * verifier subagent per adopted mitigation, records a Verified status + advances
- * the stage to review, and is reminded by a Stop hook on both Claude and Codex.
+ * Static checks on the ingrain-security Phase B (verification) pass and its hook wiring.
+ * No model calls. Guards the verification contract: Phase B lives in a reference the
+ * slim SKILL.md points at, reads the same per-task assessment file (by ABSOLUTE
+ * assessment_abs), dispatches a read-only verifier subagent per adopted mitigation,
+ * records a Verified status + advances the stage to review, and is reminded by a Stop
+ * hook on both Claude and Codex.
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
@@ -11,9 +12,9 @@ import { fromFileUrl } from "@std/path";
 import { parseFrontmatter } from "../lib/matchers.ts";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
-const SKILL = `${ROOT}skills/ingrain-security-test/SKILL.md`;
-const VERIFIER_REF =
-  `${ROOT}skills/ingrain-security-test/references/ingrain-mitigation-verifier.md`;
+const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
+const VERIFY = `${ROOT}skills/ingrain-security/references/verification-pass.md`;
+const VERIFIER_REF = `${ROOT}skills/ingrain-security/references/ingrain-mitigation-verifier.md`;
 const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/assessment-file.md`;
 const RULES_REF = `${ROOT}skills/ingrain-security/references/rules-file.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
@@ -22,31 +23,66 @@ const VERIFY_CHECK = `${ROOT}hooks/claude/verify-check`;
 const CODEX_VERIFY_CHECK = `${ROOT}hooks/codex/verify-check`;
 const VERIFY_CHECK_LIB = `${ROOT}skills/ingrain-security/scripts/lib/verify-check.sh`;
 
-Deno.test("SKILL.md: frontmatter name is ingrain-security-test", async () => {
+Deno.test("SKILL.md: one skill, frontmatter name is ingrain-security", async () => {
   const fm = parseFrontmatter(await Deno.readTextFile(SKILL));
-  assertEquals(fm.name, "ingrain-security-test");
+  assertEquals(fm.name, "ingrain-security");
 });
 
-Deno.test("SKILL.md: dispatches the read-only verifier worker via its reference file", async () => {
+Deno.test("SKILL.md: the description carries both phase triggers", async () => {
+  const fm = parseFrontmatter(await Deno.readTextFile(SKILL));
+  const description = String(fm.description);
+  // Phase A: the planning trigger — before code.
+  assertStringIncludes(description, "AS THE FINAL STEP of building an implementation plan");
+  // Phase B: the verification trigger — after code.
+  assertStringIncludes(description, "AFTER you have implemented code");
+  assertStringIncludes(description, "before you present or commit it");
+  // Both phases are labeled, and the description states they are mutually exclusive.
+  assertStringIncludes(description, "Phase A");
+  assertStringIncludes(description, "Phase B");
+  assertStringIncludes(description, "The phases never overlap");
+});
+
+Deno.test("SKILL.md: routes to a phase from repo state, then points at the reference", async () => {
   const md = await Deno.readTextFile(SKILL);
+  // The phase-select block runs before anything else.
+  assertStringIncludes(md, "## Phase select — do this FIRST");
+  // Phase B is a pointer section, not the procedure — the detail is read on demand.
+  assertStringIncludes(md, "## Phase B — verification");
+  assertStringIncludes(md, "Read `references/verification-pass.md` NOW and follow it.");
+  // The three Phase B conditions, and the signals they are read from.
+  assertStringIncludes(md, "file_exists");
+  assertStringIncludes(md, "git status --porcelain");
+  assertStringIncludes(md, "it is a pointer, not the procedure");
+});
+
+Deno.test("SKILL.md: the SUBAGENT-STOP block covers the verifier and both phases", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  // The verifier reads the injected SKILL.md, observes a dirty tree, and must not recurse.
+  assertStringIncludes(md, "ingrain-mitigation-verifier), do the one job you were given");
+  assertStringIncludes(md, "neither Phase A nor Phase B");
+});
+
+Deno.test("verification-pass.md: dispatches the read-only verifier via its reference file", async () => {
+  const md = await Deno.readTextFile(VERIFY);
   // The one worker role and the read-reference dispatch mechanism.
   assertStringIncludes(md, "ingrain-mitigation-verifier");
   assertStringIncludes(md, "Read references/ingrain-mitigation-verifier.md");
   // The read-only constraint is restated for the dispatched subagent.
   assertStringIncludes(md.toLowerCase(), "read-only");
-  // Cross-platform dispatch mapping is reused from the sibling skill, not duplicated.
-  assertStringIncludes(md, "../ingrain-security/references/platform-dispatch.md");
+  // Now a sibling reference in the same skill — no cross-skill path survives the merge.
+  assertStringIncludes(md, "references/platform-dispatch.md");
+  assertEquals(md.includes("../ingrain-security/"), false, "cross-skill paths must be collapsed");
 });
 
-Deno.test("SKILL.md: one verifier per adopted (selected) mitigation", async () => {
-  const md = await Deno.readTextFile(SKILL);
+Deno.test("verification-pass.md: one verifier per adopted (selected) mitigation", async () => {
+  const md = await Deno.readTextFile(VERIFY);
   assertStringIncludes(md, "per adopted mitigation");
   // Only `selected` mitigations are verified.
   assertStringIncludes(md, "selected");
 });
 
-Deno.test("SKILL.md: writes to the absolute assessment_abs, minted not hand-built", async () => {
-  const md = await Deno.readTextFile(SKILL);
+Deno.test("verification-pass.md: writes to the absolute assessment_abs, minted not hand-built", async () => {
+  const md = await Deno.readTextFile(VERIFY);
   assertStringIncludes(md, "assessment_abs");
   // The verifier dispatch template must hand out the absolute path, never a relative one.
   assertStringIncludes(md, "<the minted assessment_abs — the ABSOLUTE path, pasted in full>");
@@ -58,41 +94,49 @@ Deno.test("SKILL.md: writes to the absolute assessment_abs, minted not hand-buil
   assertStringIncludes(md, ".ingrain-security/assessment-<branch-slug>-<task-slug>.md");
 });
 
-Deno.test("SKILL.md: verifies the working-tree diff and reuses the assessment schema", async () => {
-  const md = await Deno.readTextFile(SKILL);
+Deno.test("verification-pass.md: guards title drift, never falls back to Phase A", async () => {
+  const md = await Deno.readTextFile(VERIFY);
+  // A drifted --title mints a different path; falling through to Phase A would re-run the
+  // whole planning review on already-written code. This is the merge's sharpest edge.
+  assertStringIncludes(md, "verbatim");
+  assertStringIncludes(md, "Do **not** fall through to Phase A.");
+});
+
+Deno.test("verification-pass.md: verifies the working-tree diff and reuses the assessment schema", async () => {
+  const md = await Deno.readTextFile(VERIFY);
   // Working-tree diff scope.
   assertStringIncludes(md, "git diff HEAD");
   assertStringIncludes(md, "git status");
   // Reuses the shared schema reference rather than redefining it.
-  assertStringIncludes(md, "../ingrain-security/references/assessment-file.md");
+  assertStringIncludes(md, "references/assessment-file.md");
 });
 
-Deno.test("SKILL.md: marks the assessment checked (Verified + Latest stage: review)", async () => {
-  const md = await Deno.readTextFile(SKILL);
+Deno.test("verification-pass.md: marks the assessment checked (Verified + Latest stage: review)", async () => {
+  const md = await Deno.readTextFile(VERIFY);
   assertStringIncludes(md, "Latest stage: review");
   // The verdict enum the orchestrator records.
   for (const v of ["verified", "insufficient", "missing"]) assertStringIncludes(md, v);
-  // The rules sidecar is a persistent planning artifact — this skill must not delete it.
+  // The rules sidecar is a persistent planning artifact — Phase B must not delete it.
   assertStringIncludes(md, "do not modify or delete it");
 });
 
-Deno.test("SKILL.md: reads org rules from the rules-*.md sidecar, no CLI", async () => {
-  const md = await Deno.readTextFile(SKILL);
+Deno.test("verification-pass.md: reads org rules from the rules-*.md sidecar, no CLI", async () => {
+  const md = await Deno.readTextFile(VERIFY);
   // Rules come from the planning-written sidecar, minted with rules-path.
   assertStringIncludes(md, "rules-path");
   assertStringIncludes(md, "rules_abs");
-  assertStringIncludes(md, "../ingrain-security/references/rules-file.md");
+  assertStringIncludes(md, "references/rules-file.md");
   // Existence is the signal; the Rule refs ids are the link into the sidecar.
   assertStringIncludes(md, "file_exists");
   assertStringIncludes(md, "Rule refs");
-  // No CLI anywhere in the verification skill.
-  assertEquals(md.includes("ingrain context"), false, "test skill must not query the CLI");
-  assertEquals(md.includes("ingrain --version"), false, "test skill must not probe the CLI");
+  // No CLI anywhere in the verification pass.
+  assertEquals(md.includes("ingrain context"), false, "Phase B must not query the CLI");
+  assertEquals(md.includes("ingrain --version"), false, "Phase B must not probe the CLI");
 });
 
-Deno.test("SKILL.md: announces itself and reports to the coding agent (no user gates)", async () => {
-  const md = await Deno.readTextFile(SKILL);
-  assertStringIncludes(md, "Using ingrain-security-test to verify the implemented mitigations.");
+Deno.test("verification-pass.md: announces itself and reports to the coding agent (no user gates)", async () => {
+  const md = await Deno.readTextFile(VERIFY);
+  assertStringIncludes(md, "Using ingrain-security to verify the implemented mitigations.");
 });
 
 Deno.test("verifier ref: INTERNAL worker, read-only with a narrow read-only-git exception", async () => {
@@ -125,8 +169,8 @@ Deno.test("assessment-file.md: defines the optional Verified column and its valu
   // The new column and its enumerated values.
   assertStringIncludes(md, "**Verified**");
   for (const v of ["verified", "insufficient", "missing"]) assertStringIncludes(md, v);
-  // It is the ingrain-security-test skill that fills it, at the review stage.
-  assertStringIncludes(md, "ingrain-security-test");
+  // It is the Phase B verification that fills it, at the review stage.
+  assertStringIncludes(md, "Phase B");
   assertStringIncludes(md, "Latest stage: review");
   // The Verified column is present in the template header.
   assertStringIncludes(md, "| Selection | Verified |");
@@ -194,5 +238,8 @@ Deno.test("verify-check: both host wrappers source the shared libs and guard the
   const lib = await Deno.readTextFile(VERIFY_CHECK_LIB);
   assertStringIncludes(lib, "status --porcelain");
   assertStringIncludes(lib, "Latest stage: review");
-  assertStringIncludes(lib, "ingrain-security-test");
+  // The reminder names the surviving skill and doubles as the explicit Phase B override,
+  // so the auto-invoked path never depends on title-keyed phase detection.
+  assertStringIncludes(lib, "run the 'ingrain-security' skill");
+  assertStringIncludes(lib, "Phase B verification request");
 });

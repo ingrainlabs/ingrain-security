@@ -53,7 +53,7 @@ shape.
   | `## Threats` | `ingrain-threat-generator` (descriptive columns, working tags) → `ingrain-risk-scorer` (scoring columns, then re-tags the rows into risk order) → orchestrator (Selection at Gate 1) — **filled in stages** |
   | `## Threat critique` | `ingrain-threat-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Risk score` | `ingrain-risk-scorer` (plan-level residual) |
-  | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Selection at Gate 2) → `ingrain-security-test` orchestrator (Verified at the review stage) |
+  | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Selection at Gate 2) → the Phase B verification pass (Verified at the review stage) |
   | `## Mitigation critique` | `ingrain-mitigation-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Coverage / open items`, `## Maintenance` | orchestrator (finalize) |
 
@@ -78,8 +78,8 @@ must use **exactly one** of the listed values (lower-case, verbatim).
 ### `## Task` 
 - **Title** — string.
 - **Latest stage** — `planning` | `development` | `review`. The lifecycle stage the file has
-  reached: `planning`/`development` while the `ingrain-security` review and implementation are
-  in progress; `review` once the `ingrain-security-test` verification has checked the adopted
+  reached: `planning`/`development` while the Phase A review and implementation are
+  in progress; `review` once the Phase B verification pass has checked the adopted
   mitigations against the implementation.
 
 ### `## Triage` — the relevance-triage verdict
@@ -150,7 +150,7 @@ this table.
 | **Threat tags** | `0..N` threat tags (e.g. `T1, T3`); `—` when the mitigation is a general implementation instruction not tied to a specific threat |
 | **Rule refs** | the org rule id(s) the mitigation follows, `0..N` comma-separated (e.g. `r-auth-01, r-log-03`); `—` when it follows no org rule (a pure threat mitigation). One mitigation may follow multiple rules. Ids are machine-facing — stored here, **never rendered to the user** (Gate 2 shows rule titles instead). Each id is the link into the persistent `rules-<…>.md` sidecar, where the rule's title and full body live (see `references/rules-file.md`). |
 | **Selection** | `selected` \| `excluded` \| `undecided` (optional until Gate 2) |
-| **Verified** | `verified` \| `insufficient` \| `missing` — the `ingrain-security-test` verification result for a `selected` mitigation. **Optional until that verification runs**; `—` before then and for any row not `selected`. |
+| **Verified** | `verified` \| `insufficient` \| `missing` — the Phase B verification result for a `selected` mitigation. **Optional until that verification runs**; `—` before then and for any row not `selected`. |
 
 **Follows org rules is derived, not stored twice.** A mitigation with ≥1 **Rule ref**
 follows org rules; an empty **Rule refs** (`—`) means a pure threat mitigation. Surface
@@ -162,13 +162,13 @@ Titles are not stored in this table — no title column is added.
 **Gate 2 → Selection.** Record each mitigation's **Selection**:
 adopt → `selected`, decline → `excluded`; `undecided` only if the user is unsure.
 
-**Verification → Verified.** After implementation, the `ingrain-security-test` skill checks
-each `selected` mitigation against the working-tree diff and records the outcome in
-**Verified**: `verified` (implemented as described), `insufficient` (partial/weak), or
-`missing` (absent). Rows that are not `selected` stay `—`. Writing this column is what
-"marks the assessment checked", alongside setting `## Task` → `Latest stage: review`. The
-`ingrain-security` planning review leaves the column empty/`—`; it is filled only at the
-review stage.
+**Verification → Verified.** After implementation, the `ingrain-security` **Phase B**
+verification pass (`references/verification-pass.md`) checks each `selected` mitigation
+against the working-tree diff and records the outcome in **Verified**: `verified`
+(implemented as described), `insufficient` (partial/weak), or `missing` (absent). Rows that
+are not `selected` stay `—`. Writing this column is what "marks the assessment checked",
+alongside setting `## Task` → `Latest stage: review`. The Phase A planning review leaves the
+column empty/`—`; it is filled only at the review stage.
 
 The retrieved org rules (ids, titles, full bodies, and the per-mitigation mapping) live in
 the **linked `rules-<branch-slug>-<task-slug>.md` sidecar**, not in this file — see

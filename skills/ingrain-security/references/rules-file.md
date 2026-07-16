@@ -28,8 +28,8 @@ back **without re-querying the CLI**. Follow this structure exactly.
   signal that no org rules back this task's mitigations, and downstream readers fall back to
   the mitigation Descriptions alone.
 - **Persistent — not deleted at finalize.** This is the key difference from the assessment
-  file's transient scratch sections. Once written it **stays**, so the `ingrain-security-test`
-  verification (which runs in a later session) can re-mint the path and read the rule
+  file's transient scratch sections. Once written it **stays**, so the Phase B verification
+  pass (which runs in a later session) can re-mint the path and read the rule
   descriptions. It is **git-ignored** (the folder self-ignores), so it stays uncommitted.
 - **Pre-approved for writing.** The `allow-assessment-write` hook auto-approves writes to
   `rules*.md` directly inside `.ingrain-security/` (the same grant that covers `assessment*.md`),

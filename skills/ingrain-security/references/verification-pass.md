@@ -1,42 +1,13 @@
----
-name: ingrain-security-test
-description: >-
-  Use this AFTER you have implemented code for a task, once the change is written
-  but before you present or commit it — the verification counterpart to the
-  ingrain-security planning review. It only applies when the task already has an
-  `.ingrain-security` assessment file (produced by the ingrain-security skill at
-  planning time) carrying adopted mitigations. It locates that assessment for the
-  current branch + task, reviews the working-tree diff, and dispatches one read-only
-  subagent per adopted mitigation to verify the implementation actually applies it.
-  Each verifier is given the org rule descriptions behind its mitigation, read from the
-  linked `rules-<…>.md` sidecar the planning review persisted (no CLI call).
-  It then reports back — all mitigations verified, or the specific ones that are
-  missing or insufficiently implemented, with evidence and fix guidance, so you can
-  revisit them — and marks the assessment checked (records each mitigation's Verified
-  status and advances the file's stage to review). It writes no code and does not
-  re-run the planning review; it verifies what was planned was built.
----
+# Phase B — the mitigation verification loop
 
-<SUBAGENT-STOP>
-If you were dispatched as a worker subagent (ingrain-mitigation-verifier), do the one
-verification job you were given and return your verdict. Do NOT run this orchestration —
-you are part of it.
-</SUBAGENT-STOP>
+This is the procedure for **Phase B** of the `ingrain-security` skill: the verification
+counterpart to the planning review in `SKILL.md`. You are here because **Phase select** routed
+you here — the task has an assessment carrying adopted mitigations and the working tree is
+dirty. Nothing in `SKILL.md`'s Steps 0–7 applies: you do not threat-model, you run no user
+gates, you make no `ingrain` CLI call, and you edit no code. You check that the mitigations
+Gate 2 adopted were actually implemented, and you record the result.
 
-<EXTREMELY-IMPORTANT>
-This is a verification pass, not a planning pass. Run it once code has been written for a
-task **whose plan went through the `ingrain-security` review** — i.e. a task with an
-`.ingrain-security/assessment-<branch-slug>-<task-slug>.md` file that carries adopted
-(`selected`) mitigations. The trigger is the *state*: implementation exists in the working
-tree and an assessment with adopted mitigations exists for this task. If there is no
-assessment for the task, or it has no `selected` mitigations, there is nothing to verify —
-say so and stop. You do not threat-model here and you do not edit code; you check that the
-mitigations the plan adopted were actually implemented, and you record the result.
-</EXTREMELY-IMPORTANT>
-
-# Mitigation verification loop
-
-**Announce:** open with "Using ingrain-security-test to verify the implemented mitigations."
+**Announce:** open with "Using ingrain-security to verify the implemented mitigations."
 
 You orchestrate one **read-only** worker role, `ingrain-mitigation-verifier`, defined by a
 reference file at `references/ingrain-mitigation-verifier.md`. You dispatch it **once per
@@ -46,14 +17,23 @@ Workers do not write the file and cannot call each other or you.
 
 ## The assessment file
 
-This skill reads and finalizes the **same** per-task assessment file the `ingrain-security`
-planning review wrote — a single file in `.ingrain-security/` at the project root. **Do not
-hand-build its path.** Mint it once, at the start of the run, with the bundled
-**`scripts/assessment-path`** script (the same one the planning skill uses — it lives in the
-sibling skill). Your SessionStart context carries the ready-to-run command (plugin root and
-host already substituted); it takes the form:
+Phase B reads and finalizes the **same** per-task assessment file the Phase A planning review
+wrote — a single file in `.ingrain-security/` at the project root. **Do not hand-build its
+path.** Mint it once, at the start of the run, with the bundled **`scripts/assessment-path`**
+script. Your SessionStart context carries the ready-to-run command (plugin root and host
+already substituted); it takes the form:
 
     bash <plugin>/skills/ingrain-security/scripts/assessment-path <host> mint --title "<task title>"
+
+**The `--title` must be the task's title as Phase A recorded it — reuse the assessment's
+`## Task` → **Title** verbatim.** Never re-derive a title from the conversation or paraphrase
+it: the mint is keyed on branch **+ task slug**, so a drifted title mints a *different* path,
+returns `file_exists: false`, and sends Phase select back to Phase A — re-running the whole
+planning review on code that is already written. If you reached Phase B via the Stop-hook
+reminder or an explicit request and the mint returns `file_exists: false`, you almost
+certainly minted the wrong title: recover it from the file itself (Glob
+`<project_root>/.ingrain-security/assessment-*.md`, read the `## Task` Title of the one for
+this task) and re-mint. Do **not** fall through to Phase A.
 
 The script returns a JSON object. Use its **`assessment_abs`** — the **absolute** path —
 verbatim as the file path for every read and for the finalize write, and obey the
@@ -64,12 +44,10 @@ put it in prose and reports, never in a write target. The path is deterministic 
     <project_root>/.ingrain-security/assessment-<branch-slug>-<task-slug>.md
 
 so it resolves to the **same file** the planning review wrote for this task
-(`file_exists: true` confirms it). **If `file_exists` is `false`**, no assessment exists for
-this task — state "no ingrain-security assessment for this task — nothing to verify" and
-**stop**. The file's schema/template lives in
-`../ingrain-security/references/assessment-file.md`; follow it exactly, including the
-enumerated values for the `Verified` column (`verified` | `insufficient` | `missing`) and the
-`Latest stage` field (`planning` | `development` | `review`).
+(`file_exists: true` confirms it). The file's schema/template lives in
+`references/assessment-file.md`; follow it exactly, including the enumerated values for the
+`Verified` column (`verified` | `insufficient` | `missing`) and the `Latest stage` field
+(`planning` | `development` | `review`).
 
 Writes to `assessment_abs` are pre-approved by the `allow-assessment-write` hook, so expect
 no permission prompt when you finalize. Write **only** to that absolute path — anything else
@@ -94,11 +72,11 @@ paste the whole diff into every dispatch.
 Each adopted mitigation carries **Rule ref ids** (the `Rule refs` column of `## Mitigations`)
 but not the rule bodies. The planning review persisted the rule bodies to a **linked sidecar**,
 `.ingrain-security/rules-<branch-slug>-<task-slug>.md` — the twin of the assessment file, keyed
-by the same branch + task slug (schema: `../ingrain-security/references/rules-file.md`). To let
-each verifier judge `verified` vs `insufficient` against *how the org implements* the control —
-not just the mitigation's generic Description — locate that sidecar and hand each verifier the
-rule descriptions for its mitigation. **This reads a file the planning review already wrote;
-there is no CLI call here** — neither you nor the verifiers query `ingrain`.
+by the same branch + task slug (schema: `references/rules-file.md`). To let each verifier judge
+`verified` vs `insufficient` against *how the org implements* the control — not just the
+mitigation's generic Description — locate that sidecar and hand each verifier the rule
+descriptions for its mitigation. **This reads a file the planning review already wrote; there
+is no CLI call here** — neither you nor the verifiers query `ingrain`.
 
 **Do not hand-build the sidecar path.** Mint it with the bundled **`scripts/rules-path`**
 script, the twin of `assessment-path`; your SessionStart context carries the ready-to-run
@@ -106,8 +84,9 @@ command:
 
     bash <plugin>/skills/ingrain-security/scripts/rules-path <host> mint --title "<task title>"
 
-Use its **`rules_abs`** (absolute) as the read path. Because it is keyed by the same branch +
-task slug, it resolves to the **same sidecar** the planning review wrote for this task.
+Use its **`rules_abs`** (absolute) as the read path, and the **same verbatim title** you minted
+the assessment with. Because it is keyed by the same branch + task slug, it resolves to the
+**same sidecar** the planning review wrote for this task.
 
 - **`file_exists: true`** — the sidecar carries this task's org rules. Read the bounded
   `## Retrieved rules` / `## Per-mitigation mapping` slices you need to give each verifier the
@@ -126,9 +105,9 @@ A verifier is a role defined by a reference file, not a platform-native agent. Y
 its logic yourself — you dispatch a **fresh worker subagent** and tell it to become the
 verifier by reading its reference file. This keeps the check cross-platform: it works wherever
 a subagent primitive exists and degrades to sequential in-context execution where one does
-not. See `../ingrain-security/references/platform-dispatch.md` for the per-platform mapping
-(host with a subagent/task primitive → that primitive, one verifier per call; no-subagent
-fallback → sequential in-context execution).
+not. See `references/platform-dispatch.md` for the per-platform mapping (host with a
+subagent/task primitive → that primitive, one verifier per call; no-subagent fallback →
+sequential in-context execution).
 
 Dispatch every verifier with the same shape. Restate the read-only constraint inline, because
 on hosts without tool-level enforcement it is the only thing enforcing it. The verifier is
@@ -169,8 +148,10 @@ where it does not).
 
 ## Steps — in strict order
 
-0. **Locate the assessment.** Mint the path (see **The assessment file**). If
-   `file_exists: false`, state there is no assessment for this task and **stop**.
+0. **Locate the assessment.** Mint the path with the task's `## Task` Title **verbatim** (see
+   **The assessment file**). If `file_exists: false`, you minted the wrong title — recover it
+   from the file and re-mint. If no assessment for this task genuinely exists, state so and
+   **stop**; do not fall through to the Phase A planning review.
 1. **Capture the diff.** Capture the working-tree diff once (see **The diff under review**).
    If the tree is clean, state "no changes to verify" and **stop**.
 2. **Collect adopted mitigations.** Read the bounded `## Mitigations` slice of the assessment
@@ -179,21 +160,24 @@ where it does not).
    mitigations to verify", set `Latest stage: review`, and **stop** (nothing to check). If
    threats were selected but every mitigation was declined, note that the selected threats
    were accepted with no adopted mitigation — there is nothing to verify.
-3. **Locate the rules file.** Mint `rules_abs` with the `rules-path` command (see **The rules
-   file**). If `file_exists: true`, it carries this task's org rules — you will hand each
-   verifier the rule(s) for its mitigation by pointer. If `file_exists: false`, no rules were
-   retrieved at planning; verifiers verify from Descriptions alone. This is supporting context
-   only — never a blocker and never a finding. (No CLI is involved.)
+3. **Locate the rules file.** Mint `rules_abs` with the `rules-path` command and the same
+   verbatim title (see **The rules file**). If `file_exists: true`, it carries this task's org
+   rules — you will hand each verifier the rule(s) for its mitigation by pointer. If
+   `file_exists: false`, no rules were retrieved at planning; verifiers verify from
+   Descriptions alone. This is supporting context only — never a blocker and never a finding.
+   (No CLI is involved.)
 4. **Dispatch verifiers.** Dispatch one `ingrain-mitigation-verifier` per adopted mitigation
    (see **How to dispatch a verifier**), each pointed at its `M<n>` row, the threat(s) it
    covers, **and — when the sidecar exists — its rule(s) in `rules_abs`**. Collect each verdict
    (`verified` | `insufficient` | `missing`) plus its one-line evidence/gap.
-5. **Finalize the assessment (you write).** Write each verdict into the new **`Verified`**
-   column of the `## Mitigations` table (per
-   `../ingrain-security/references/assessment-file.md`), leaving excluded/undecided rows as
-   `—`, and set `## Task` → `Latest stage: review`. Write to the minted `assessment_abs`. The
-   `rules-<…>.md` sidecar is a persistent planning artifact — **do not modify or delete it**.
-   This is the "mark checked" step — the file now records what was verified.
+5. **Finalize the assessment (you write).** Write each verdict into the **`Verified`**
+   column of the `## Mitigations` table (per `references/assessment-file.md`), leaving
+   excluded/undecided rows as `—`, and set `## Task` → `Latest stage: review`. Write to the
+   minted `assessment_abs`. On a re-verification (the file was already at `Latest stage:
+   review` and the code changed again), **overwrite** the previous verdicts — the column
+   records the current implementation, not a history. The `rules-<…>.md` sidecar is a
+   persistent planning artifact — **do not modify or delete it**. This is the "mark checked"
+   step — the file now records what was verified.
 6. **Report to the coding agent.** Present the findings (see **Reporting format**) and close
    with a one-line verdict. If any mitigation is `insufficient` or `missing`, ask the coding
    agent to revisit exactly those.
@@ -219,29 +203,35 @@ Then close with a one-line verdict:
   presenting the change," naming exactly the `insufficient`/`missing` ones.
 
 This report goes to the **coding agent**, not through user selection windows — there are no
-gates in this skill.
+gates in Phase B.
 
 ## Red flags — stop if you catch yourself thinking…
 
 | Thought | Reality |
 |---------|---------|
-| "No assessment file, I'll threat-model it now" | This skill verifies an existing assessment. No assessment for the task → stop; run `ingrain-security` at planning time instead. |
+| "`file_exists: false`, but I'm clearly verifying code I just wrote" | You minted the wrong title. The mint is keyed on branch + task slug, so a paraphrased title resolves to a different path. Recover the `## Task` Title from the assessment file and re-mint **verbatim** — never fall through to the Phase A planning review on code that is already written. |
+| "No assessment file, I'll threat-model it now" | Phase B verifies an existing assessment. No assessment for the task → stop; Phase A runs at planning time, not after the code is written. |
 | "I'll just eyeball the diff myself" | Dispatch a read-only `ingrain-mitigation-verifier` per mitigation — don't inline the verification. |
 | "I'm 60% sure it's implemented — call it verified" | Only mark `verified` (or `missing`) at ≥80% confidence; otherwise `insufficient` with the specific gap. Never silently pass. |
 | "The verifier can just edit the Verified column itself" | Verifiers are read-only and return verdicts; **you** write the file, to avoid concurrent writes to one table. |
 | "I'll write the results into a fresh file" | Write to the minted `assessment_abs` — the same file the planning review wrote. Never hand-build a path or create an `.ingrain-security/` folder. |
 | "Only threat mitigations matter" | Verify **every** `selected` row — general implementation instructions too. |
-| "I'll query the `ingrain` CLI for the rule bodies" | No CLI here — the rule bodies are in the planning-written `rules-<…>.md` sidecar; mint `rules_abs` and read it. Verifiers never call the CLI either. |
+| "I'll query the `ingrain` CLI for the rule bodies" | No CLI in Phase B — the rule bodies are in the planning-written `rules-<…>.md` sidecar; mint `rules_abs` and read it. Verifiers never call the CLI either. |
 | "The org rule body overrides the mitigation Description" | The Description is the verification contract; the rule body only sharpens `verified` vs `insufficient`. Never fail a mitigation solely for diverging from a rule the Description did not require. |
 | "No rules sidecar exists, so I can't verify" | The sidecar is absent whenever planning retrieved no org rules — expected, never a finding. Dispatch verifiers with no rule pointer; they verify from Descriptions. |
-| "I'll update the sidecar with what I found" | The `rules-<…>.md` sidecar is a persistent planning artifact — this skill only reads it. Record results in the assessment's `Verified` column instead. |
-| "I found a gap, I'll fix the code" | This skill writes no code. Report the gap and ask the coding agent to revisit it. |
+| "I'll update the sidecar with what I found" | The `rules-<…>.md` sidecar is a persistent planning artifact — Phase B only reads it. Record results in the assessment's `Verified` column instead. |
+| "The file is already at `Latest stage: review`, so it's done" | That only means a previous verification ran. If the code changed again, re-verify and overwrite the verdicts — the column records the current implementation. |
+| "I found a gap, I'll fix the code" | Phase B writes no code. Report the gap and ask the coding agent to revisit it. |
 
 ## Rules
 
-- **Verification, not planning.** Runs *after* code is written, on a task that already has an
-  `.ingrain-security` assessment with adopted mitigations. It writes no code; its only
-  assessment writes are the `Verified` column + `Latest stage: review`.
+- **Verification, not planning.** Phase B runs *after* code is written, on a task that already
+  has an `.ingrain-security` assessment with adopted mitigations. It writes no code; its only
+  assessment writes are the `Verified` column + `Latest stage: review`. It never falls back to
+  the Phase A planning review.
+- **The title is the key — reuse it verbatim.** Every mint (`assessment-path` and
+  `rules-path`) uses the assessment's `## Task` Title exactly as written. A paraphrase mints a
+  different file and silently loses the task.
 - **Read-only workers.** Verifiers make no code or repo edits — Read/Grep/Glob plus read-only
   git only, and **no CLI** — and write nothing; they return a verdict. Restate that in every
   dispatch.

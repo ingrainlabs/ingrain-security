@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Stop hook for the ingrain-security-test skill (Claude Code — the Codex twin is
+# Stop hook for the ingrain-security Phase B verification (Claude Code — the Codex twin is
 # hooks/codex/verify-check, on the same Stop event with an identical output shape).
 #
 # Fires when the agent finishes a turn. If the current task has an ingrain-security
 # assessment with an ADOPTED (selected) mitigation that has not yet been verified, and
 # the working tree has uncommitted changes, it reminds the agent to run the
-# 'ingrain-security-test' skill to verify the implemented mitigations before presenting
-# the change. The decision itself lives in the shared lib/verify-check.sh; this wrapper
+# 'ingrain-security' skill's Phase B verification on the implemented mitigations before
+# presenting the change. The decision itself lives in the shared lib/verify-check.sh; this wrapper
 # only owns stdin (the stop-loop guard) and the Claude Stop JSON.
 #
 # Deliberately quiet: it emits the reminder ONLY when all guards hold, so a routine

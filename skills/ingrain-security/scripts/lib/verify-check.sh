@@ -1,4 +1,4 @@
-# Shared decision logic for the ingrain-security-test Stop-hook reminder.
+# Shared decision logic for the ingrain-security Phase B (verification) Stop-hook reminder.
 #
 # The dialect is declared here rather than by a shebang, because this file is sourced,
 # not executed — ShellCheck has no other way to know it is bash.
@@ -20,10 +20,11 @@
 
 # The instruction handed back to the agent when a reminder is warranted. Shared so both
 # hosts emit identical wording.
-VERIFY_CHECK_REASON="This task has an ingrain-security assessment with adopted mitigations that have not been verified against the implementation. Before presenting or committing the change, run the 'ingrain-security-test' skill via the Skill tool to verify each adopted mitigation was implemented."
+VERIFY_CHECK_REASON="This task has an ingrain-security assessment with adopted mitigations that have not been verified against the implementation. Before presenting or committing the change, run the 'ingrain-security' skill via the Skill tool — this is a Phase B verification request, so skip phase detection and verify each adopted mitigation against the working-tree diff."
 
 # Echo VERIFY_CHECK_REASON and return 0 when the current repo state warrants reminding the
-# agent to run ingrain-security-test; echo nothing and return non-zero otherwise. The
+# agent to run the ingrain-security Phase B verification; echo nothing and return non-zero
+# otherwise. The
 # host ($1) selects the project-root resolution (resolve_project_root, from
 # project-root.sh, which the caller must have sourced).
 #

@@ -1,27 +1,38 @@
 ---
 name: ingrain-security
 description: >-
-  Use this AS THE FINAL STEP of building an implementation plan — whether the plan
-  is an ad-hoc approach you sketched inline in the conversation or a formal
-  plan-mode / design-doc session. Run it once your plan is comprehensive and
-  detailed (affected files, concrete implementations, tests) but before you present
-  it or write code. It takes the finished plan as input and folds security back into
-  it. It first triages the change and
-  only runs the full review for security-relevant ("major") changes: threats →
-  0-100 risk score → user selects which threats to address (0–N) → mitigations →
-  user selects which mitigations to adopt, with critic-driven improvement loops,
-  via dedicated read-only subagents. Mitigations are informed by the org's own
-  security rules, retrieved through the ingrain CLI, so they reflect established
-  org practice for how to implement the fix; when rules are retrieved they are
-  persisted (id, title, full body) to a linked `rules-<…>.md` sidecar next to the
-  assessment file, so the verification pass can read them without re-querying. The
-  selected threats and adopted mitigations become part of the plan you produce.
+  Use this at BOTH ends of a security-relevant change; it auto-detects which phase to
+  run from repo state, so invoke it at either moment and let it decide.
+  **Phase A — plan review:** use AS THE FINAL STEP of building an implementation plan —
+  whether the plan is an ad-hoc approach you sketched inline in the conversation or a
+  formal plan-mode / design-doc session. Run it once your plan is comprehensive and
+  detailed (affected files, concrete implementations, tests) but before you present it
+  or write code. It takes the finished plan as input and folds security back into it:
+  it triages the change and only runs the full review for security-relevant ("major")
+  changes: threats → 0-100 risk score → user selects which threats to address (0–N) →
+  mitigations → user selects which mitigations to adopt, with critic-driven improvement
+  loops, via dedicated read-only subagents. Mitigations are informed by the org's own
+  security rules, retrieved through the ingrain CLI, and persisted (id, title, full
+  body) to a linked `rules-<…>.md` sidecar next to the assessment file. The selected
+  threats and adopted mitigations become part of the plan you produce.
+  **Phase B — verification:** use AFTER you have implemented code for that plan, once
+  the change is written but before you present or commit it. It applies only when this
+  task already has an `.ingrain-security` assessment carrying adopted mitigations and
+  uncommitted changes to check them against. It reviews the working-tree diff and
+  dispatches one read-only subagent per adopted mitigation to verify the implementation
+  actually applies it — each verifier reading that mitigation's org rules back from the
+  persisted sidecar, no CLI call. It reports which mitigations are verified and which
+  are missing or insufficiently implemented, with evidence and fix guidance, and records
+  each verdict in the assessment. It writes no code and does not re-run the planning
+  review. The phases never overlap: Phase A runs only before code for the task exists,
+  Phase B only after.
 ---
 
 <SUBAGENT-STOP>
 If you were dispatched as a worker subagent (ingrain-relevance-triage, ingrain-threat-generator,
-ingrain-threat-critic, ingrain-risk-scorer, ingrain-mitigation-generator, ingrain-mitigation-critic), do the one
-job you were given and return. Do NOT run this orchestration — you are part of it.
+ingrain-threat-critic, ingrain-risk-scorer, ingrain-mitigation-generator, ingrain-mitigation-critic,
+ingrain-mitigation-verifier), do the one job you were given and return. Do NOT run this
+orchestration — neither Phase A nor Phase B — you are part of it.
 </SUBAGENT-STOP>
 
 <EXTREMELY-IMPORTANT>
@@ -38,6 +49,52 @@ planning: the plan you hand back already reflects it. If there is even a 1%
 chance the change touches security, run it — triage decides minor vs. major, you
 do not pre-judge it away.
 </EXTREMELY-IMPORTANT>
+
+## Phase select — do this FIRST
+
+This skill has two phases. **Phase A — plan review** is Steps 0–7 below, and is everything
+the `<EXTREMELY-IMPORTANT>` block above describes: it runs on a finished plan, before code.
+**Phase B — verification** (`references/verification-pass.md`) runs on the code that plan
+produced. Decide which one you are in **from repo state, before anything else** — never from
+a guess about what the user meant, and never by reading ahead into Steps 0–7.
+
+**If the user named a phase, that is the answer.** "Verify the mitigations", or the
+Stop-hook reminder, → **Phase B**. "Review this plan" → **Phase A**. Skip the table.
+
+Otherwise resolve the state with **the mint call you already have to make** (see **The
+assessment file**): Phase A mints `assessment_abs` at Step 0 anyway, so run it now, keyed on
+this task's title, and read `file_exists` off its JSON. This is the same one shell call, not
+a new one — minting only resolves the path and ensures the folder, and is safe in either
+phase. If `file_exists: true`, read the bounded `## Mitigations` slice of that file (the
+bounded read the context-window discipline permits). Then:
+
+| `file_exists` | `selected` mitigation rows | working tree | Phase |
+|---|---|---|---|
+| `false` | — | anything | **A** — no assessment for this task; there is nothing to verify |
+| `true` | none | anything | **A** — resume this task's analysis in place (Step 0's `file_exists: true`) |
+| `true` | 1+ | clean | **A** — the plan was reviewed, but no code exists yet to verify |
+| `true` | 1+ | dirty (`git status --porcelain` non-empty) | **B** — read `references/verification-pass.md` NOW |
+
+**Phase B requires all three: an assessment for THIS task, adopted mitigations in it, and a
+dirty tree.** Anything else is Phase A. Note what is deliberately *not* in the table:
+
+- **A dirty tree is never on its own a Phase B signal.** A fresh task whose tree happens to
+  be dirty with unrelated WIP mints a fresh path → `file_exists: false` → row 1 → **Phase A**.
+  **Do not glob `.ingrain-security/` for "some assessment on this branch."** The mint is keyed
+  on branch **+ task title**, and that keying is exactly what stops a new task from adopting a
+  different task's assessment. Take `file_exists` at its word.
+- **`Latest stage` is not a Phase B guard.** An assessment already at `Latest stage: review`
+  whose tree is dirty again — the user revised the code after a verification round — is
+  **Phase B again**: re-verify every adopted mitigation and overwrite the `Verified` column.
+  The plan did not change; the code did. Never re-run Phase A to "re-review" it.
+  (`Latest stage: review` only suppresses the Stop-hook reminder; it does not close the task.)
+- **A `minor` triage adopts no mitigations, so it never routes to B.** It lands on row 2. If
+  the user explicitly asked to verify, the override sends you to Phase B, which stops at "no
+  adopted mitigations to verify" — the correct, cheap answer. Otherwise row 2 resumes Phase A,
+  where triage re-confirms `minor` in one dispatch and stops. Either way, nothing is verified,
+  because by construction there is nothing to verify.
+
+Announce the phase you picked in your opening line, so a misroute costs the user one turn.
 
 # Security review loop
 
@@ -393,7 +450,7 @@ sections it needs — the file is the shared state, so your own context stays le
    command from your INGRAIN-ASSESSMENT-PATHS session context and pass its **`rules_abs`** to
    the generator dispatch alongside `assessment_abs`. The sidecar is written **only if org
    rules were retrieved**; unlike the transient scratch sections it is **not deleted at
-   finalize** — the `ingrain-security-test` verification reads it in a later session.
+   finalize** — the Phase B verification pass reads it in a later session.
 
    **On a `fetch blocked` signal.** If the generator returns
    `fetch blocked — permission needed` (its `ingrain context` lookup was denied by the
@@ -482,6 +539,33 @@ sections it needs — the file is the shared state, so your own context stays le
    (and the threats they cover) are now part of the plan file the coding agent
    implements; incorporate them and continue planning.
 
+## Phase B — verification
+
+Phase B is the verification counterpart to the review above: once the code for a reviewed
+plan is written — but before you present or commit it — it checks that the mitigations Gate 2
+adopted were actually implemented. It reads the working-tree diff, dispatches one read-only
+`ingrain-mitigation-verifier` subagent per adopted mitigation, records each verdict
+(`verified` | `insufficient` | `missing`) into the assessment's `Verified` column, sets
+`## Task` → `Latest stage: review`, and reports the gaps to the coding agent. It has **no
+user gates**, threat-models nothing, and writes no code: it verifies that what was planned
+was built.
+
+It fires when **Phase select** lands on Phase B — an assessment for this task exists, it
+carries `selected` mitigations, and the working tree is dirty. **Nothing above this line
+applies to it:** Steps 0–7, both gates, the critic loops, and the org-rules CLI lookup are
+Phase A only. Phase B makes no `ingrain` CLI call at all — each mitigation's org rules are
+read back from the `rules-<…>.md` sidecar Phase A persisted (see `references/rules-file.md`).
+
+**Read `references/verification-pass.md` NOW and follow it.** The full loop lives there:
+locating the assessment and the rules sidecar, capturing the diff once, the verifier dispatch
+shape, the reporting table, and the empty cases (no assessment / clean tree / no adopted
+mitigations). The verifier's role definition is `references/ingrain-mitigation-verifier.md`;
+it writes against the same schema in `references/assessment-file.md` and uses the same
+per-platform mapping in `references/platform-dispatch.md`. Do not run the loop from this
+section's summary — it is a pointer, not the procedure.
+
+**Announce:** open with "Using ingrain-security to verify the implemented mitigations."
+
 ## Red flags — stop if you catch yourself thinking…
 
 | Thought | Reality |
@@ -499,7 +583,7 @@ sections it needs — the file is the shared state, so your own context stays le
 | "I'll just answer the worker's job myself instead of dispatching" | Each worker runs in its own read-only subagent — dispatch it, don't inline it. |
 | "`.ingrain-security/assessment-….md` is clear enough — the worker will find it" | It won't. A relative path is resolved by whoever receives it, and a worker has no project root in view — it resolves against the file it was reading and creates a stray folder there. Pass the absolute `assessment_abs`, always. |
 | "I'll create the `.ingrain-security/` folder since it's missing" | It is not missing — the script created it at the repo root and it self-ignores, so `git status` never shows it. If you think it's absent, you resolved the path wrong. Re-run the mint script. |
-| "I'll delete the `rules-<…>.md` sidecar at finalize like the scratch sections" | The rules sidecar is a **persistent** linked artifact, not scratch — the verification skill reads it later. Only the two critique sections are deleted. |
+| "I'll delete the `rules-<…>.md` sidecar at finalize like the scratch sections" | The rules sidecar is a **persistent** linked artifact, not scratch — the Phase B verification pass reads it later. Only the two critique sections are deleted. |
 | "No org rules came back, so I'll write an empty `rules-<…>.md`" | The sidecar is written **only when rules were retrieved**. No rules → no file; its absence is the signal, and Gate 2 / verification fall back to Descriptions. |
 | "The `ingrain` CLI errored / isn't configured, so I'll stop the review" | Genuine unavailability (binary absent, unconfigured, no matches) degrades gracefully — proceed without rules, note why, and still propose mitigations. |
 | "The `ingrain` fetch was blocked by the sandbox, so I'll just proceed without rules" | A permission/sandbox denial is recoverable, not graceful-degradation — ask the user for access (native prompt, or the generator's `fetch blocked — permission needed` signal → you prompt and re-dispatch) and retry. Only proceed without rules if the user declines. |

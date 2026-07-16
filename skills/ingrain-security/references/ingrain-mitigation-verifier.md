@@ -1,14 +1,14 @@
 ---
 name: ingrain-mitigation-verifier
 description: >-
-  INTERNAL worker of the ingrain-security-test verification pipeline — do NOT invoke
-  directly or proactively; it is dispatched only by the ingrain-security-test
+  INTERNAL worker of the ingrain-security Phase B verification pass — do NOT invoke
+  directly or proactively; it is dispatched only by the ingrain-security
   orchestrator. Read-only check that one adopted mitigation from the assessment file
   is actually implemented in the working-tree diff.
 ---
 
 > **INTERNAL WORKER — do not run the orchestration.** You were dispatched by the
-> `ingrain-security-test` orchestrator to verify **one** mitigation. Treat the instructions
+> `ingrain-security` orchestrator to verify **one** mitigation. Treat the instructions
 > below as your system prompt, act on the INPUT you were given, and return your verdict — do
 > not invoke other workers, do not verify other mitigations, and do not run the loop yourself.
 >
