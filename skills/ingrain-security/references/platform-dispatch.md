@@ -73,8 +73,8 @@ file at the path this dispatch names" — is a **Development** rule. Testing's w
 **writes nothing at all.** It has no section of its own; it returns its reasoning and the
 orchestrator concludes and records it. So drop the "your only write is…" clause from its
 dispatch and say **you write nothing** instead. It gets one narrow exception — read-only
-git (`git diff HEAD`, `git status`, `git show`) to obtain the working-tree diff — and no
-shell or CLI access beyond it.
+git (`git diff <diff_ref>`, `git status`, `git show`) to obtain the branch diff at the
+`diff_ref` the orchestrator resolved — and no shell or CLI access beyond it.
 
 On a host with a subagent primitive, fan out the per-mitigation verifiers **together** —
 each depends on nothing the others produce. On the sequential fallback, run them in the

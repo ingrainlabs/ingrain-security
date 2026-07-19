@@ -9,11 +9,12 @@ Gate 2 adopted were actually implemented, and you record the result.
 
 **Announce:** open with "Using ingrain-security to verify the implemented mitigations."
 
-You orchestrate **one read-only** worker role and conclude from it yourself:
+You orchestrate **one read-only worker per adopted mitigation** — as many verifiers as there
+are `selected` rows in `## Mitigations` — and conclude from what they return yourself:
 
-- **`ingrain-mitigation-verifier`** (`references/ingrain-mitigation-verifier.md`) — the
-  **informed** read. One per adopted mitigation, each holding that mitigation, the threats it
-  covers, and its org rules (see **How to dispatch a verifier**).
+- **`ingrain-mitigation-verifier`** (`references/ingrain-mitigation-verifier.md`) — one per
+  adopted mitigation, each holding that mitigation, the threats it covers, and its org rules
+  (see **How to dispatch a verifier**).
 
 A verifier handed a mitigation and asked whether it is implemented is under quiet pressure to
 find it. That is why it returns a **justification**, not a verdict: the level it leads with is a
@@ -62,15 +63,45 @@ prompts the user and stalls the run.
 
 ## The diff under review
 
-Verify against the **working tree** — the code as implemented right now. Capture it once, as
-your one shell call besides the mint:
+Verify against **everything this branch added since it diverged from the branch it was cut
+from** — committed **and** uncommitted alike. By the time Testing runs, the coding agent has
+usually committed most of the implementation, so the uncommitted delta alone shows almost
+none of the code the mitigations were adopted for.
 
-- `git status --porcelain` — the set of changed + untracked paths (does anything need
-  verifying at all?).
-- `git diff HEAD` — the committed-vs-working diff of tracked files.
+**The parent branch is not assumed to be `main`.** Branches are routinely cut from other
+feature branches, release branches, or long-lived integration branches. Resolve the branch
+this one *actually* diverged from — never hardcode a trunk name.
+
+**Resolving the fork point.** Take every other local and remote branch, compute its merge-base
+with `HEAD`, discard any whose merge-base *is* `HEAD` (those contain no divergence), and keep
+the merge-base with the **most recent commit date** — the nearest branch point. One shell step:
+
+    cur=$(git branch --show-current)
+    for ref in $(git for-each-ref --format='%(refname:short)' refs/heads refs/remotes); do
+      [ "$ref" = "$cur" ] && continue
+      mb=$(git merge-base HEAD "$ref" 2>/dev/null) || continue
+      { [ -z "$mb" ] || [ "$mb" = "$(git rev-parse HEAD)" ]; } && continue
+      printf '%s\t%s\t%s\n' "$(git show -s --format=%ct "$mb")" "$ref" "$mb"
+    done | sort -rn | head -1
+
+The winning line gives you **`base_ref`** (field 2 — the parent branch, for the report) and
+**`diff_ref`** (field 3 — the merge-base commit, what you actually diff against). Where two
+refs tie on the same merge-base commit, take the first; they yield an identical `diff_ref`.
+
+Then capture, as your remaining shell steps:
+
+- `git diff <diff_ref>` — the full branch delta for tracked files, committed + uncommitted.
+- `git status --porcelain` — the set of changed + untracked paths.
 - New (untracked) files listed by `git status` — read their contents directly.
 
-If the working tree is clean (nothing changed), there is nothing to verify — say so and stop.
+**Fallback — `HEAD`, and only as the fallback.** When no fork point resolves — detached HEAD,
+a repo with no other branch, `merge-base` failing — set `diff_ref = HEAD` and diff
+`git diff HEAD`, the uncommitted delta only. **Say so in the report** whenever you fall back:
+the review is then narrower than intended, and that is a caveat on the result, not a silent
+detail.
+
+If the branch delta is empty — nothing committed since the fork point and nothing dirty (on
+the `HEAD` fallback: a clean working tree) — there is nothing to verify; say so and stop.
 Each verifier re-derives the slice of this diff relevant to its own mitigation; you do not
 paste the whole diff into every dispatch.
 
@@ -143,8 +174,8 @@ sequential in-context execution).
 Dispatch every verifier with the same shape. Restate the read-only constraint inline, because
 on hosts without tool-level enforcement it is the only thing enforcing it. The verifier is
 read-only on the codebase — **Read/Grep/Glob only** — with **one narrow exception**: it may
-run **read-only git** (`git diff HEAD`, `git status`, `git show`) to obtain the working-tree
-diff. It makes no edits, runs no other commands, and **runs no `ingrain`/CLI commands** — any
+run **read-only git** (`git diff <diff_ref>`, `git merge-base`, `git status`, `git show`) to obtain
+the branch diff. It makes no edits, runs no other commands, and **runs no `ingrain`/CLI commands** — any
 org rule it needs is already in the `rules-<…>.md` sidecar (see **The rules file**). **Hand off
 by pointer:** point the verifier at its mitigation row **and, when the sidecar exists, the
 rule(s) for its Rule refs** rather than pasting the files; the verifier **returns a justification
@@ -154,7 +185,7 @@ concurrent writes to one table):
 ```
 Read references/ingrain-mitigation-verifier.md and follow it as your system prompt.
 You do no code or repo edits — use only Read/Grep/Glob on the codebase, plus read-only git
-(git diff HEAD, git status, git show) to obtain the working-tree diff. You run NO ingrain/CLI
+(git diff <diff_ref>, git status, git show) to obtain the branch diff. You run NO ingrain/CLI
 commands — any org rule you need is in the rules sidecar named below. You write NOTHING —
 not the assessment file, not any file; you only return your justification and level.
 INPUT:
@@ -167,7 +198,12 @@ INPUT:
   SUPPORTING CONTEXT on how the org implements this control; the mitigation Description remains
   the contract you verify against. If the sidecar is absent, or <M-tag>'s Rule refs is `—`,
   verify from the Description alone.
-- Verify whether the working-tree diff implements that mitigation as described.
+- The diff under review is `git diff <the resolved diff_ref — the merge-base commit, pasted in full>`,
+  the delta since this branch diverged from <base_ref> — committed AND uncommitted. Use that ref
+  as given: do NOT re-derive it and do NOT substitute HEAD for it.
+  <When the HEAD fallback is in effect, say so here instead: "no fork point resolved — diff_ref
+  is HEAD, so only uncommitted changes are under review.">
+- Verify whether that branch diff implements that mitigation as described.
 Return ONLY, in this order: JUSTIFICATION (≤256 chars — your reasoning against the Description),
 then LEVEL (fail | accepted | high) for <M-tag>, then EVIDENCE (file:line in the diff), and —
 when the level is `fail` — the GAP (whether the mitigation is ABSENT or PRESENT-BUT-INSUFFICIENT,
@@ -214,8 +250,10 @@ file.
    **The assessment file**). If `file_exists: false`, you minted the wrong title — recover it
    from the file and re-mint. If no assessment for this task genuinely exists, state so and
    **stop**; do not fall through to the plan review.
-1. **Capture the diff.** Capture the working-tree diff once (see **The diff under review**).
-   If the tree is clean, state "no changes to verify" and **stop**.
+1. **Capture the diff.** Resolve the fork point to `base_ref` + `diff_ref`, then capture the
+   branch diff once (see **The diff under review**). Fall back to `diff_ref = HEAD` only when no
+   fork point resolves, and report that you did. If the branch delta is empty, state "no changes
+   to verify" and **stop**.
 2. **Collect adopted mitigations.** Read the bounded `## Mitigations` slice of the assessment
    file and take every row whose **Selection** is `selected` — both threat mitigations and
    general implementation instructions. If **none** are selected, state "no adopted
@@ -280,6 +318,8 @@ gates in Testing.
 |---------|---------|
 | "`file_exists: false`, but I'm clearly verifying code I just wrote" | You minted the wrong title. The mint is keyed on branch + task slug, so a paraphrased title resolves to a different path. Recover the `## Task` Title from the assessment file and re-mint **verbatim** — never fall through to the plan review on code that is already written. |
 | "No assessment file, I'll threat-model it now" | Testing verifies an existing assessment. No assessment for the task → stop; Development runs at planning time, not after the code is written. |
+| "`git diff HEAD` is empty, so there's nothing to verify" | You are diffing the wrong basis. The implementation is almost certainly **committed** on this branch — diff against the fork point (`git diff <diff_ref>`), which carries committed *and* uncommitted work. `HEAD` is the fallback for when no fork point resolves, not the default. |
+| "The branch came off `main`, I'll just diff against `main`" | Never hardcode a trunk name — branches are cut from other feature, release, and integration branches all the time. Resolve the nearest branch point (see **The diff under review**); diffing against the wrong parent drags in unrelated work and buries the change under review. |
 | "I'll just eyeball the diff myself" | Dispatch a read-only `ingrain-mitigation-verifier` per mitigation — don't inline the verification. |
 | "I'm 60% sure it's implemented — call it `accepted`" | `accepted` and `high` need the **≥80%** bar. Below it the level is `fail` with the specific gap — uncertainty lands on `fail` by design. Never round up on a hunch, never silently pass. |
 | "It's implemented, so `high`" | `high` is `accepted` **plus** supporting artefacts — tests that adversarially prove the control holds, at a cited `file:line`. Implemented-as-described with no artefacts is `accepted`, and never `fail`: the missing artefact separates `high` from `accepted`, not `accepted` from `fail`. |
@@ -307,7 +347,7 @@ off by pointer: never paste the assessment, the sidecar, or the full diff into a
 Report the empty cases, never fail silently.
 
 - [ ] 0. Assessment located — title minted verbatim; no assessment for this task → stop
-- [ ] 1. Diff captured once — clean tree → stop
+- [ ] 1. Fork point resolved (`base_ref` + `diff_ref`) and branch diff captured once — `HEAD` only as a reported fallback; empty branch delta → stop
 - [ ] 2. Adopted mitigations collected (`Selection: selected`) — none → set `Latest stage: testing` and stop
 - [ ] 3. Rules sidecar located (`rules_abs`) — absent is expected, never a blocker, never a finding
 - [ ] 4. One verifier dispatched per adopted mitigation — justification FIRST, then `fail`/`accepted`/`high` at the ≥80% bar

@@ -10,7 +10,8 @@ description: >-
   before you present it or write any code. It triages the change and folds selected
   threats and adopted mitigations back into the plan you produce.
   **Testing — verification:** run AFTER you have implemented code for that plan, but
-  before you present or commit it. It checks the working-tree diff against the
+  before you present or commit it. It checks the branch diff — everything committed
+  and uncommitted since this branch diverged from its parent — against the
   mitigations the plan adopted and reports the maturity level each one reached and
   which still need work. It writes no code.
   If there is even a 1% chance the change touches security, invoke it — triage decides

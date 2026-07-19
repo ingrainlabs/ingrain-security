@@ -3,8 +3,8 @@ name: ingrain-mitigation-verifier
 description: >-
   INTERNAL worker of the ingrain-security Testing verification pass — do NOT invoke
   directly or proactively; it is dispatched only by the ingrain-security
-  orchestrator. Read-only, informed check that one adopted mitigation from the assessment
-  file is implemented in the working-tree diff, and at what maturity level.
+  orchestrator. Read-only check that one adopted mitigation from the assessment
+  file is implemented in the branch diff under review, and at what maturity level.
 ---
 
 > **INTERNAL WORKER — do not run the orchestration.** You were dispatched by the
@@ -13,7 +13,7 @@ description: >-
 > not invoke other workers, do not verify other mitigations, and do not run the loop yourself.
 >
 > - **Read-only on the codebase.** Use only Read, Grep, and Glob to inspect the code, **plus
->   read-only git** (`git diff HEAD`, `git status`, `git show`) to obtain the working-tree
+>   read-only git** (`git diff <diff_ref>`, `git status`, `git show`) to obtain the branch
 >   diff. Make no code edits and run no other/mutating commands. You run **no `ingrain`/CLI
 >   commands** — any org rule you need is already in the `rules-<…>.md` sidecar the orchestrator
 >   names in your dispatch. You **write nothing** — not the assessment file, not the sidecar,
@@ -47,16 +47,21 @@ The orchestrator gives you:
   implements** this control. Read only your mitigation's rule(s). If the sidecar is `none`/absent,
   or your row's Rule refs is `—`, proceed from the Description alone — org rules are best-effort
   and their absence is never a gap in the implementation.
-- The instruction to verify that mitigation against the **working-tree diff**.
+- The **`diff_ref`** to verify against — the merge-base commit where this branch diverged from
+  its parent — and the instruction to verify that mitigation against the **branch diff** at
+  that ref.
 
-You obtain the diff yourself with read-only git: `git diff HEAD` for changed tracked files and
-`git status --porcelain` to find new (untracked) files, which you then Read directly. Scope to
-the files and hunks relevant to your mitigation — you do not need the whole diff.
+You obtain the diff yourself with read-only git: `git diff <diff_ref>` for changed tracked
+files — committed **and** uncommitted since the fork point — and `git status --porcelain` to
+find new (untracked) files, which you then Read directly. **Use the `diff_ref` exactly as the
+orchestrator gave it:** do not re-derive it, and do not substitute `HEAD` for it — `HEAD` shows
+only uncommitted work and would hide the committed implementation you are here to verify.
+Scope to the files and hunks relevant to your mitigation — you do not need the whole diff.
 
 ## Task
 
-Decide whether the working-tree implementation applies your mitigation **as its Description
-specifies**.
+Decide whether the implementation in the branch diff applies your mitigation **as its
+Description specifies**.
 
 1. Read your mitigation's Description — the concrete security behavior it requires (e.g.
    "authenticate the token-refresh endpoint", "parameterize the SQL query", "validate and

@@ -62,7 +62,8 @@ has two phases and picks between them from repo state: **Development** is the pl
 run before code; **Testing** (spec:
 [`skills/ingrain-security/references/verification-pass.md`](skills/ingrain-security/references/verification-pass.md))
 runs after you implement a task whose plan went through that review. It locates the task's
-assessment file, reviews the **working-tree diff**, and dispatches one read-only
+assessment file, reviews the **branch diff since this branch diverged from its parent**
+(committed and uncommitted alike), and dispatches one read-only
 `ingrain-mitigation-verifier` per adopted mitigation — each holding that mitigation, the threats
 it covers, and the org rules behind it from the `rules-<…>.md` sidecar.
 

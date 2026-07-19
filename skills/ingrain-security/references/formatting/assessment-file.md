@@ -154,7 +154,7 @@ this table.
 | **Rule refs** | the org rule id(s) the mitigation follows, `0..N` comma-separated (e.g. `r-auth-01, r-log-03`); `—` when it follows no org rule (a pure threat mitigation). One mitigation may follow multiple rules. Ids are machine-facing — stored here, **never rendered to the user** (Gate 2 shows rule titles instead). Each id is the link into the persistent `rules-<…>.md` sidecar, where the rule's title and full body live (see `references/formatting/rules-file.md`). |
 | **Selection** | `selected` \| `excluded` \| `undecided` (optional until Gate 2) |
 | **Justification** | string, **≤ 256 characters** — the reasoning behind the **Verification level**, concluded by the Testing orchestrator from the verifier's read. **Optional until that verification runs**; `—` before then and for any row not `selected`. |
-| **Verification level** | `fail` \| `accepted` \| `high` — the maturity a `selected` mitigation reached in the implementation. **Optional until that verification runs**; `—` before then and for any row not `selected`. |
+| **Verification level** | `fail` \| `accepted` \| `high` — the maturity a `selected` mitigation reached in the implementation: `fail` = not sufficiently implemented (absent, or present and not holding); `accepted` = implemented as its **Description** describes; `high` = `accepted` **plus** supporting artefacts that would fail if the control regressed. Normative definitions: `references/verification-pass.md` → **Maturity levels**. **Optional until that verification runs**; `—` before then and for any row not `selected`. |
 
 **Follows org rules is derived, not stored twice.** A mitigation with ≥1 **Rule ref**
 follows org rules; an empty **Rule refs** (`—`) means a pure threat mitigation. Surface
@@ -166,33 +166,16 @@ Titles are not stored in this table — no title column is added.
 **Gate 2 → Selection.** Record each mitigation's **Selection**:
 adopt → `selected`, decline → `excluded`; `undecided` only if the user is unsure.
 
-**Justification leads the Verification level on purpose.** The same reasoning schema
-`## Threats` uses for its scores: the orchestrator fills the row left-to-right, so writing the
-justification *before* the level forces the reasoning to come first and drive the level, rather
-than rationalizing a level already chosen. Both justifications in this file are capped at
-**256 characters** for the same reason — a justification that needs more than that is a level
-that was decided first.
+**Justification leads the Verification level on purpose** — the same reasoning schema
+`## Threats` uses for its scores (above): filling the row left-to-right forces the reasoning to
+come first and drive the level. The 256-character cap on both justifications is part of that
+forcing — one that needs more room is a level that was decided first.
 
-**Verification → Verification level.** After implementation, the `ingrain-security` **Testing**
-verification pass (`references/verification-pass.md`) verifies each adopted mitigation against the
-working-tree diff and records, per `selected` mitigation, its reasoning in **Justification** and
-the maturity it concluded in **Verification level**:
-
-- **`fail`** — the intended mitigation is **not sufficiently implemented**: absent from the
-  change, or present but partial, weak, or bypassable. The two are one level here; *where* the
-  gap sits is reported to the coding agent, not stored.
-- **`accepted`** — the mitigation is implemented as its **Description** describes.
-- **`high`** — the threat is covered by a **broad, comprehensive** mitigation **and** supporting
-  artefacts back it — e.g. well-covering tests that prove the control holds.
-
-Rows that are not `selected` stay `—` in both columns. Writing these two columns is what "marks
-the assessment checked", alongside setting `## Task` → `Latest stage: testing`. The plan
-review leaves both empty/`—`; they are filled only at the Testing phase.
-
-The retrieved org rules (ids, titles, full bodies, and the per-mitigation mapping) live in
-the **linked `rules-<branch-slug>-<task-slug>.md` sidecar**, not in this file — see
-`references/formatting/rules-file.md` for its schema. This file references them only by the compact
-**Rule refs** ids in `## Mitigations`.
+**Who fills these two columns.** The Testing verification pass
+(`references/verification-pass.md`) concludes each `selected` mitigation's level from the
+evidence and writes both. Rows that are not `selected` stay `—`. Writing them, alongside setting
+`## Task` → `Latest stage: testing`, is what marks the assessment checked; the plan review
+leaves both empty.
 
 ### `## Coverage / open items`
 - Any threat whose **Selection** is `selected` that has no mitigation with

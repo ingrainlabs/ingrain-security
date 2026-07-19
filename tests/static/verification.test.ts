@@ -136,11 +136,15 @@ Deno.test("verification-pass.md: guards title drift, never falls back to Develop
   assertStringIncludes(md, "Do **not** fall through to Development.");
 });
 
-Deno.test("verification-pass.md: verifies the working-tree diff and reuses the assessment schema", async () => {
+Deno.test("verification-pass.md: verifies the branch diff since the fork point and reuses the assessment schema", async () => {
   const md = await Deno.readTextFile(VERIFY);
-  // Working-tree diff scope.
-  assertStringIncludes(md, "git diff HEAD");
+  // The diff basis is the fork point — committed work included, not just the dirty tree.
+  assertStringIncludes(md, "git merge-base");
+  assertStringIncludes(md, "git diff <diff_ref>");
   assertStringIncludes(md, "git status");
+  // HEAD survives only as the documented fallback, and must stay documented.
+  assertStringIncludes(md, "git diff HEAD");
+  assertStringIncludes(md, "only as the fallback");
   // Reuses the shared schema reference rather than redefining it.
   assertStringIncludes(md, "references/formatting/assessment-file.md");
 });
@@ -183,7 +187,7 @@ Deno.test("verification-pass.md: announces itself and reports to the coding agen
   assertStringIncludes(md, "Using ingrain-security to verify the implemented mitigations.");
 });
 
-Deno.test("verifier ref: INTERNAL worker, read-only with a narrow read-only-git exception", async () => {
+Deno.test("verifier ref: INTERNAL worker, read-only with a narrow read-only-git exception on the branch diff", async () => {
   const md = await Deno.readTextFile(VERIFIER_REF);
   const fm = parseFrontmatter(md);
   assertEquals(fm.name, "ingrain-mitigation-verifier");
@@ -192,7 +196,10 @@ Deno.test("verifier ref: INTERNAL worker, read-only with a narrow read-only-git 
   assertStringIncludes(md.toLowerCase(), "internal worker");
   // Read-only on the codebase, with read-only git to obtain the diff, and writes nothing.
   assertStringIncludes(md.toLowerCase(), "read-only");
-  assertStringIncludes(md, "git diff HEAD");
+  // The verifier is HANDED the ref by the orchestrator — it never re-derives it, and must not
+  // fall back to HEAD, which would hide the committed implementation.
+  assertStringIncludes(md, "git diff <diff_ref>");
+  assertStringIncludes(md, "do not substitute `HEAD` for it");
   // Grades on the maturity ladder, and leads with the JUSTIFICATION — not the level. The
   // order is the point: a level written first is one the justification then argues for.
   for (const v of ["`fail`", "`accepted`", "`high`"]) assertStringIncludes(md, v);
