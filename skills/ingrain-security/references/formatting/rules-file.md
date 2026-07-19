@@ -2,10 +2,10 @@
 
 Defines the org-rules **sidecar** the `ingrain-security` review persists next to the
 assessment file. It is the twin of `assessment-file.md`: same folder, same branch + task
-slug, same minted-not-hand-built discipline — but where the assessment carries the
+slug, same minted-path discipline — but where the assessment carries the
 analysis, this file carries the **org security rules** (id, title, and full body/description)
-retrieved for the task, so the verification stage can read the rule descriptions back
-**without re-querying the CLI**. It is filled in two passes: the orchestrator retrieves from
+retrieved for the task, so the verification stage reads the rule descriptions **straight off
+disk**. It is filled in two passes: the orchestrator retrieves from
 the plan and the selected threats before mitigations exist, and `ingrain-rule-expander`
 appends a second pass keyed on the mitigations once they do. Follow this structure exactly.
 
@@ -23,25 +23,24 @@ appends a second pass keyed on the mitigations once they do. Follow this structu
   so `rules-<…>.md` and `assessment-<…>.md` are twin sidecars for one task. The same slug
   fallbacks apply (branch unknown → `rules-<task-slug>.md`; no title → `rules-<branch-slug>.md`;
   both absent → `rules.md`), and the `rules-` prefix always leads. Minting is shared with the
-  assessment path (`scripts/lib/mint-path.sh`), so the two never drift.
-- **Created only when org rules are retrieved.** Unlike the assessment file, this file is
-  **conditional**: it exists **only if** a retrieval pass actually got rules back from the
-  `ingrain` CLI. The orchestrator's first pass normally creates it; if that pass returns
-  nothing, `ingrain-rule-expander` creates it later should its own pass find something. If the
-  CLI is absent, unconfigured, or both passes return nothing (graceful degradation), **no
-  rules file is written** — its absence is the signal that no org rules back this task's
-  mitigations, and downstream readers fall back to the mitigation Descriptions alone.
-- **Persistent — not deleted at finalize.** This is the key difference from the assessment
-  file's transient scratch sections. Once written it **stays**, so the Testing verification
-  pass (which runs in a later session) can re-mint the path and read the rule
-  descriptions. It is **git-ignored** (the folder self-ignores), so it stays uncommitted.
+  assessment path (`scripts/lib/mint-path.sh`), so the two always resolve to matching slugs.
+- **Created when org rules are retrieved.** This file is **conditional**: it exists exactly
+  when a retrieval pass got rules back from the `ingrain` CLI. The orchestrator's first pass
+  normally creates it; where that pass returns nothing, `ingrain-rule-expander` creates it
+  later should its own pass find something. Its presence tells downstream readers that org
+  rules back this task's mitigations; its absence tells them to judge from the mitigation
+  Descriptions alone.
+- **Persistent.** Once written it **stays** — the assessment file's scratch sections are
+  deleted at finalize, this file survives it — so the Testing verification pass (which runs
+  in a later session) can re-mint the path and read the rule descriptions. It is
+  **git-ignored** (the folder self-ignores), so it stays uncommitted.
 - **Pre-approved for writing.** The `allow-assessment-write` hook auto-approves writes to
   `rules*.md` directly inside `.ingrain-security/` (the same grant that covers `assessment*.md`),
   so expect **no permission prompt** when writing it. Any other path still prompts.
 - **Linked from the assessment.** The assessment file links to this sidecar by its relative
   `rules_path`, and each mitigation's **Rule refs** ids (in the assessment's `## Mitigations`
-  table) are the machine link into this file's rule entries. The rule **titles and bodies** are
-  not duplicated into the assessment — they live only here.
+  table) are the machine link into this file's rule entries. The rule **titles and bodies**
+  live here, and the assessment reaches them by that link.
 
 ## Sections and fields
 
@@ -72,7 +71,7 @@ here must appear as an entry in `## Retrieved rules`, and must match that mitiga
 
 ### `## Applicable rules` — optional
 
-Retrieved rules relevant to the change that do not map cleanly onto a single mitigation, each
+Retrieved rules that apply to the change as a whole rather than to one mitigation, each
 as `<id> — <title>`, so the critic and reviewer still see them. Omit the section if there are
 none.
 
@@ -85,20 +84,19 @@ none.
 | Plan · Expand rules (step 7) | `ingrain-rule-expander` | **Appends** second-pass rules to `## Retrieved rules` / `## Applicable rules` — once, never on a revision round; creates the file if step 5 found nothing |
 | Plan · Critique (step 8) | `ingrain-mitigation-critic` | Reads it by pointer to judge how faithfully mitigations follow the cited rules, and which appended rules go unapplied |
 | Plan · Gate 2 (step 9) | orchestrator | Reads `## Per-mitigation mapping` + `## Retrieved rules` to resolve each **Rule ref** id → title for the "Follows rules" display |
-| Plan · finalize | orchestrator | **Leaves it in place** — persistent, never deleted |
+| Plan · finalize | orchestrator | **Leaves it in place** — the file is persistent |
 | Review | `ingrain-threat-verifier` | Reads the rule description(s) behind its threat's covering mitigations as supporting context for verification |
 
-The file is never shown to the user directly; only the rule **titles** it records reach the
-user at Gate 2.
+Only the rule **titles** it records reach the user, at Gate 2; the file itself stays internal.
 
 ## Maintenance
 
 To locate this file, re-run the `rules-path` mint command from the
 `INGRAIN-ASSESSMENT-PATHS` session context and use the absolute `rules_abs` it returns — it
 resolves back to this same file (deterministic in branch + title). Never resolve a relative
-`.ingrain-security/…` string against the file being edited, and never create the folder. If
-the file does not exist (`file_exists: false`), no org rules were retrieved for this task —
-do not fabricate one; fall back to the mitigation Descriptions.
+`.ingrain-security/…` string against the file being edited, and never create the folder.
+`file_exists: false` means no org rules were retrieved for this task — do not fabricate one;
+fall back to the mitigation Descriptions.
 
 ## Template
 
@@ -106,7 +104,7 @@ do not fabricate one; fall back to the mitigation Descriptions.
 # Org rules — <task title>
 
 > Local sidecar produced by ingrain-security when org rules were retrieved for this task's
-> mitigations. Read by the mitigation critic, Gate 2, and the verification skill. Not committed.
+> mitigations. Read by the mitigation critic, Gate 2, and the verification skill. Git-ignored.
 
 ## Retrieved rules
 

@@ -66,7 +66,7 @@ Deno.test("SKILL.md: the description carries both phase triggers", async () => {
   // Both phases are labeled, and the description states they are mutually exclusive.
   assertStringIncludes(description, "Development");
   assertStringIncludes(description, "Testing");
-  assertStringIncludes(description, "The phases never overlap");
+  assertStringIncludes(description, "Each phase owns one moment");
 });
 
 Deno.test("SKILL.md: routes to a phase from repo state, then points at the reference", async () => {
@@ -81,7 +81,7 @@ Deno.test("SKILL.md: routes to a phase from repo state, then points at the refer
   assertStringIncludes(md, "file_exists");
   assertStringIncludes(md, "scripts/branch-diff");
   assertStringIncludes(md, "delta_empty");
-  assertStringIncludes(md, "it is a pointer, not the procedure");
+  assertStringIncludes(md, "this section is a pointer, and the procedure is in that file");
 });
 
 Deno.test("SKILL.md: the SUBAGENT-STOP block covers the Testing read and both phases", async () => {
@@ -276,9 +276,9 @@ Deno.test("rules-file.md: defines the persistent org-rules sidecar schema", asyn
   // Its sections: retrieved rules (id/title/body) + per-mitigation mapping.
   assertStringIncludes(md, "## Retrieved rules");
   assertStringIncludes(md, "## Per-mitigation mapping");
-  // It persists (not deleted) and is written only when rules were retrieved.
+  // It persists past finalize, and exists exactly when a pass retrieved rules.
   assertStringIncludes(md.toLowerCase(), "persist");
-  assertStringIncludes(md, "only when org rules are retrieved");
+  assertStringIncludes(md, "Created when org rules are retrieved");
 });
 
 /**

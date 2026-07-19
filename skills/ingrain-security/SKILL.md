@@ -2,8 +2,8 @@
 name: ingrain-security
 description: >-
   Use at BOTH ends of a security-relevant change; it detects which phase to run from
-  repo state, so invoke it at either moment. The phases never overlap: Development runs only
-  before code for the task exists, Testing only after.
+  repo state, so invoke it at either moment. Each phase owns one moment: Development runs
+  before code for the task exists, Testing after it.
   **Development — plan review:** run AS THE FINAL STEP of building an implementation plan,
   ad-hoc inline or in a formal plan-mode / design-doc session. Invoke once the plan is
   comprehensive and detailed (affected files, concrete implementations, tests) but
@@ -15,7 +15,7 @@ description: >-
   everything committed and uncommitted since this branch diverged from its parent — to
   see whether that threat can still be realized in the code as built. The threats
   define the scope. It reports each threat's robustness and, for any still reachable,
-  the residual path an attacker would take. It writes no code.
+  the residual path an attacker would take. It reports; the coding agent implements.
   If there is even a 1% chance the change touches security, invoke it — triage decides
   whether a full review is warranted.
 ---
@@ -28,11 +28,11 @@ and return. Do NOT run this orchestration — neither Development nor Testing �
 </SUBAGENT-STOP>
 
 <EXTREMELY-IMPORTANT>
-Security analysis is the FINAL step of planning, not a separate phase after it.
+Security analysis is the FINAL step of planning.
 First build your implementation plan in full — the affected files, the concrete
-implementations, the tests. The trigger is the *state*, not the mode: an **ad-hoc plan**
+implementations, the tests. The trigger is the *state*: an **ad-hoc plan**
 worked out inline and a **formal planning session** (plan mode, a design doc) both reach
-the same moment — the plan is comprehensive and detailed, and no code is written yet.
+the same moment — the plan is comprehensive and detailed, and implementation is still ahead.
 Once that state holds, and before you present it or write any code, run this review with
 the finished plan as its input, then fold its results back into the plan. It still belongs
 to planning: the plan you hand back already reflects it. If there is even a 1% chance the
@@ -70,42 +70,44 @@ tables and plan-file links, never in a write target.
 the file's schema — read it before your first write.
 
 The third signal is the **branch delta**. Resolve it with the bundled `scripts/branch-diff`
-script and read **`delta_empty`** off its JSON: `false` means this branch has commits since the
-fork point, or an uncommitted change, or both. **Keep its `base_ref`, `diff_ref` and
-`fallback`** — Testing diffs against exactly that `diff_ref`.
-→ `references/lib/branch-diff.md` owns the script, the refs it returns, and why a clean working
-tree is **not** evidence that no code exists — read it before routing on the delta.
+script and read **`delta_empty`** off its JSON: `true` means the branch delta is empty; `false`
+means this branch has commits since the fork point, an uncommitted change, or both. **Keep its
+`base_ref`, `diff_ref` and `fallback`** — Testing diffs against exactly that `diff_ref`.
+→ `references/lib/branch-diff.md` owns the script, the refs it returns, and why `delta_empty` —
+rather than `git status` — is the routing signal; read it before routing on the delta.
 
 If `file_exists: true`, read the bounded `## Mitigations` slice of that file (the bounded
 read the context-window discipline permits). Then:
 
 | `file_exists` | `selected` mitigation rows | branch delta | Phase |
 |---|---|---|---|
-| `false` | — | anything | **Development** — no assessment for this task; there is nothing to verify |
+| `false` | — | anything | **Development** — no assessment for this task, so it starts at triage |
 | `true` | none | anything | **Development** — resume this task's analysis in place (Step 0's `file_exists: true`) |
-| `true` | 1+ | empty (`delta_empty: true`) | **Development** — the plan was reviewed, but no code for it exists yet to verify |
+| `true` | 1+ | empty (`delta_empty: true`) | **Development** — the plan was reviewed; implementation is still ahead |
 | `true` | 1+ | non-empty (`delta_empty: false`) | **Testing** — read `references/testing/verification-pass.md` NOW |
 
 **Testing requires all three: an assessment for THIS task, adopted mitigations in it, and a
-non-empty branch delta.** Anything else is Development. Note what is deliberately *not* in the table:
+non-empty branch delta.** Anything else is Development. Three signals look like Testing but
+route elsewhere; here is what each actually means:
 
-- **A non-empty branch delta is never on its own a Testing signal.** A fresh task on a branch that
-  already carries unrelated commits, or unrelated WIP, mints a fresh path → `file_exists: false` →
-  row 1 → **Development**.
+- **Testing needs all three signals together; a branch delta alone routes to Development.** A
+  fresh task on a branch that already carries unrelated commits, or unrelated WIP, mints a fresh
+  path → `file_exists: false` → row 1 → **Development**.
   **Do not glob `.ingrain-security/` for "some assessment on this branch."** The mint is keyed
-  on branch **+ task title**, and that keying is exactly what stops a new task from adopting a
-  different task's assessment. Take `file_exists` at its word.
-- **`Latest stage: testing` does not mean Testing is done.** The field records that a
-  verification ran; it does not close the task, and it is never a reason to skip. An
+  on branch **+ task title**, and that keying is what binds each assessment to exactly one
+  task. Take `file_exists` at its word.
+- **`Latest stage: testing` records that a verification ran.** The task stays open, and a later
+  code change earns another round. An
   assessment already at `Latest stage: testing` whose branch delta has grown again — the user revised
   the code after a verification round — is **Testing again**: re-test every selected threat and
   overwrite the `Robustness`, `Justification` and `Verification level` columns.
-  The plan did not change; the code did. Never re-run Development to "re-review" it.
-- **A `minor` triage adopts no mitigations, so it never routes to Testing.** It lands on row 2. If
+  Re-verification is driven by the code, which changed; the plan is unchanged. Never re-run
+  Development to "re-review" it.
+- **A `minor` triage lands on row 2** — its scope holds no mitigations to verify. If
   the user explicitly asked to verify, the override sends you to Testing, which stops at "no
   adopted mitigations to verify" — the correct, cheap answer. Otherwise row 2 resumes Development,
-  where triage re-confirms `minor` in one dispatch and stops. Either way, nothing is verified,
-  because by construction there is nothing to verify.
+  where triage re-confirms `minor` in one dispatch and stops. Either way the run ends at triage,
+  which is the right outcome for a minor change.
 
 Announce the phase you picked in your opening line, so a misroute costs the user one turn.
 
@@ -117,9 +119,8 @@ You orchestrate seven **read-only** worker roles, each defined by a reference fi
 `references/development/<name>.md` (`ingrain-relevance-triage`, `ingrain-threat-generator`,
 `ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-mitigation-generator`,
 `ingrain-rule-expander`, `ingrain-mitigation-critic`). You dispatch each as a fresh subagent,
-in order, holding the state between steps yourself — workers cannot call each other or you.
-One step is yours alone: at Step 5 you run the org-rules retrieval **in this session**, not
-through a worker.
+in order, holding the state between steps yourself — all coordination flows through you.
+One step is yours alone: Step 5, where you run the org-rules retrieval **in this session**.
 
 The process produces exactly **two things**: the **assessment file** (the hand-off medium
 the workers write section by section, and you finalize) and the **user-selected finding set
@@ -141,9 +142,8 @@ afterwards.
 
 ## How to dispatch a worker
 
-A worker is a role defined by a reference file, not a platform-native agent. You never run a
-worker's logic yourself — you dispatch a **fresh worker subagent** and tell it to become that
-worker by reading its reference file.
+A worker is a role a fresh subagent adopts by reading its reference file. Dispatch a **fresh
+worker subagent** and tell it to become that worker; the reference file is its logic.
 → `references/lib/platform-dispatch.md` maps this onto your host (subagent/task primitive, or
 the sequential in-context fallback where none exists) — read it if you are unsure which
 primitive to use.
@@ -191,11 +191,11 @@ steps, in this order**:
    in one place before deciding. **Mandatory in every mode and on every host** — plan mode,
    ad-hoc, windowed or fallback alike. It is **visible output in the conversation**, never
    only written into the plan or assessment file, and never skipped as "extra output":
-   printing it is a read-only display action that no mode forbids.
+   printing it is a read-only display action, permitted in every mode.
 2. **Then present the selection windows** — one single-choice include/exclude window per
    finding, labeled by tag + short title (e.g. `T1 — unauthenticated token refresh`). One
    window, one finding, one binary choice keeps every decision isolated and deliberate, so
-   findings never blur together the way they do in a single multi-toggle list. Mark
+   each finding stays a distinct choice of its own. Mark
    high/critical findings recommended. Because each window is its own decision, **selecting
    none is always reachable** — the user excludes every window.
    → `references/lib/platform-dispatch.md` § Selection windows for the host mechanism and the
@@ -226,11 +226,11 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
      The worker's `## Triage` section is already in it.
 
 1. **Threats** — dispatch `ingrain-threat-generator`, pointing it at the plan **and the
-   `## Triage` section** (Surfaces are starting points, not a ceiling). **If triage returned a
+   `## Triage` section** (Surfaces seed the search; extend beyond them). **If triage returned a
    Prior analysis pointer**, also point it at that snapshot's `## Threats` and `## Mitigations`
    so it **seeds from the prior analysis** — re-derive and refresh against the current plan, do
    not blindly copy. It writes the `## Threats` rows under working tags `T1…` and returns a
-   pointer. Its tags are discovery order and carry no priority.
+   pointer. Its tags record discovery order; the risk-scorer assigns priority at Step 3.
 
 2. **Critique threats** *(loop, max 3)* — dispatch `ingrain-threat-critic` at `## Threats`.
    - `needs-revision` → re-dispatch `ingrain-threat-generator` with a pointer to `## Threats`
@@ -240,8 +240,8 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
 3. **Risk score** — dispatch `ingrain-risk-scorer` at the frozen `## Threats`. It fills each
    row's scoring columns, writes the plan-level residual into `## Risk score`, and **re-tags
    the threats into descending-risk order** — contiguous `T1…Tn`, `T1` the most critical. From
-   here the tag *is* the priority and every stage reads the table top-down. (The re-tag is part
-   of its job, not a resequencing of the pipeline.)
+   here the tag *is* the priority and every stage reads the table top-down. (The re-tag belongs
+   to the scorer's job.)
 
 4. **Gate 1 — the user selects which threats to address.** Follow **How to ask the user**.
    The user is deciding per threat whether it is worth acting on, so they must understand each
@@ -262,7 +262,7 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    |--------|----------|
    | **Threat** | tag + short title (e.g. `T1 — unauthenticated token refresh`) |
    | **Risk** | risk criticality + 0–100 score (e.g. `high · 78`) |
-   | **What can go wrong** | the concrete failure, drawn from the threat's Vector/Description (not a generic category) |
+   | **What can go wrong** | the concrete failure, drawn from the threat's Vector/Description and stated in this change's terms |
    | **Why it matters** | the consequence if realized, grounded in the scorer's impact and score (what an attacker gains, what data or guarantee is lost) |
    | **Local impact in the plan** | which specific part of *this* change the threat lands on (the component, file, or step from the plan) |
 
@@ -270,8 +270,7 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    re-score. Flag high/critical rows (e.g. `⚑ high · 78`) so the table and the windows tell the
    same story. In the same message, **name the run's assessment file** (its relative
    `.ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) and **the plan file**
-   these decisions feed into — a **mention only**; nothing is written to the plan file at the
-   gates, the write happens at finalize.
+   these decisions feed into — a **mention only**; the plan-file write happens at finalize.
 
    - **1–N selected** → only those proceed to Step 5. Name the excluded ones in one line
      ("T2, T5 excluded — risk accepted").
@@ -303,32 +302,32 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
      if the user **declines** (or no permission channel exists), noting that access was
      declined.
    - **Genuine unavailability** — binary absent, CLI unconfigured, or no matches — degrades
-     gracefully: no sidecar, note why in one line, carry on. A `command not found` probe also
+     gracefully: skip the sidecar, note why in one line, carry on. A `command not found` probe also
      means **Step 7 is skipped**, since the expander has no CLI to reach either.
 
 6. **Mitigate** — dispatch `ingrain-mitigation-generator` with the **user-selected threats
    only** (excluded threats are out of scope), `assessment_abs`, and `rules_abs` — pointing it
    at the sidecar's `## Retrieved rules` so it grounds its proposals in established org
-   practice rather than its own knowledge alone. It proposes both **threat mitigations** and
+   practice. It proposes both **threat mitigations** and
    **general implementation instructions** for the full scoped task — both belong in the plan.
-   It writes the mitigation rows and the sidecar's `## Per-mitigation mapping`. It is strictly
-   Read/Grep/Glob — **it runs no CLI**; the rules it needs are already on disk.
+   It writes the mitigation rows and the sidecar's `## Per-mitigation mapping`. It works from
+   the rules already on disk, with Read/Grep/Glob alone.
 
 7. **Expand rules** — dispatch `ingrain-rule-expander` at the `## Mitigations` table and the
-   sidecar, with `rules_abs` as its write target. Step 5 could only query what the threats
-   implied; now that concrete mitigations name concrete mechanisms, it searches for the rules
-   that pass could not have known to ask for, and **appends** them to the sidecar.
+   sidecar, with `rules_abs` as its write target. Step 5 queried from the threats; now that
+   concrete mitigations name concrete mechanisms, it searches on those mechanisms and
+   **appends** what it finds to the sidecar.
    **This is the one worker that gets the shell/exec tool** — dispatch it with Bash/exec in
    addition to Read/Grep/Glob, and say so in its dispatch. Every other worker stays strictly
    Read/Grep/Glob.
-   **It runs exactly once.** It is not part of the Step 8 loop and is never re-dispatched on a
-   revision round — the critic is what carries its findings into the mitigations. Skip this
+   **It runs exactly once**, before the Step 8 loop — the critic is what carries its findings
+   into the mitigations. Skip this
    step entirely if Step 5's probe reported the CLI absent, and say so when you do.
    → `references/development/ingrain-rule-expander.md` owns the lookup and its failure modes.
    - `fetch blocked — permission needed` → the lookup was denied by the sandbox and the worker
      could not surface a prompt itself. Ask the user for access using the same window
      primitive the gates use, and on grant **re-dispatch with exec access** — this recovery
-     re-run is not a second pass. Only if the user **declines** (or no permission channel
+     re-run completes the one expansion pass. Only if the user **declines** (or no permission channel
      exists) do you continue with Step 5's rules alone, noting that access was declined.
 
 8. **Critique mitigations** *(loop, max 3)* — dispatch `ingrain-mitigation-critic` at
@@ -368,7 +367,8 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
 
    - **1–N selected** → incorporate exactly those. If the selection leaves a `selected` threat
      with no covering mitigation, **say so in the closing verdict — never silently**.
-   - **None selected** → incorporate nothing; note that the selected threats remain unmitigated.
+   - **None selected** → incorporate nothing; record the selected threats as accepted risk in
+     the closing verdict.
    - Then **go to Finalize**. This is the last step — close with a one-line verdict.
 
 ## The plan file
@@ -380,8 +380,8 @@ implementation plan the selected threats and adopted mitigations become part of.
 
 In **plan mode** it is a concrete on-disk file (e.g. `.${coding_agent_root}/plans/<name>.md`);
 you already hold its path, since it is the file you are editing — **name it** when you
-reference it. In **ad-hoc mode** there is no file — the plan file is "the inline plan you are
-building" in the conversation.
+reference it. In **ad-hoc mode** the plan file is "the inline plan you are building" in the
+conversation.
 
 ## Finalize
 
@@ -395,8 +395,7 @@ transient sections — `## Threat critique` and `## Mitigation critique`** (head
 they are iteration scratch, and the finalized file carries only end results. **Leave the
 `rules-<…>.md` sidecar in place** — it is a persistent, linked artifact that the Testing
 verification pass reads in a later session. One write, to the minted `assessment_abs`; the
-file already lives there, so there is **no snapshot to copy** — finalizing it *is*
-persisting it.
+file already lives at its final path, so **finalizing it in place *is* persisting it**.
 
 **2. Write the results into the plan file.** Incorporate the selected threats and adopted
 mitigations, plus two supporting things:
@@ -422,14 +421,14 @@ incorporate them and continue planning.
 
 Testing measures how robust the adopted mitigations are, by **negative testing**: for each
 threat Gate 1 selected, can it still be realized in the code as built? The threats define the
-scope — not the mitigation Descriptions. It fires when
+scope. It fires when
 **Phase select** lands on Testing — an assessment for this task exists, it carries `selected`
 mitigations, and the branch delta is non-empty (`scripts/branch-diff` → `delta_empty: false`).
-**Nothing above this line applies to it:** Steps 0–9, both gates, the critic loops, and the
-org-rules CLI lookup are Development only.
+**Everything above this line belongs to Development:** Steps 0–9, both gates, the critic
+loops, and the org-rules CLI lookup.
 
-**Read `references/testing/verification-pass.md` NOW and follow it.** The full loop lives there — do
-not run it from this section's summary: it is a pointer, not the procedure.
+**Read `references/testing/verification-pass.md` NOW and follow it.** The full loop lives
+there; this section is a pointer, and the procedure is in that file.
 
 ## Red flags — stop if you catch yourself thinking…
 
@@ -463,9 +462,8 @@ not run it from this section's summary: it is a pointer, not the procedure.
 
 The procedure is **Development — the flow**; this is the tracker. Tick only what is actually
 done. Work top to bottom — never skip a step, never reorder the pipeline, never batch. (The
-`ingrain-risk-scorer` re-tagging threats into risk order at step 3 is part of its job, not a
-resequencing.) Each gate incorporates exactly the selected subset — never an unselected or
-unreviewed finding.
+`ingrain-risk-scorer` re-tagging threats into risk order at step 3 belongs to its job.) Each
+gate incorporates exactly the selected subset — never an unselected or unreviewed finding.
 
 - [ ] 0. Triage dispatched — bias to `major` when uncertain; `minor` → stop, `major` → open the assessment file
 - [ ] 1. Threats generated into `## Threats`, seeded from any prior analysis
@@ -473,7 +471,7 @@ unreviewed finding.
 - [ ] 3. Risk scored; threats re-tagged into descending-risk order
 - [ ] 4. Gate 1 — table displayed in the conversation FIRST, then one window per threat; `Selection` recorded (zero selected ends the review)
 - [ ] 5. Org rules retrieved by YOU via the `ingrain` CLI, from plan + selected threats; sidecar written (or none, if nothing came back)
-- [ ] 6. Mitigations generated for the selected threats ONLY, grounded in the sidecar; generator got no CLI
+- [ ] 6. Mitigations generated for the selected threats ONLY, grounded in the sidecar; generator ran on Read/Grep/Glob alone
 - [ ] 7. Rule expander dispatched ONCE — second pass keyed on the mitigations; appended to the sidecar (skipped only if the CLI is absent)
 - [ ] 8. Mitigation critique loop closed — approved, or 3 rounds spent; only the generator re-dispatched; mitigations frozen
 - [ ] 9. Gate 2 — table displayed FIRST, then one window per mitigation; `Selection` recorded

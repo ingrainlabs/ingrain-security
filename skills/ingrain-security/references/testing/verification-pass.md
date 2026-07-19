@@ -3,16 +3,17 @@
 This is the procedure for the **Testing** phase of the `ingrain-security` skill: the verification
 counterpart to the plan review in `SKILL.md`. You are here because **Phase select** routed
 you here — the task has an assessment carrying adopted mitigations and a non-empty branch
-delta. Nothing in `SKILL.md`'s Steps 0–9 applies: you do not threat-model, you run no user
-gates, you make no `ingrain` CLI call, and you edit no code.
+delta. Your whole job is: read the assessment, diff the branch, dispatch one verifier per
+selected threat, and record the levels you conclude. `SKILL.md`'s Steps 0–9 stay behind in
+Development.
 
-**What this phase measures.** Not whether each mitigation matches the words of its
-Description — whether the **threats the plan selected can still be realized** against the code
-as built. This is **negative testing**: for each selected threat you ask how well the adopted
-mitigations actually close it, and the answer is that threat's **robustness**. A mitigation
-implemented exactly as written that still leaves a path to its threat is **not** robust
-coverage. The **threats define the scope** — every selected threat is examined, including one
-whose mitigations were all declined.
+**What this phase measures.** Whether the **threats the plan selected can still be realized**
+against the code as built. This is **negative testing**: for each selected threat you ask how
+well the adopted mitigations actually close it, and the answer is that threat's
+**robustness**. Robust coverage means every route to the threat is closed — a mitigation's
+fidelity to the words of its Description is beside the point. The **threats define the
+scope** — every selected threat is examined, including one whose mitigations were all
+declined.
 
 **Announce:** open with "Using ingrain-security to verify the implemented mitigations."
 
@@ -24,9 +25,9 @@ You orchestrate **one read-only worker per selected threat** — as many verifie
   mitigations' org rules (see **How to dispatch a verifier**).
 
 A verifier handed a threat and its mitigations is under quiet pressure to conclude the threat
-is handled. That is why it returns a **justification**, not a verdict, and writes nothing: the
-level it leads with is a conclusion you re-derive from the evidence it cites, not an answer you
-route on (see **Concluding the level**).
+is handled. That is why it returns a **justification** and leaves the recording to you: the
+level it leads with is a conclusion you re-derive from the evidence it cites (see
+**Concluding the level**).
 
 ## The assessment file
 
@@ -82,14 +83,15 @@ substituted, in `diff_command` and `status_command`:
 
 **Fallback — `HEAD`, and only as the fallback.** When no fork point resolves, the script returns
 `fallback: true` with `diff_ref: HEAD` — the uncommitted delta only — and names the case in
-`reason`. **Report it**, and report it accurately, because the two kinds are not equivalent:
+`reason`. **Report it**, and report it accurately, because the two kinds differ in what they
+leave visible:
 
 - `no-divergence` — this branch has no commits since it was cut, so `HEAD` captures **all** of its
-  work. The review is **complete**; say so rather than caveating a result that needs no caveat.
+  work. The review is **complete**; report it as such.
 - `not-a-git-repository`, `no-commits`, `no-fork-point` (a detached HEAD, a repo with no other
   branch, `merge-base` failing on a shallow clone — check the `shallow` field) — any *committed*
-  implementation is invisible to `git diff HEAD`. The review is then narrower than intended, and
-  that is a caveat on the result, not a silent detail.
+  implementation is invisible to `git diff HEAD`. The review is then narrower than intended;
+  state that as a caveat on the result.
 
 If `delta_empty: true` — nothing committed since the fork point and nothing dirty (on the `HEAD`
 fallback this means only that the working tree is clean) — there is nothing to verify; say so and
@@ -104,10 +106,10 @@ both dispatches and `references/formatting/assessment-file.md` point at:
 
 - **`weak`** — the threat **can still be realized**. A path to it survives the change:
   nothing mitigates it, or what does is bypassable, or it is closed on one route and open on
-  another, or the analysis cannot establish that it is closed at all.
+  another, or the analysis leaves its closure unestablished.
 - **`adequate`** — the routes by which this threat would be realized are **closed** by the
   adopted mitigations, on the surface the threat named.
-- **`strong`** — closed **broadly** rather than only on the one route the threat named, **and**
+- **`strong`** — closed **broadly**, across every route to the asset, **and**
   supporting **artefacts** back it: tests that adversarially exercise the control and would
   fail if it regressed.
 
@@ -116,25 +118,22 @@ escaping is `weak`; escaping on the custom-CSS path so the injection no longer l
 `adequate`; escaping applied across every path that renders user CSS, plus tests proving
 injected CSS comes out escaped, is `strong`.
 
-**Judging robustness is your analysis to make.** These definitions say what each level
-*means*; they are not a rubric you execute. Weigh the actual code against the actual threat and
-decide. Two principles bound that judgement:
+**Judging robustness is your analysis to make.** Apply these definitions as judgement: weigh
+the actual code against the actual threat and decide. Two principles bound that judgement:
 
-- **A threat you cannot establish is closed is not closed.** Uncertainty lands on `weak`, with
-  the residual path named. Never round up on a hunch.
-- **Missing artefacts never make a threat `weak`.** A threat genuinely closed, with no tests
-  proving it stays closed, is `adequate` — the artefact is what separates `strong` from
-  `adequate`, not `adequate` from `weak`.
+- **A threat counts as closed only when you can establish that it is.** Uncertainty lands on
+  `weak`, with the residual path named. Never round up on a hunch.
+- **Artefacts are the boundary between `strong` and `adequate`.** A threat genuinely closed,
+  with no tests proving it stays closed, is `adequate`.
 
 ## The rules file
 
-Each adopted mitigation carries **Rule ref ids** (the `Rule refs` column of `## Mitigations`)
-but not the rule bodies. The plan review persisted the rule bodies to a **linked sidecar**,
+Each adopted mitigation carries **Rule ref ids** (the `Rule refs` column of `## Mitigations`),
+which resolve to rule bodies in the sidecar. The plan review persisted those bodies to a **linked sidecar**,
 `.ingrain-security/rules-<branch-slug>-<task-slug>.md` — the twin of the assessment file, keyed
 by the same branch + task slug (schema: `references/formatting/rules-file.md`). To let each verifier judge
-robustness against *how the org implements* the control — not just the mitigation's generic
-Description — locate that sidecar and hand each verifier the rule descriptions for the
-mitigations covering its threat.
+robustness against *how the org implements* the control, locate that sidecar and hand each
+verifier the rule descriptions for the mitigations covering its threat.
 
 Mint its path with the bundled **`scripts/rules-path`** script, the twin of `assessment-path`;
 your SessionStart context carries the ready-to-run command:
@@ -150,25 +149,25 @@ the assessment with. Because it is keyed by the same branch + task slug, it reso
   rule(s) behind its threat's covering mitigations (by pointer — see **How to dispatch a
   verifier**).
 - **`file_exists: false`** — no org rules were retrieved for this task at planning time (the
-  CLI was absent, unconfigured, or returned nothing). There is nothing to hand the verifiers;
-  they judge from the threat and the mitigation Descriptions alone. This is **never** a finding.
+  CLI was absent, unconfigured, or returned nothing). The verifiers judge from the threat and
+  the mitigation Descriptions alone — treat this as an expected input state.
 
 The rules are **supporting context only**: they sharpen what "closed" looks like for this org,
-and their absence never blocks verification. A mitigation whose `Rule refs` is `—` has no
-backing rule — the verifier works from its Description and the threat.
+and verification proceeds with or without them. A mitigation whose `Rule refs` is `—` is
+judged from its Description and the threat.
 
 ## How to dispatch a verifier
 
 Dispatch a **fresh worker subagent** per verifier and tell it to become the verifier by reading
 its reference file.
 → `references/lib/platform-dispatch.md` maps this onto your host, including the fan-out rule for
-the per-threat verifiers and why the standing worker constraint does not fit this one.
+the per-threat verifiers and the verifier's own write-nothing contract.
 
 Dispatch every verifier with the same shape, restating its constraints inline. **Hand off by
 pointer:** point the verifier at its threat row and its covering mitigation rows **and, when
 the sidecar exists, the rule(s) for those mitigations' Rule refs** rather than pasting the
-files; the verifier **returns a justification and a level, and does not write the assessment
-file** (you conclude and record, to avoid concurrent writes to one table):
+files; the verifier **returns a justification and a level**, and you conclude and record, so
+one writer owns the table:
 
 ```
 Read references/testing/ingrain-threat-verifier.md and follow it as your system prompt.
@@ -193,14 +192,15 @@ INPUT:
   is HEAD, so only uncommitted changes are under review.">
 - Evaluate how well those mitigations cover <T-tag> in the code as built: can this threat still
   be realized? Look for a surviving route — an unprotected path, a bypass, a partial
-  application. Judge the threat, not the wording of the mitigations: a mitigation implemented
-  exactly as described that still leaves the threat reachable is weak coverage.
+  application. Judge the threat: coverage is only as strong as the routes it actually closes,
+  so a mitigation implemented exactly as described that still leaves the threat reachable is
+  weak coverage.
 Return ONLY, in this order: JUSTIFICATION (≤256 chars — your reasoning about whether the threat
 is still reachable), then LEVEL (weak | adequate | strong) for <T-tag>, then EVIDENCE (file:line
 in the diff), and — when the level is `weak` — the RESIDUAL PATH (the concrete route by which
 the threat can still be realized, and the change that would close it).
-The justification comes FIRST: it is what I weigh, and writing it first is what stops the level
-from being a guess. Do not return the full diff or a long analysis.
+The justification comes FIRST: it is what I weigh, and writing it first is what grounds the level
+in evidence. Do not return the full diff or a long analysis.
 ```
 
 Dispatch verifiers for **all** selected threats. **A selected threat with no covering
@@ -208,7 +208,7 @@ mitigation is still dispatched** — the code may close it incidentally, and if 
 is exactly the `weak` finding the report exists to surface.
 
 **The general-instruction pass.** Adopted mitigations whose `Threat tags` is `—` are general
-implementation instructions: no threat defines their scope, so no threat verifier covers them.
+implementation instructions: their scope is the instruction itself, so this pass covers them.
 Check them separately against their Descriptions — followed, or not — and report them in their
 own table. They take a `Verification level` like any other row: `weak` when the instruction was
 not followed, `adequate` when it was, `strong` when it was followed comprehensively and
@@ -216,25 +216,26 @@ artefacts back it.
 
 **Do not branch on the level word a verifier leads with.** Hold its justification and its level
 together and take both to **Concluding the level** — the level is a conclusion you are going
-to re-derive, not an answer you route on.
+to re-derive.
 
 ## Concluding the level
 
 You now hold, per selected threat, the verifier's justification and the level it led with.
-**The level you record is your own conclusion, not the verifier's answer forwarded.** Per
+**The level you record is your own conclusion, derived from the verifier's evidence.** Per
 threat, in this order:
 
 1. **Read the justification before you look at the level.** If you have already seen the level,
-   set it aside deliberately: you are re-deriving that conclusion, not rubber-stamping it.
+   set it aside deliberately and re-derive the conclusion from the justification alone.
 2. **Weigh the justification on its evidence.** Strong: it cites a concrete `file:line` in the
    diff and says what the code *at that line* does, and why that closes the threat's route or
    leaves it open. Weak: it asserts a conclusion ("the control is in place", "looks
    comprehensive"), reasons from the mitigation's wording rather than from the code, cites a
-   file with no line, or cites nothing. Length, confidence, and fluency are not evidence.
-3. **A justification that does not carry its level does not get it.** An `adequate` resting on
-   an assertion rather than a cited line is `weak` with the residual path named, and a `strong`
-   whose artefact is asserted but never cited at a `file:line` is `adequate`. Read the cited
-   line yourself where the level turns on it — the verifier's reading is not the last word.
+   file with no line, or cites nothing. Evidence is a cited `file:line` plus a statement of
+   what the code there does; length, confidence, and fluency are style.
+3. **A level stands only when the justification's cited evidence carries it.** An `adequate`
+   resting on an assertion rather than a cited line is `weak` with the residual path named, and
+   a `strong` whose artefact is asserted but never cited at a `file:line` is `adequate`. Read
+   the cited line yourself where the level turns on it — yours is the last word.
    Ask the question the verifier was asked: given this code, can the threat still be realized?
 4. **Conclude, then write.** The level you record is **yours**, and so is the Justification: ≤256
    characters, in your own words, naming the evidence it rests on — not the verifier's text
@@ -245,9 +246,9 @@ result; `## Mitigations` → **Verification level** carries each mitigation's co
 closing the threats it covers. Read it off the threat analyses the mitigation appears in:
 
 - Covers one threat → it takes that threat's level.
-- Covers several whose levels differ → **the weakest governs.** A mitigation is only as robust
-  as its worst-covered threat; a control that closes `T1` while leaving `T3` reachable has not
-  earned `adequate` on the strength of `T1`.
+- Covers several whose levels differ → **the weakest governs.** A mitigation takes the level of
+  its weakest-covered threat; a control that closes `T1` while leaving `T3` reachable is `weak`
+  on the strength of `T3`.
 - Carries no threat tag → it took its level from the general-instruction pass.
 
 ## Testing — the flow
@@ -296,12 +297,12 @@ file.
    rows as `—`; and set `## Task` → `Latest stage: testing`. One write, to the
    minted `assessment_abs`. On a re-verification (the file was already at `Latest stage: testing`
    and the code changed again), **overwrite** the previous justifications and levels — they
-   record the current implementation, not a history. The
+   record the current implementation. The
    `rules-<…>.md` sidecar is a persistent planning artifact — **do not modify or delete it**.
    This is the "mark checked" step — the file now records what was verified.
 7. **Report to the coding agent.** Present the findings (see **Reporting format**) and close
    with a one-line verdict. If any threat is `weak`, ask the coding agent to revisit exactly
-   those — naming the residual path, not just the mitigation.
+   those — naming the residual path for each.
 
 ## Reporting format
 
@@ -318,7 +319,7 @@ mitigations.
 | **Covering mitigations** | the adopted `M` tags meant to close it, or `none adopted` |
 | **Justification** | the reasoning you concluded — the same one behind the table |
 | **Evidence** | where in the diff the threat is closed (or left open) — `file:line`, or `—` |
-| **Residual path** | for `weak`: **the concrete route by which the threat can still be realized**, and the change that would close it. This is the actionable half of the report — "the mitigation is missing" is not a residual path; "an unauthenticated caller still reaches `/refresh` via X" is. `—` otherwise |
+| **Residual path** | for `weak`: **the concrete route by which the threat can still be realized**, and the change that would close it. This is the actionable half of the report — name the concrete route an attacker still takes, e.g. "an unauthenticated caller still reaches `/refresh` via X". `—` otherwise |
 
 **Mitigation contribution**, one row per adopted mitigation, in tag order (`M1` first): tag +
 title, **Verification level**, the threat tags it covers (or `general`), and one line on what
@@ -331,8 +332,8 @@ Then close with a one-line verdict:
 - **Gaps found** — "N of M selected threats remain realizable: <T-tags> — please revisit them
   before presenting the change," naming exactly the `weak` ones.
 
-This report goes to the **coding agent**, not through user selection windows — there are no
-gates in Testing.
+This report goes to the **coding agent** as visible Markdown; the selection gates belong to
+Development.
 
 ## Red flags — stop if you catch yourself thinking…
 
@@ -363,8 +364,8 @@ Report the empty cases, never fail silently.
 - [ ] 0. Assessment located — title minted verbatim; no assessment for this task → stop
 - [ ] 1. Fork point resolved with `scripts/branch-diff` (`base_ref` + `diff_ref` + `fallback`) and branch diff captured once — `HEAD` only as a reported fallback; `delta_empty: true` → stop
 - [ ] 2. Scope collected — `selected` threats paired with their covering `selected` mitigations (an uncovered threat is still in scope), untagged rows set aside; nothing selected → set `Latest stage: testing` and stop
-- [ ] 3. Rules sidecar located (`rules_abs`) — absent is expected, never a blocker, never a finding
+- [ ] 3. Rules sidecar located (`rules_abs`) — an absent sidecar is an expected state; verification proceeds either way
 - [ ] 4. One verifier dispatched per selected threat, plus the general-instruction pass — justification FIRST, then `weak`/`adequate`/`strong`
-- [ ] 5. Each threat's robustness concluded — justification weighed BEFORE the level; a level its evidence does not carry does not stand; the conclusion is YOURS; mitigation levels derived, weakest governs
-- [ ] 6. `Robustness` + `Justification` + `Verification level` + `Latest stage: testing` written — YOU write, the verifier doesn't; sidecar untouched
-- [ ] 7. Reported to the coding agent — `weak` threats named with their residual path; Testing writes no code
+- [ ] 5. Each threat's robustness concluded — justification weighed BEFORE the level; a level stands only when its evidence carries it; the conclusion is YOURS; mitigation levels derived, weakest governs
+- [ ] 6. `Robustness` + `Justification` + `Verification level` + `Latest stage: testing` written — YOU write, the verifier only returns; sidecar untouched
+- [ ] 7. Reported to the coding agent — `weak` threats named with their residual path; the coding agent owns the code changes
