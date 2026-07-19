@@ -7,7 +7,7 @@
 # Sourced — never executed. Sets no shell options: every caller runs `set -uo pipefail`
 # WITHOUT `-e` on purpose (git lookups on a non-git or detached-HEAD checkout must degrade
 # to an empty result, not abort), and sourcing must not change that. Requires the sibling
-# project-root.sh to be sourced first (resolve_project_root, seed_gitignore,
+# project-root.sh to be sourced first (resolve_project_root, resolve_branch, seed_gitignore,
 # escape_for_json).
 #
 # Sourced by:
@@ -18,18 +18,6 @@
 # filename lead, the JSON field prefix, the diagnostic program token, and the `instruction`
 # string. Both write a deterministic `.ingrain-security/<label>-<branch-slug>-<task-slug>.md`
 # path — twin sidecars in one folder — so the logic lives here and cannot drift.
-
-# Resolve the current git branch, anchored to the resolved project root. Uses
-# `branch --show-current` (fallback `rev-parse --abbrev-ref HEAD`) — never `.git/HEAD`,
-# unreliable in a worktree/submodule. Detached HEAD or a non-git dir yields empty
-# (git noise swallowed), which callers treat as an unknown branch.
-resolve_branch() {
-    local root="$1" branch
-    branch="$(git -C "${root}" branch --show-current 2>/dev/null)"
-    [ -n "${branch}" ] || branch="$(git -C "${root}" rev-parse --abbrev-ref HEAD 2>/dev/null)"
-    [ "${branch}" = "HEAD" ] && branch=""
-    printf '%s' "${branch}"
-}
 
 # Slugify: lowercase, reduce every disallowed char to `-`, collapse `-` runs, trim.
 # So `feature/foo` -> `feature-foo`, `Feature/Foo Bar` -> `feature-foo-bar`.

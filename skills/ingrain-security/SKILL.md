@@ -51,10 +51,10 @@ from a guess about what the user meant, and never by reading ahead into the chec
 **If the user named a phase, that is the answer.** "Verify the mitigations" → **Testing**.
 "Review this plan" → **Development**. Skip the table.
 
-Otherwise resolve the state with **the mint call you already have to make**: Development mints
-`assessment_abs` at Step 0 anyway, so run it now, keyed on this task's title, and read
-`file_exists` off its JSON. This is the same one shell call, not a new one — minting only
-resolves the path and ensures the folder, and is safe in either phase.
+Otherwise resolve the state with **two cheap shell calls**. The first is **the mint call you
+already have to make**: Development mints `assessment_abs` at Step 0 anyway, so run it now, keyed
+on this task's title, and read `file_exists` off its JSON — minting only resolves the path and
+ensures the folder, and is safe in either phase. The second resolves the **branch delta**.
 
 **Do not hand-build the path.** Mint it with the bundled `scripts/assessment-path` script
 and reuse its output everywhere. Your SessionStart context carries the concrete,
@@ -69,27 +69,41 @@ tables and plan-file links, never in a write target.
 → `references/formatting/assessment-file.md` owns what the script resolves, the name's derivation, and
 the file's schema — read it before your first write.
 
+The third signal is the **branch delta** — everything this branch added since it diverged from
+the branch it was cut from, **committed and uncommitted alike**. By the time Testing is due the
+coding agent has usually *committed* the implementation, so a clean working tree is **not**
+evidence that no code exists. Resolve it with the bundled `scripts/branch-diff` script; your
+SessionStart context carries the ready-to-run command. It is read-only and writes nothing:
+
+    bash <plugin>/skills/ingrain-security/scripts/branch-diff <host>
+
+Read **`delta_empty`** off its JSON: `false` means this branch has commits since the fork point,
+or an uncommitted change, or both. **Keep its `base_ref`, `diff_ref` and `fallback`** — Testing
+diffs against exactly that `diff_ref`. When no fork point resolves the script sets
+`fallback: true` and `diff_ref: HEAD`, and `delta_empty` degrades to the dirty-tree test.
+
 If `file_exists: true`, read the bounded `## Mitigations` slice of that file (the bounded
 read the context-window discipline permits). Then:
 
-| `file_exists` | `selected` mitigation rows | working tree | Phase |
+| `file_exists` | `selected` mitigation rows | branch delta | Phase |
 |---|---|---|---|
 | `false` | — | anything | **Development** — no assessment for this task; there is nothing to verify |
 | `true` | none | anything | **Development** — resume this task's analysis in place (Step 0's `file_exists: true`) |
-| `true` | 1+ | clean | **Development** — the plan was reviewed, but no code exists yet to verify |
-| `true` | 1+ | dirty (`git status --porcelain` non-empty) | **Testing** — read `references/testing/verification-pass.md` NOW |
+| `true` | 1+ | empty (`delta_empty: true`) | **Development** — the plan was reviewed, but no code for it exists yet to verify |
+| `true` | 1+ | non-empty (`delta_empty: false`) | **Testing** — read `references/testing/verification-pass.md` NOW |
 
 **Testing requires all three: an assessment for THIS task, adopted mitigations in it, and a
-dirty tree.** Anything else is Development. Note what is deliberately *not* in the table:
+non-empty branch delta.** Anything else is Development. Note what is deliberately *not* in the table:
 
-- **A dirty tree is never on its own a Testing signal.** A fresh task whose tree happens to
-  be dirty with unrelated WIP mints a fresh path → `file_exists: false` → row 1 → **Development**.
+- **A non-empty branch delta is never on its own a Testing signal.** A fresh task on a branch that
+  already carries unrelated commits, or unrelated WIP, mints a fresh path → `file_exists: false` →
+  row 1 → **Development**.
   **Do not glob `.ingrain-security/` for "some assessment on this branch."** The mint is keyed
   on branch **+ task title**, and that keying is exactly what stops a new task from adopting a
   different task's assessment. Take `file_exists` at its word.
 - **`Latest stage: testing` does not mean Testing is done.** The field records that a
   verification ran; it does not close the task, and it is never a reason to skip. An
-  assessment already at `Latest stage: testing` whose tree is dirty again — the user revised
+  assessment already at `Latest stage: testing` whose branch delta has grown again — the user revised
   the code after a verification round — is **Testing again**: re-test every selected threat and
   overwrite the `Robustness`, `Justification` and `Verification level` columns.
   The plan did not change; the code did. Never re-run Development to "re-review" it.
@@ -416,7 +430,8 @@ Testing measures how robust the adopted mitigations are, by **negative testing**
 threat Gate 1 selected, can it still be realized in the code as built? The threats define the
 scope — not the mitigation Descriptions. It fires when
 **Phase select** lands on Testing — an assessment for this task exists, it carries `selected`
-mitigations, and the working tree is dirty. **Nothing above this line applies to it:** the
+mitigations, and the branch delta is non-empty (`scripts/branch-diff` → `delta_empty: false`).
+**Nothing above this line applies to it:** the
 checklist, both gates, the critic loops, and the org-rules CLI lookup are Development only.
 
 **Read `references/testing/verification-pass.md` NOW and follow it.** The full loop lives there — do
@@ -441,6 +456,8 @@ not run it from this section's summary: it is a pointer, not the procedure.
 | "I'll just answer the worker's job myself instead of dispatching" | Each worker runs in its own read-only subagent — dispatch it, don't inline it. |
 | "I'll read the whole assessment file to see where we are" | Hold only the compact statuses workers return. The bounded gate slices and finalize are the only reads. |
 | "`.ingrain-security/assessment-….md` is clear enough — the worker will find it" | It won't. A relative path is resolved by whoever receives it, and a worker has no project root in view — it resolves against the file it was reading and creates a stray folder there. Pass the absolute `assessment_abs`, always. |
+| "The tree is clean, so there's no code yet — Development" | Phase select tests the **branch delta**, not the tree. By the time verification is due the implementation is usually **committed**, which is a non-empty delta and routes to **Testing**. `delta_empty` is the signal; `git status` alone is not. |
+| "I'll work out the fork point myself with a merge-base loop" | `scripts/branch-diff` resolves it — one read-only call returning `base_ref`, `diff_ref` and `delta_empty`. Hand-rolling it is how the gate and the review end up disagreeing about what is under test. |
 | "I'll create the `.ingrain-security/` folder since it's missing" | It is not missing — the script created it at the repo root and it self-ignores, so `git status` never shows it. If you think it's absent, you resolved the path wrong. Re-run the mint script. |
 | "I'll delete the `rules-<…>.md` sidecar at finalize like the scratch sections" | The rules sidecar is a **persistent** linked artifact, not scratch — the Testing verification pass reads it later. Only the two critique sections are deleted. |
 | "No org rules came back, so I'll write an empty `rules-<…>.md`" | The sidecar is written **only when rules were retrieved**. No rules → no file; its absence is the signal, and Gate 2 / verification fall back to Descriptions. |

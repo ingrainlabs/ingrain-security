@@ -2,8 +2,8 @@
 
 This is the procedure for the **Testing** phase of the `ingrain-security` skill: the verification
 counterpart to the plan review in `SKILL.md`. You are here because **Phase select** routed
-you here — the task has an assessment carrying adopted mitigations and the working tree is
-dirty. Nothing in `SKILL.md`'s Steps 0–7 applies: you do not threat-model, you run no user
+you here — the task has an assessment carrying adopted mitigations and a non-empty branch
+delta. Nothing in `SKILL.md`'s Steps 0–7 applies: you do not threat-model, you run no user
 gates, you make no `ingrain` CLI call, and you edit no code.
 
 **What this phase measures.** Not whether each mitigation matches the words of its
@@ -80,37 +80,42 @@ fraction of the code the mitigations were adopted for.
 feature branches, release branches, or long-lived integration branches. Resolve the branch
 this one *actually* diverged from — never hardcode a trunk name.
 
-**Resolving the fork point.** Take every other local and remote branch, compute its merge-base
-with `HEAD`, discard any whose merge-base *is* `HEAD` (those contain no divergence), and keep
-the merge-base with the **most recent commit date** — the nearest branch point. One shell step:
+**Resolving the fork point.** Do **not** hand-roll this. The bundled **`scripts/branch-diff`**
+script resolves it — it takes every other local and remote branch, computes its merge-base with
+`HEAD`, discards any whose merge-base *is* `HEAD` (those contain no divergence), and keeps the
+merge-base with the **most recent commit date**, the nearest branch point. Your SessionStart
+context carries the ready-to-run command; it is read-only and writes nothing:
 
-    cur=$(git branch --show-current)
-    for ref in $(git for-each-ref --format='%(refname:short)' refs/heads refs/remotes); do
-      [ "$ref" = "$cur" ] && continue
-      mb=$(git merge-base HEAD "$ref" 2>/dev/null) || continue
-      { [ -z "$mb" ] || [ "$mb" = "$(git rev-parse HEAD)" ]; } && continue
-      printf '%s\t%s\t%s\n' "$(git show -s --format=%ct "$mb")" "$ref" "$mb"
-    done | sort -rn | head -1
+    bash <plugin>/skills/ingrain-security/scripts/branch-diff <host>
 
-The winning line gives you **`base_ref`** (field 2 — the parent branch, for the report) and
-**`diff_ref`** (field 3 — the merge-base commit, what you actually diff against). Where two
-refs tie on the same merge-base commit, take the first; they yield an identical `diff_ref`.
+It emits one JSON object. Take **`base_ref`** (the parent branch, for the report), **`diff_ref`**
+(the merge-base commit — what you actually diff against), `fallback` and `delta_empty`, and obey
+its `instruction` field. **`diff_ref` is the run's fixed basis:** resolve it once, pass it verbatim
+to every verifier, and never re-derive it per dispatch or substitute `HEAD` for it. Where two refs
+tie on the same merge-base commit the script prefers the local branch name; they yield an
+identical `diff_ref` either way.
 
-Then capture, as your remaining shell steps:
+Then capture, as your remaining shell steps — the script hands you both commands fully
+substituted, in `diff_command` and `status_command`:
 
 - `git diff <diff_ref>` — the full branch delta for tracked files, committed + uncommitted.
 - `git status --porcelain` — the set of changed + untracked paths.
 - New (untracked) files listed by `git status` — read their contents directly.
 
-**Fallback — `HEAD`, and only as the fallback.** When no fork point resolves — detached HEAD,
-a repo with no other branch, `merge-base` failing — set `diff_ref = HEAD` and diff
-`git diff HEAD`, the uncommitted delta only. **Say so in the report** whenever you fall back:
-the review is then narrower than intended, and that is a caveat on the result, not a silent
-detail.
+**Fallback — `HEAD`, and only as the fallback.** When no fork point resolves, the script returns
+`fallback: true` with `diff_ref: HEAD` — the uncommitted delta only — and names the case in
+`reason`. **Report it**, and report it accurately, because the two kinds are not equivalent:
 
-If the branch delta is empty — nothing committed since the fork point and nothing dirty (on
-the `HEAD` fallback: a clean working tree) — there is nothing to verify; say so and stop.
-Each verifier re-derives the slice of this diff relevant to its own mitigation; you do not
+- `no-divergence` — this branch has no commits since it was cut, so `HEAD` captures **all** of its
+  work. The review is **complete**; say so rather than caveating a result that needs no caveat.
+- `not-a-git-repository`, `no-commits`, `no-fork-point` (a detached HEAD, a repo with no other
+  branch, `merge-base` failing on a shallow clone — check the `shallow` field) — any *committed*
+  implementation is invisible to `git diff HEAD`. The review is then narrower than intended, and
+  that is a caveat on the result, not a silent detail.
+
+If `delta_empty: true` — nothing committed since the fork point and nothing dirty (on the `HEAD`
+fallback this means only that the working tree is clean) — there is nothing to verify; say so and
+stop. Each verifier re-derives the slice of this diff relevant to its own mitigation; you do not
 paste the whole diff into every dispatch.
 
 ## Maturity levels
@@ -287,10 +292,14 @@ file.
    **The assessment file**). If `file_exists: false`, you minted the wrong title — recover it
    from the file and re-mint. If no assessment for this task genuinely exists, state so and
    **stop**; do not fall through to the plan review.
-1. **Capture the diff.** Resolve the fork point to `base_ref` + `diff_ref`, then capture the
-   branch diff once (see **The diff under review**). Fall back to `diff_ref = HEAD` only when no
-   fork point resolves, and report that you did. If the branch delta is empty, state "no changes
-   to verify" and **stop**.
+1. **Capture the diff.** Run `scripts/branch-diff` to resolve `base_ref` + `diff_ref`, then
+   capture the branch diff **once** (see **The diff under review**). If **Phase select** already
+   ran it this turn, reuse the JSON you are holding rather than paying for it twice — the script
+   is deterministic, so either way you get the same refs. If you reached Testing by an explicit
+   request ("verify the mitigations"), Phase select's table was skipped and **you must run it
+   here**. However you got them, `diff_ref` is now fixed for the run: pass it verbatim to every
+   verifier and never re-derive it mid-run. If `fallback: true`, report that and its `reason`. If
+   `delta_empty: true`, state "no changes to verify" and **stop**.
 2. **Collect the scope.** Read the bounded `## Threats` and `## Mitigations` slices of the
    assessment file. The scope is every threat whose **Selection** is `selected`, each paired
    with the `selected` mitigations carrying its tag — **including a selected threat that no
@@ -365,8 +374,9 @@ gates in Testing.
 |---------|---------|
 | "`file_exists: false`, but I'm clearly verifying code I just wrote" | You minted the wrong title. The mint is keyed on branch + task slug, so a paraphrased title resolves to a different path. Recover the `## Task` Title from the assessment file and re-mint **verbatim** — never fall through to the plan review on code that is already written. |
 | "No assessment file, I'll threat-model it now" | Testing verifies an existing assessment. No assessment for the task → stop; Development runs at planning time, not after the code is written. |
-| "`git diff HEAD` is empty, so there's nothing to verify" | You are diffing the wrong basis. The implementation is almost certainly **committed** on this branch — diff against the fork point (`git diff <diff_ref>`), which carries committed *and* uncommitted work. `HEAD` is the fallback for when no fork point resolves, not the default. |
-| "The branch came off `main`, I'll just diff against `main`" | Never hardcode a trunk name — branches are cut from other feature, release, and integration branches all the time. Resolve the nearest branch point (see **The diff under review**); diffing against the wrong parent drags in unrelated work and buries the change under review. |
+| "`git diff HEAD` is empty, so there's nothing to verify" | You are diffing the wrong basis. The implementation is almost certainly **committed** on this branch — diff against the fork point `scripts/branch-diff` resolved (`git diff <diff_ref>`), which carries committed *and* uncommitted work. `HEAD` is the fallback for when no fork point resolves, not the default. |
+| "The branch came off `main`, I'll just diff against `main`" | Never hardcode a trunk name — branches are cut from other feature, release, and integration branches all the time. Run `scripts/branch-diff` and use the `base_ref`/`diff_ref` it returns; diffing against the wrong parent drags in unrelated work and buries the change under review. |
+| "`git status` is clean, so Phase select was wrong to send me here" | Phase select routes on the **branch delta**, not the tree. `delta_empty: false` with a clean tree means the implementation is **committed** — precisely the case this phase exists for. Diff against `diff_ref`, not `HEAD`. |
 | "I'll just eyeball the diff myself" | Dispatch a read-only `ingrain-threat-verifier` per selected threat — don't inline the analysis. |
 | "The mitigation is implemented exactly as its Description says, so it passes" | The Description is not the bar — the **threat** is. A control built to spec that still leaves a route to its threat is `weak` coverage. Ask what an attacker does next, not whether the words match. |
 | "I can't find a way in, so it must be closed" | Not finding a route is not the same as establishing there is none. If the analysis cannot show the threat is closed, it is `weak` with the uncertainty stated — never round up on a hunch, never silently pass. |
@@ -396,7 +406,7 @@ off by pointer: never paste the assessment, the sidecar, or the full diff into a
 Report the empty cases, never fail silently.
 
 - [ ] 0. Assessment located — title minted verbatim; no assessment for this task → stop
-- [ ] 1. Fork point resolved (`base_ref` + `diff_ref`) and branch diff captured once — `HEAD` only as a reported fallback; empty branch delta → stop
+- [ ] 1. Fork point resolved with `scripts/branch-diff` (`base_ref` + `diff_ref` + `fallback`) and branch diff captured once — `HEAD` only as a reported fallback; `delta_empty: true` → stop
 - [ ] 2. Scope collected — `selected` threats paired with their covering `selected` mitigations (an uncovered threat is still in scope), untagged rows set aside; nothing selected → set `Latest stage: testing` and stop
 - [ ] 3. Rules sidecar located (`rules_abs`) — absent is expected, never a blocker, never a finding
 - [ ] 4. One verifier dispatched per selected threat, plus the general-instruction pass — justification FIRST, then `weak`/`adequate`/`strong`

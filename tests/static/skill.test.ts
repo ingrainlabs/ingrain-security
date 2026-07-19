@@ -293,6 +293,17 @@ Deno.test("session-start: points the orchestrator at assessment_abs", async () =
   assertStringIncludes(hook, "assessment_abs");
 });
 
+Deno.test("session-start: injects the branch-diff runner Phase select routes on", async () => {
+  const hook = await Deno.readTextFile(SESSION_START);
+  // Both prose files promise the ready-to-run command arrives in SessionStart context. Without
+  // the runner the orchestrator hand-rolls a merge-base loop, which is the drift this replaces.
+  assertStringIncludes(hook, "scripts/branch-diff");
+  assertStringIncludes(hook, "branch_diff_runner_escaped");
+  assertStringIncludes(hook, "${branch_diff_runner_escaped}");
+  // The routing signal itself has to reach the agent, not just the command.
+  assertStringIncludes(hook, "delta_empty");
+});
+
 Deno.test("assessment-path: emits an instruction and anchors on the git repo root", async () => {
   const script = await Deno.readTextFile(PATH_SCRIPT);
   // The minting logic (JSON emission included) now lives in the shared mint-path.sh, which

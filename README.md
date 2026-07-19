@@ -71,7 +71,7 @@ flowchart TD
     end
 
     folded --> impl[coding agent implements the plan]
-    impl --> phase{assessment + adopted mitigations + dirty tree?}
+    impl --> phase{assessment + adopted mitigations + branch delta?}
     phase -->|no| nothing([Nothing to verify])
     phase -->|yes| diff
 
@@ -125,8 +125,8 @@ each verifier reads the org rules back from the `rules-<…>.md` sidecar Develop
   default rather than a guarantee.
 - **Manual.** Invoke the skill after implementing — e.g. *"Use ingrain-security to verify the
   mitigations I just implemented."* Naming the phase is enough to select it; otherwise the skill
-  routes on state (an assessment for this task, carrying adopted mitigations, plus a dirty tree
-  → Testing). This is the reliable way to run it.
+  routes on state (an assessment for this task, carrying adopted mitigations, plus a non-empty
+  branch delta — committed or uncommitted → Testing). This is the reliable way to run it.
 
 If a task has no assessment (or no adopted mitigations), there is nothing to verify.
 

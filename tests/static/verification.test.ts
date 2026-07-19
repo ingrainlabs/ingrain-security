@@ -76,15 +76,18 @@ Deno.test("SKILL.md: routes to a phase from repo state, then points at the refer
   // Testing is a pointer section, not the procedure — the detail is read on demand.
   assertStringIncludes(md, "## Testing — verification");
   assertStringIncludes(md, "Read `references/testing/verification-pass.md` NOW and follow it.");
-  // The three Testing conditions, and the signals they are read from.
+  // The three Testing conditions, and the signals they are read from. The third is the BRANCH
+  // DELTA, not the working tree: a fully-committed implementation must still route to Testing.
   assertStringIncludes(md, "file_exists");
-  assertStringIncludes(md, "git status --porcelain");
+  assertStringIncludes(md, "scripts/branch-diff");
+  assertStringIncludes(md, "delta_empty");
   assertStringIncludes(md, "it is a pointer, not the procedure");
 });
 
 Deno.test("SKILL.md: the SUBAGENT-STOP block covers the Testing read and both phases", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // The Testing worker reads the injected SKILL.md, observes a dirty tree, and must not recurse.
+  // The Testing worker reads the injected SKILL.md, sees a non-empty branch delta, and must not
+  // recurse into the orchestration it is part of.
   assertStringIncludes(md, "ingrain-threat-verifier), do the one job you were given");
   assertStringIncludes(md, "neither Development nor Testing");
 });
@@ -138,8 +141,10 @@ Deno.test("verification-pass.md: guards title drift, never falls back to Develop
 
 Deno.test("verification-pass.md: verifies the branch diff since the fork point and reuses the assessment schema", async () => {
   const md = await Deno.readTextFile(VERIFY);
-  // The diff basis is the fork point — committed work included, not just the dirty tree.
-  assertStringIncludes(md, "git merge-base");
+  // The diff basis is the fork point — committed work included, not just the dirty tree — and it
+  // is resolved by the bundled script, so the gate and the review cannot drift apart.
+  assertStringIncludes(md, "scripts/branch-diff");
+  assertStringIncludes(md, "diff_ref");
   assertStringIncludes(md, "git diff <diff_ref>");
   assertStringIncludes(md, "git status");
   // HEAD survives only as the documented fallback, and must stay documented.
