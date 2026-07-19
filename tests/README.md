@@ -1,7 +1,7 @@
 # Tests
 
 Test suite for the `ingrain-security` plugin — the `ingrain-security` orchestrator skill and its
-read-only worker roles: six in Development, plus Testing's `ingrain-mitigation-verifier`. Built on
+read-only worker roles: six in Development, plus Testing's `ingrain-threat-verifier`. Built on
 Deno's test runner; it drives the `claude` CLI in headless mode and can exercise each worker in
 isolation by dispatching it the way the orchestrator does (its
 `skills/ingrain-security/references/<name>.md` body as the system prompt, restricted to read-only

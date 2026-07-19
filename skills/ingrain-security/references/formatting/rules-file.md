@@ -78,7 +78,7 @@ none.
 | Plan · Critique (step 6) | `ingrain-mitigation-critic` | Reads it by pointer to judge how faithfully mitigations follow the cited rules |
 | Plan · Gate 2 (step 7) | orchestrator | Reads `## Per-mitigation mapping` + `## Retrieved rules` to resolve each **Rule ref** id → title for the "Follows rules" display |
 | Plan · finalize | orchestrator | **Leaves it in place** — persistent, never deleted |
-| Review | `ingrain-mitigation-verifier` | Reads its own mitigation's rule description(s) as supporting context for verification |
+| Review | `ingrain-threat-verifier` | Reads the rule description(s) behind its threat's covering mitigations as supporting context for verification |
 
 The file is never shown to the user directly; only the rule **titles** it records reach the
 user at Gate 2.

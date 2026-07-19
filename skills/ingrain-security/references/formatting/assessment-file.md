@@ -52,7 +52,7 @@ shape.
   |---------|-----------|
   | `## Task` | orchestrator (framing) |
   | `## Triage` | `ingrain-relevance-triage` |
-  | `## Threats` | `ingrain-threat-generator` (descriptive columns, working tags) → `ingrain-risk-scorer` (scoring columns, then re-tags the rows into risk order) → orchestrator (Selection at Gate 1) — **filled in stages** |
+  | `## Threats` | `ingrain-threat-generator` (descriptive columns, working tags) → `ingrain-risk-scorer` (scoring columns, then re-tags the rows into risk order) → orchestrator (Selection at Gate 1) → the Testing verification pass (Robustness at the Testing phase) — **filled in stages** |
   | `## Threat critique` | `ingrain-threat-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Risk score` | `ingrain-risk-scorer` (plan-level residual) |
   | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Selection at Gate 2) → the Testing verification pass (Justification + Verification level at the Testing phase) |
@@ -113,6 +113,7 @@ One row per threat, with these columns:
 | **Risk score** | integer `0`–`100` |
 | **Criticality** | `low` \| `medium` \| `high` \| `critical` |
 | **Selection** | `selected` \| `excluded` \| `undecided` (optional until Gate 1) |
+| **Robustness** | `weak` \| `adequate` \| `strong` — how well the adopted mitigations cover this threat in the implementation: `weak` = the threat can still be realized (a route survives, or the analysis cannot establish one does not); `adequate` = its realization routes are closed; `strong` = closed broadly **plus** artefacts that would fail if the control regressed. Concluded by the Testing pass from negative testing against the branch diff — not from whether a mitigation matches its Description. Normative definitions: `references/verification-pass.md` → **Maturity levels**. **Optional until that verification runs**; `—` before then and for any row not `selected`. |
 
 **Justification leads the scoring columns on purpose.** The scorer fills a row
 left-to-right, so this table doubles as a reasoning schema: writing the justification
@@ -154,7 +155,7 @@ this table.
 | **Rule refs** | the org rule id(s) the mitigation follows, `0..N` comma-separated (e.g. `r-auth-01, r-log-03`); `—` when it follows no org rule (a pure threat mitigation). One mitigation may follow multiple rules. Ids are machine-facing — stored here, **never rendered to the user** (Gate 2 shows rule titles instead). Each id is the link into the persistent `rules-<…>.md` sidecar, where the rule's title and full body live (see `references/formatting/rules-file.md`). |
 | **Selection** | `selected` \| `excluded` \| `undecided` (optional until Gate 2) |
 | **Justification** | string, **≤ 256 characters** — the reasoning behind the **Verification level**, concluded by the Testing orchestrator from the verifier's read. **Optional until that verification runs**; `—` before then and for any row not `selected`. |
-| **Verification level** | `fail` \| `accepted` \| `high` — the maturity a `selected` mitigation reached in the implementation: `fail` = not sufficiently implemented (absent, or present and not holding); `accepted` = implemented as its **Description** describes; `high` = `accepted` **plus** supporting artefacts that would fail if the control regressed. Normative definitions: `references/verification-pass.md` → **Maturity levels**. **Optional until that verification runs**; `—` before then and for any row not `selected`. |
+| **Verification level** | `weak` \| `adequate` \| `strong` — this mitigation's contribution to closing the threats it covers, **derived from their `Robustness`**: covering one threat, it takes that threat's level; covering several that differ, **the weakest governs**. A general implementation instruction (no threat tag) takes its level from whether the instruction was followed. Same ladder as `Robustness`; normative definitions: `references/verification-pass.md` → **Maturity levels**. **Optional until that verification runs**; `—` before then and for any row not `selected`. |
 
 **Follows org rules is derived, not stored twice.** A mitigation with ≥1 **Rule ref**
 follows org rules; an empty **Rule refs** (`—`) means a pure threat mitigation. Surface
@@ -171,17 +172,27 @@ adopt → `selected`, decline → `excluded`; `undecided` only if the user is un
 come first and drive the level. The 256-character cap on both justifications is part of that
 forcing — one that needs more room is a level that was decided first.
 
-**Who fills these two columns.** The Testing verification pass
-(`references/verification-pass.md`) concludes each `selected` mitigation's level from the
-evidence and writes both. Rows that are not `selected` stay `—`. Writing them, alongside setting
-`## Task` → `Latest stage: testing`, is what marks the assessment checked; the plan review
-leaves both empty.
+**Who fills the verification columns.** The Testing verification pass
+(`references/verification-pass.md`) writes all three: `## Threats` → **Robustness** from its
+negative testing of each selected threat, then `## Mitigations` → **Justification** and
+**Verification level**, the latter derived from the threats each mitigation covers. Rows that
+are not `selected` stay `—`. Writing them, alongside setting `## Task` →
+`Latest stage: testing`, is what marks the assessment checked; the plan review leaves them
+empty.
+
+**The threat column is the primary result.** `Robustness` records what was actually tested —
+whether the threat survives the change. `Verification level` is derived bookkeeping on top of
+it, so a mitigation's level never disagrees with the threat it covers.
 
 ### `## Coverage / open items`
 - Any threat whose **Selection** is `selected` that has no mitigation with
   **Selection** `selected` covering it (via its **Threat tags**). Only **threat
   mitigations** (those carrying threat tags) count toward covering a threat — general
   implementation instructions are not expected to cover a specific threat.
+- This is a **structural** join computed at the Development finalize: it says a mitigation was
+  adopted for the threat, not that the threat is actually closed. Efficacy lives in
+  `## Threats` → **Robustness**, written later by Testing. A threat can be "covered" here and
+  `weak` there. Testing does not rewrite this section.
 
 ### `## Maintenance (for the implementing agent)`
 - Instruction to keep the file in sync as the implementation evolves.
@@ -212,10 +223,10 @@ Surfaces:
 Prior analysis: <.ingrain-security/assessment-<…>.md — N threats | none>
 
 ## Threats
-| Tag | Title | Asset | Vector | Description | Assumptions | Justification | Impact | Likelihood | Risk score | Criticality | Selection |
-|-----|-------|-------|--------|-------------|-------------|---------------|--------|------------|------------|-------------|------------|
-| T1  | …     | …     | …      | …           | …           | …             | high   | medium     | 78         | high        | selected   |
-| T2  | …     | …     | …      | …           | …           | …             | low    | low        | 40         | medium      | excluded   |
+| Tag | Title | Asset | Vector | Description | Assumptions | Justification | Impact | Likelihood | Risk score | Criticality | Selection | Robustness |
+|-----|-------|-------|--------|-------------|-------------|---------------|--------|------------|------------|-------------|------------|------------|
+| T1  | …     | …     | …      | …           | …           | …             | high   | medium     | 78         | high        | selected   | adequate   |
+| T2  | …     | …     | …      | …           | …           | …             | low    | low        | 40         | medium      | excluded   | —          |
 
 ## Risk score
 Score: <0–100>
@@ -224,8 +235,8 @@ Criticality: <low|medium|high|critical>
 ## Mitigations
 | Tag | Title | Description | Yield | Effort | Threat tags | Rule refs | Selection | Justification | Verification level |
 |-----|-------|-------------|-------|--------|-------------|-----------|-----------|---------------|--------------------|
-| M1  | …     | …           | high  | medium | T1          | r-auth-01 | selected  | …             | accepted           |
-| M2  | …     | …           | medium| low    | —           | r-log-03  | selected  | …             | high               |
+| M1  | …     | …           | high  | medium | T1          | r-auth-01 | selected  | …             | adequate           |
+| M2  | …     | …           | medium| low    | —           | r-log-03  | selected  | …             | strong             |
 | M3  | …     | …           | low   | low    | T2          | —         | excluded  | —             | —                  |
 
 ## Coverage / open items

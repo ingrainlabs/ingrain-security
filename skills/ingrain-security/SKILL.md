@@ -10,10 +10,12 @@ description: >-
   before you present it or write any code. It triages the change and folds selected
   threats and adopted mitigations back into the plan you produce.
   **Testing — verification:** run AFTER you have implemented code for that plan, but
-  before you present or commit it. It checks the branch diff — everything committed
-  and uncommitted since this branch diverged from its parent — against the
-  mitigations the plan adopted and reports the maturity level each one reached and
-  which still need work. It writes no code.
+  before you present or commit it. It measures how robust the applied mitigations are
+  by negative testing: for each threat the plan selected, it checks the branch diff —
+  everything committed and uncommitted since this branch diverged from its parent — to
+  see whether that threat can still be realized in the code as built. The threats
+  define the scope. It reports each threat's robustness and, for any still reachable,
+  the residual path an attacker would take. It writes no code.
   If there is even a 1% chance the change touches security, invoke it — triage decides
   whether a full review is warranted.
 ---
@@ -21,7 +23,7 @@ description: >-
 <SUBAGENT-STOP>
 If you were dispatched as a worker subagent (ingrain-relevance-triage, ingrain-threat-generator,
 ingrain-threat-critic, ingrain-risk-scorer, ingrain-mitigation-generator, ingrain-mitigation-critic,
-ingrain-mitigation-verifier), do the one job you were given
+ingrain-threat-verifier), do the one job you were given
 and return. Do NOT run this orchestration — neither Development nor Testing — you are part of it.
 </SUBAGENT-STOP>
 
@@ -88,8 +90,8 @@ dirty tree.** Anything else is Development. Note what is deliberately *not* in t
 - **`Latest stage: testing` does not mean Testing is done.** The field records that a
   verification ran; it does not close the task, and it is never a reason to skip. An
   assessment already at `Latest stage: testing` whose tree is dirty again — the user revised
-  the code after a verification round — is **Testing again**: re-verify every adopted
-  mitigation and overwrite the `Justification` + `Verification level` columns.
+  the code after a verification round — is **Testing again**: re-test every selected threat and
+  overwrite the `Robustness`, `Justification` and `Verification level` columns.
   The plan did not change; the code did. Never re-run Development to "re-review" it.
 - **A `minor` triage adopts no mitigations, so it never routes to Testing.** It lands on row 2. If
   the user explicitly asked to verify, the override sends you to Testing, which stops at "no
@@ -365,7 +367,9 @@ incorporate them and continue planning.
 
 ## Testing — verification
 
-Testing checks that the mitigations Gate 2 adopted were actually implemented. It fires when
+Testing measures how robust the adopted mitigations are, by **negative testing**: for each
+threat Gate 1 selected, can it still be realized in the code as built? The threats define the
+scope — not the mitigation Descriptions. It fires when
 **Phase select** lands on Testing — an assessment for this task exists, it carries `selected`
 mitigations, and the working tree is dirty. **Nothing above this line applies to it:** the
 checklist, both gates, the critic loops, and the org-rules CLI lookup are Development only.

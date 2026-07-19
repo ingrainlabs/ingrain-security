@@ -21,7 +21,7 @@ import {
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
 const VERIFY = `${ROOT}skills/ingrain-security/references/verification-pass.md`;
-const VERIFIER_REF = `${ROOT}skills/ingrain-security/references/ingrain-mitigation-verifier.md`;
+const VERIFIER_REF = `${ROOT}skills/ingrain-security/references/ingrain-threat-verifier.md`;
 
 /**
  * The contents of every fenced code block in `md`, joined. In a dispatch section that is the
@@ -85,15 +85,15 @@ Deno.test("SKILL.md: routes to a phase from repo state, then points at the refer
 Deno.test("SKILL.md: the SUBAGENT-STOP block covers the Testing read and both phases", async () => {
   const md = await Deno.readTextFile(SKILL);
   // The Testing worker reads the injected SKILL.md, observes a dirty tree, and must not recurse.
-  assertStringIncludes(md, "ingrain-mitigation-verifier), do the one job you were given");
+  assertStringIncludes(md, "ingrain-threat-verifier), do the one job you were given");
   assertStringIncludes(md, "neither Development nor Testing");
 });
 
 Deno.test("verification-pass.md: dispatches the read-only verifier via its reference file", async () => {
   const md = await Deno.readTextFile(VERIFY);
   // The one worker role and the read-reference dispatch mechanism.
-  assertStringIncludes(md, "ingrain-mitigation-verifier");
-  assertStringIncludes(md, "Read references/ingrain-mitigation-verifier.md");
+  assertStringIncludes(md, "ingrain-threat-verifier");
+  assertStringIncludes(md, "Read references/ingrain-threat-verifier.md");
   // The read-only constraint is restated for the dispatched subagent.
   assertStringIncludes(md.toLowerCase(), "read-only");
   // Now a sibling reference in the same skill — no cross-skill path survives the merge.
@@ -108,10 +108,10 @@ Deno.test("verification-pass.md: dispatches the read-only verifier via its refer
   }
 });
 
-Deno.test("verification-pass.md: one verifier per adopted (selected) mitigation", async () => {
+Deno.test("verification-pass.md: one verifier per selected threat", async () => {
   const md = await Deno.readTextFile(VERIFY);
-  assertStringIncludes(md, "per adopted mitigation");
-  // Only `selected` mitigations are verified.
+  assertStringIncludes(md, "per selected threat");
+  // Threats define the scope; only `selected` ones are tested.
   assertStringIncludes(md, "selected");
 });
 
@@ -155,7 +155,7 @@ Deno.test("verification-pass.md: marks the assessment checked (Verification leve
   // The two columns the orchestrator records, and the maturity enum it picks from.
   assertStringIncludes(md, "Verification level");
   assertStringIncludes(md, "Justification");
-  for (const v of ["`fail`", "`accepted`", "`high`"]) assertStringIncludes(md, v);
+  for (const v of ["`weak`", "`adequate`", "`strong`"]) assertStringIncludes(md, v);
   // The old verdict enum is gone from the schema. Note this pins the ENUM, not the bare
   // words: the prose and the report's Gap column still legitimately say "insufficient".
   assertEquals(
@@ -190,7 +190,7 @@ Deno.test("verification-pass.md: announces itself and reports to the coding agen
 Deno.test("verifier ref: INTERNAL worker, read-only with a narrow read-only-git exception on the branch diff", async () => {
   const md = await Deno.readTextFile(VERIFIER_REF);
   const fm = parseFrontmatter(md);
-  assertEquals(fm.name, "ingrain-mitigation-verifier");
+  assertEquals(fm.name, "ingrain-threat-verifier");
   // Marked internal so it does not self-trigger.
   assertStringIncludes(md, "do NOT invoke");
   assertStringIncludes(md.toLowerCase(), "internal worker");
@@ -202,16 +202,16 @@ Deno.test("verifier ref: INTERNAL worker, read-only with a narrow read-only-git 
   assertStringIncludes(md, "do not substitute `HEAD` for it");
   // Grades on the maturity ladder, and leads with the JUSTIFICATION — not the level. The
   // order is the point: a level written first is one the justification then argues for.
-  for (const v of ["`fail`", "`accepted`", "`high`"]) assertStringIncludes(md, v);
+  for (const v of ["`weak`", "`adequate`", "`strong`"]) assertStringIncludes(md, v);
   assertOrder(md, "JUSTIFICATION", "LEVEL", "the verifier leads with its justification");
 });
 
 Deno.test("verification-pass.md: defines the three maturity levels", async () => {
   const s = section(await Deno.readTextFile(VERIFY), "## Maturity levels");
-  for (const v of ["`fail`", "`accepted`", "`high`"]) assertStringIncludes(s, v);
-  // `fail` subsumes both old verdicts; the split survives only in the report's Gap column.
-  assertStringIncludes(s.toLowerCase(), "not sufficiently implemented");
-  // `high` is `accepted` PLUS artefacts — not a synonym for "well implemented".
+  for (const v of ["`weak`", "`adequate`", "`strong`"]) assertStringIncludes(s, v);
+  // The ladder is negative testing: `weak` means the threat survives the change.
+  assertStringIncludes(s.toLowerCase(), "can still be realized");
+  // `strong` is `adequate` PLUS artefacts — not a synonym for "well implemented".
   assertStringIncludes(s.toLowerCase(), "artefact");
   assertStringIncludes(s.toLowerCase(), "test");
 });
@@ -243,7 +243,7 @@ Deno.test("assessment-file.md: defines the Justification + Verification level co
   // The two columns and the maturity enum.
   assertStringIncludes(md, "**Verification level**");
   assertStringIncludes(md, "**Justification**");
-  for (const v of ["`fail`", "`accepted`", "`high`"]) assertStringIncludes(md, v);
+  for (const v of ["`weak`", "`adequate`", "`strong`"]) assertStringIncludes(md, v);
   assertEquals(md.includes("**Verified**"), false, "the Verified column is renamed");
   // It is the Testing verification pass that fills them, after the code is written.
   assertStringIncludes(md, "Testing");

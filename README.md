@@ -61,23 +61,29 @@ Planning adopts mitigations; the **Testing** phase of the same skill checks they
 has two phases and picks between them from repo state: **Development** is the plan review above,
 run before code; **Testing** (spec:
 [`skills/ingrain-security/references/verification-pass.md`](skills/ingrain-security/references/verification-pass.md))
-runs after you implement a task whose plan went through that review. It locates the task's
-assessment file, reviews the **branch diff since this branch diverged from its parent**
-(committed and uncommitted alike), and dispatches one read-only
-`ingrain-mitigation-verifier` per adopted mitigation — each holding that mitigation, the threats
-it covers, and the org rules behind it from the `rules-<…>.md` sidecar.
+runs after you implement a task whose plan went through that review. It measures **how robust
+the applied mitigations are** — by **negative testing**: whether the threats the plan selected
+can still be realized against the code as built. The threats define the scope. It locates the
+task's assessment file, reviews the **branch diff since this branch diverged from its parent**
+(committed and uncommitted alike), and dispatches one read-only `ingrain-threat-verifier` per
+selected threat — each holding that threat, the adopted mitigations meant to close it, and the
+org rules behind them from the `rules-<…>.md` sidecar. A threat the plan selected but adopted
+nothing for is tested too.
 
 Each verifier justifies before it concludes, and the skill **weighs that justification on its
 evidence** rather than taking the level word at face value: a level the cited `file:line` does
 not carry does not stand, and the level recorded is the orchestrator's own conclusion.
 
-It reports each adopted mitigation's maturity — `fail` (not sufficiently implemented),
-`accepted` (implemented as described), or `high` (implemented broadly *and* backed by artefacts
-such as adversarial tests) — with evidence and a fix recommendation, and marks the assessment
-checked by recording each mitigation's **Justification** + **Verification level** and advancing
-the file's stage to `testing`. It writes no code, runs no user gates, and makes no `ingrain` CLI
-call: each verifier reads its mitigation's org rules back from the `rules-<…>.md` sidecar
-Development persisted.
+It reports each threat's robustness — `weak` (the threat can still be realized), `adequate`
+(its realization routes are closed), or `strong` (closed broadly *and* backed by artefacts such
+as adversarial tests) — with evidence and, for `weak`, the concrete residual path by which the
+attack still gets through. Whether a mitigation matches the wording of its Description is not
+the bar; a control built to spec that still leaves its threat reachable is `weak` coverage.
+Judging robustness is left to the analyzing agent — the levels define what was tested, not a
+rubric to execute. It marks the assessment checked by recording each threat's **Robustness**
+and each mitigation's **Justification** + **Verification level**, and advancing the file's
+stage to `testing`. It writes no code, runs no user gates, and makes no `ingrain` CLI call:
+each verifier reads the org rules back from the `rules-<…>.md` sidecar Development persisted.
 
 - **On the skill's own trigger.** The skill description tells the agent to run Testing after it
   implements code for a reviewed plan, before presenting or committing it. Nothing enforces this
