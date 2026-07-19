@@ -24,22 +24,22 @@
 # unreliable in a worktree/submodule. Detached HEAD or a non-git dir yields empty
 # (git noise swallowed), which callers treat as an unknown branch.
 resolve_branch() {
-    local root="$1" b
-    b="$(git -C "${root}" branch --show-current 2>/dev/null)"
-    [ -n "${b}" ] || b="$(git -C "${root}" rev-parse --abbrev-ref HEAD 2>/dev/null)"
-    [ "${b}" = "HEAD" ] && b=""
-    printf '%s' "${b}"
+    local root="$1" branch
+    branch="$(git -C "${root}" branch --show-current 2>/dev/null)"
+    [ -n "${branch}" ] || branch="$(git -C "${root}" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+    [ "${branch}" = "HEAD" ] && branch=""
+    printf '%s' "${branch}"
 }
 
 # Slugify: lowercase, reduce every disallowed char to `-`, collapse `-` runs, trim.
 # So `feature/foo` -> `feature-foo`, `Feature/Foo Bar` -> `feature-foo-bar`.
 slugify() {
-    local s
-    s="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-' '-')"
-    while [[ "${s}" == *--* ]]; do s="${s//--/-}"; done
-    s="${s#-}"
-    s="${s%-}"
-    printf '%s' "${s}"
+    local slug
+    slug="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-' '-')"
+    while [[ "${slug}" == *--* ]]; do slug="${slug//--/-}"; done
+    slug="${slug#-}"
+    slug="${slug%-}"
+    printf '%s' "${slug}"
 }
 
 # Mint one sidecar path. $1 host (selects project-root resolution only), $2 label
