@@ -3,7 +3,7 @@
  * network — pure file reads.
  *
  * Workers are reference files under the single ingrain-security skill now
- * (skills/ingrain-security/references/<name>.md), so the read-only guarantee is
+ * (skills/ingrain-security/references/development/<name>.md), so the read-only guarantee is
  * advisory prose in the ROLE header rather than a platform-enforced `tools:`
  * frontmatter list. These checks guard that advisory contract: every worker
  * still declares itself read-only on the codebase (Read/Grep/Glob, no code
@@ -23,7 +23,7 @@ import { fromFileUrl } from "@std/path";
 import { parseFrontmatter } from "../lib/matchers.ts";
 
 const REFERENCES_DIR = fromFileUrl(
-  new URL("../../skills/ingrain-security/references/", import.meta.url),
+  new URL("../../skills/ingrain-security/references/development/", import.meta.url),
 );
 
 const WORKERS = [

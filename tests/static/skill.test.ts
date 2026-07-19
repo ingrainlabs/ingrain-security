@@ -17,8 +17,9 @@ import {
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
 const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/formatting/assessment-file.md`;
-const TRIAGE_REF = `${ROOT}skills/ingrain-security/references/ingrain-relevance-triage.md`;
-const PLATFORM_REF = `${ROOT}skills/ingrain-security/references/platform-dispatch.md`;
+const TRIAGE_REF =
+  `${ROOT}skills/ingrain-security/references/development/ingrain-relevance-triage.md`;
+const PLATFORM_REF = `${ROOT}skills/ingrain-security/references/lib/platform-dispatch.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
 const SESSION_START = `${ROOT}hooks/start/session-start`;
@@ -115,9 +116,9 @@ Deno.test("SKILL.md: contains the announce and minor-stop phrases", async () => 
 Deno.test("SKILL.md: documents the read-reference dispatch mechanism", async () => {
   const md = await Deno.readTextFile(SKILL);
   // Generic-subagent dispatch reads each worker's reference file by path.
-  assertStringIncludes(md, "Read references/<name>.md");
+  assertStringIncludes(md, "Read references/development/<name>.md");
   // Cross-platform mapping lives in the reference doc.
-  assertStringIncludes(md, "references/platform-dispatch.md");
+  assertStringIncludes(md, "references/lib/platform-dispatch.md");
   // The read-only constraint is restated for the dispatched subagents.
   assertStringIncludes(md.toLowerCase(), "read-only");
 });
@@ -241,19 +242,28 @@ Deno.test("SKILL.md: folds the assessment link + maintenance instruction into th
 });
 
 Deno.test("platform-dispatch.md: covers the subagent primitive and the fallback", async () => {
-  const ref = `${ROOT}skills/ingrain-security/references/platform-dispatch.md`;
+  const ref = `${ROOT}skills/ingrain-security/references/lib/platform-dispatch.md`;
   const md = await Deno.readTextFile(ref);
   assertStringIncludes(md.toLowerCase(), "task primitive");
   assertStringIncludes(md.toLowerCase(), "fallback");
 });
 
-Deno.test("ingrain-rule-expander.md: documents the ingrain rule-retrieval CLI", async () => {
-  const ref = `${ROOT}skills/ingrain-security/references/ingrain-rule-expander.md`;
+Deno.test("ingrain-cli.md: documents the ingrain rule-retrieval CLI", async () => {
+  const ref = `${ROOT}skills/ingrain-security/references/lib/ingrain-cli.md`;
   const md = await Deno.readTextFile(ref);
-  // The retrieval command and its output shape.
+  // The probe, the retrieval command, and its output shape.
+  assertStringIncludes(md, "ingrain --version");
   assertStringIncludes(md, "ingrain context security_rules");
-  // Version fallback for older CLIs (pre-rename #98).
-  assertStringIncludes(md, "ingrain context decisions");
+  assertStringIncludes(md, '{ "id"');
+  // The pre-rename `decisions` spelling is no longer supported anywhere.
+  assertEquals(md.includes("ingrain context decisions"), false);
+});
+
+Deno.test("ingrain-rule-expander.md: defers the CLI mechanics and degrades gracefully", async () => {
+  const ref = `${ROOT}skills/ingrain-security/references/development/ingrain-rule-expander.md`;
+  const md = await Deno.readTextFile(ref);
+  // The mechanics live in the CLI reference; the worker only handles the outcomes.
+  assertStringIncludes(md, "references/lib/ingrain-cli.md");
   // Graceful degradation when the CLI is absent/unconfigured.
   assertStringIncludes(md.toLowerCase(), "graceful degradation");
   assertStringIncludes(md.toLowerCase(), "proceed without rules");
@@ -262,7 +272,8 @@ Deno.test("ingrain-rule-expander.md: documents the ingrain rule-retrieval CLI", 
 Deno.test("SKILL.md: the orchestrator's own step retrieves rules", async () => {
   const md = await Deno.readTextFile(SKILL);
   // Step 5 is the orchestrator's first-pass retrieval, run in session — not a dispatch.
-  assertStringIncludes(md, "ingrain context security_rules");
+  // It points at the CLI reference rather than restating the command.
+  assertStringIncludes(md, "references/lib/ingrain-cli.md");
 });
 
 // The assessment file must be written to the ABSOLUTE `assessment_abs`. A relative path

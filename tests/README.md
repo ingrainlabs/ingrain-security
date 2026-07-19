@@ -4,8 +4,23 @@ Test suite for the `ingrain-security` plugin — the `ingrain-security` orchestr
 read-only worker roles: six in Development, plus Testing's `ingrain-threat-verifier`. Built on
 Deno's test runner; it drives the `claude` CLI in headless mode and can exercise each worker in
 isolation by dispatching it the way the orchestrator does (its
-`skills/ingrain-security/references/<name>.md` body as the system prompt, restricted to read-only
-tools).
+`skills/ingrain-security/references/development/<name>.md` body as the system prompt, restricted to
+read-only tools).
+
+## Reference layout
+
+The skill's reference files are grouped by the phase that reads them, so a file's phase is visible
+from its path:
+
+| Folder                    | Holds                                                                      |
+| ------------------------- | -------------------------------------------------------------------------- |
+| `references/development/` | The seven Development worker roles, `ingrain-<role>.md`                    |
+| `references/testing/`     | `verification-pass.md` (the Testing flow) and `ingrain-threat-verifier.md` |
+| `references/lib/`         | `platform-dispatch.md` — dispatch machinery, read by both phases           |
+| `references/formatting/`  | `assessment-file.md`, `rules-file.md` — file schemas, read by both phases  |
+
+A worker's filename stem equals its frontmatter `name:`, so the static tests derive a worker's path
+from its name — keep the two in step when adding a worker.
 
 ## Requirements
 
@@ -75,7 +90,7 @@ This is always on for the live tiers — Deno streams each test's output live (w
   pinned ShellCheck rather than trusting the runner image to preinstall one, and lints the same
   scripts from its own workflow step rather than through this tier — see **CI** below.
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
-  `skills/ingrain-security/references/<name>.md` body as the system prompt with
+  `skills/ingrain-security/references/development/<name>.md` body as the system prompt with
   `--allowed-tools Read,Grep,Glob`. The test asserts the output's _shape_ (a verdict keyword, a
   0–100 score, risk descending by threat tag, required fields). Assertions are loose because live
   output varies.
@@ -194,8 +209,9 @@ earlier mode's transcript in its own subdir.
 
 - Live tests call the model, so an occasional flake is possible; re-run a single test with
   `--filter`. Assertions check shape, not exact wording, to minimize this.
-- Each worker is dispatched by inlining its `skills/ingrain-security/references/<name>.md` body (via
-  `workerDispatchPrompt` in `lib/claudeRunner.ts`) and restricting tools to `Read,Grep,Glob`; the
-  plugin is loaded via `--plugin-dir` pointing at the repo root (computed automatically).
+- Each worker is dispatched by inlining its
+  `skills/ingrain-security/references/development/<name>.md` body (via `workerDispatchPrompt` in
+  `lib/claudeRunner.ts`) and restricting tools to `Read,Grep,Glob`; the plugin is loaded via
+  `--plugin-dir` pointing at the repo root (computed automatically).
 - The orchestration test deliberately does **not** answer the interactive Gate 1/Gate 2 prompts —
   headless mode has no human — so it asserts the run _reaches_ Gate 1 and stops.

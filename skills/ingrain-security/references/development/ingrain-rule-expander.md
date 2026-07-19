@@ -60,40 +60,23 @@ Skip anything already covered by an entry in the sidecar. Re-retrieving a rule t
 
 ### 2. Retrieve
 
-0. **Check the CLI is available.** Run `ingrain --version` — a local probe that reads no
-   config and makes no network call. If it fails with `command not found`, this repo has
-   no org rules store wired up: add nothing, leave any existing sidecar untouched, note
-   `no further rules retrieved — ingrain CLI not installed` in your return headline, and
-   return. Do not stall, and do not ask the user to install it. Any *other* failure — a
-   sandbox denial, or a binary that is present but will not run — is inconclusive: continue
-   to step 1 and let the branches below cover it.
-1. Formulate one or more natural-language queries — one per distinct question you
-   identified in §1. Queries are matched on meaning, not keywords, so phrase them as
-   questions.
-2. Run each query (default limit 10; raise with `--limit N`, 1–50, when a topic is broad):
+**`references/lib/ingrain-cli.md` owns the commands, their flags, the returned shape, and
+the failure taxonomy.** Read it and drive the CLI from there; below is only what *you* do
+with each outcome.
 
-   ```bash
-   ingrain context security_rules "<query>" --json
-   ```
+0. **Check the CLI is available** with the availability probe. A **not installed** result
+   means this repo has no org rules store wired up: add nothing, leave any existing sidecar
+   untouched, note `no further rules retrieved — ingrain CLI not installed` in your return
+   headline, and return. Do not stall, and do not ask the user to install it. Any *other*
+   failure is inconclusive — continue to step 1 and let the branches below cover it.
+1. Formulate one query per distinct question you identified in §1.
+2. Run each query.
+3. Discard any returned id already present in the sidecar's `## Retrieved rules`; those are
+   not new.
 
-   **Version fallback:** older `ingrain` builds (pre-rename) name the subcommand
-   `decisions` instead of `security_rules`. If `security_rules` errors as an
-   unknown subcommand, retry the same query with:
-
-   ```bash
-   ingrain context decisions "<query>" --json
-   ```
-
-3. Parse the JSON array of rule objects — each is `{ "id", "title", "body" }`. Discard any
-   id already present in the sidecar's `## Retrieved rules`; those are not new.
-
-**Access denied? Ask for permission and retry — don't skip.** A sandbox or
-permission denial is different from the CLI being unavailable: the org rules *are*
-reachable, the host just hasn't granted this command exec. If the `ingrain context`
-call is **blocked by the sandbox / permission layer, or the host has not granted
-exec** (e.g. an "operation not permitted" / sandbox-denied / permission-required
-error, not a "command not found" or config error), do **not** treat it as graceful
-degradation:
+**Access denied? Ask for permission and retry — don't skip.** An **access denied** result
+is different from the CLI being unavailable: the org rules *are* reachable, the host just
+hasn't granted this command exec. Do **not** treat it as graceful degradation:
 
 1. **Re-attempt so the host's native permission prompt reaches the user** — re-run
    the same `ingrain context` command in the way that surfaces the host's "allow this
@@ -106,17 +89,14 @@ degradation:
    access. Do not fall back to adding nothing on your own — the orchestrator owns that
    decision once the user has been asked.
 
-**Graceful degradation — never block on the CLI.** This applies only to failures the
-user *cannot* fix by granting access: the CLI is present but unconfigured (missing
-`INGRAIN_SYNC_URL` / API token surfaces as a config error and runs no search), the
-subcommand is unknown even after the version fallback, or every query returns no matches.
-It also still covers an absent `ingrain` binary if you reach a `command not found` here
-without having probed. In every such case, **add no rules and proceed without rules** —
-leave any existing sidecar exactly as you found it, and write none if there was none. Do
-not fail or stall the review; the critique loop runs next regardless. In your return
-headline, note briefly that no further rules were retrieved and why (e.g.
-`no further rules retrieved — CLI not configured`). A permission/sandbox denial is **not**
-one of these cases — it takes the access-denied branch above.
+**Graceful degradation — never block on the CLI.** This applies to every outcome the user
+*cannot* fix by granting access — **unconfigured**, **unsupported build**, **no matches**,
+and a **not installed** result you reach without having probed. In each case, **add no rules
+and proceed without rules** — leave any existing sidecar exactly as you found it, and write
+none if there was none. Do not fail or stall the review; the critique loop runs next
+regardless. In your return headline, note briefly that no further rules were retrieved and
+why (e.g. `no further rules retrieved — CLI not configured`). An **access denied** result is
+**not** one of these cases — it takes the branch above.
 
 Finding nothing new is a legitimate outcome, not a failure. If the first pass already
 covered the ground, say so and return.

@@ -40,7 +40,7 @@ the short version:
   subagents — `ingrain-relevance-triage`, `ingrain-threat-generator`,
   `ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-mitigation-generator`,
   `ingrain-rule-expander`, `ingrain-mitigation-critic` (defined under
-  [`skills/ingrain-security/references/`](skills/ingrain-security/references/)).
+  [`skills/ingrain-security/references/development/`](skills/ingrain-security/references/development/)).
   Each uses only Read/Grep/Glob on your codebase; its sole write is its own section
   of the assessment file.
 - **Two selection gates are yours.** At Gate 1 and Gate 2 you decide, per finding,
@@ -94,7 +94,7 @@ flowchart TD
 Planning adopts mitigations; the **Testing** phase of the same skill checks they were built. `ingrain-security`
 has two phases and picks between them from repo state: **Development** is the plan review above,
 run before code; **Testing** (spec:
-[`skills/ingrain-security/references/verification-pass.md`](skills/ingrain-security/references/verification-pass.md))
+[`skills/ingrain-security/references/testing/verification-pass.md`](skills/ingrain-security/references/testing/verification-pass.md))
 runs after you implement a task whose plan went through that review. It measures **how robust
 the applied mitigations are** — by **negative testing**: whether the threats the plan selected
 can still be realized against the code as built. The threats define the scope. It locates the

@@ -44,7 +44,7 @@ away.
 
 This skill has two phases. **Development — plan review** is the checklist below, and is
 everything the `<EXTREMELY-IMPORTANT>` block describes: it runs on a finished plan, before
-code. **Testing — verification** (`references/verification-pass.md`) runs on the code that
+code. **Testing — verification** (`references/testing/verification-pass.md`) runs on the code that
 plan produced. Decide which one you are in **from repo state, before anything else** — never
 from a guess about what the user meant, and never by reading ahead into the checklist.
 
@@ -77,7 +77,7 @@ read the context-window discipline permits). Then:
 | `false` | — | anything | **Development** — no assessment for this task; there is nothing to verify |
 | `true` | none | anything | **Development** — resume this task's analysis in place (Step 0's `file_exists: true`) |
 | `true` | 1+ | clean | **Development** — the plan was reviewed, but no code exists yet to verify |
-| `true` | 1+ | dirty (`git status --porcelain` non-empty) | **Testing** — read `references/verification-pass.md` NOW |
+| `true` | 1+ | dirty (`git status --porcelain` non-empty) | **Testing** — read `references/testing/verification-pass.md` NOW |
 
 **Testing requires all three: an assessment for THIS task, adopted mitigations in it, and a
 dirty tree.** Anything else is Development. Note what is deliberately *not* in the table:
@@ -106,7 +106,7 @@ Announce the phase you picked in your opening line, so a misroute costs the user
 **Announce:** open with "Using ingrain-security to assess this plan."
 
 You orchestrate seven **read-only** worker roles, each defined by a reference file at
-`references/<name>.md` (`ingrain-relevance-triage`, `ingrain-threat-generator`,
+`references/development/<name>.md` (`ingrain-relevance-triage`, `ingrain-threat-generator`,
 `ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-mitigation-generator`,
 `ingrain-rule-expander`, `ingrain-mitigation-critic`). You dispatch each as a fresh subagent,
 in order, holding the state between steps yourself — workers cannot call each other or you.
@@ -136,7 +136,7 @@ afterwards.
 A worker is a role defined by a reference file, not a platform-native agent. You never run a
 worker's logic yourself — you dispatch a **fresh worker subagent** and tell it to become that
 worker by reading its reference file.
-→ `references/platform-dispatch.md` maps this onto your host (subagent/task primitive, or
+→ `references/lib/platform-dispatch.md` maps this onto your host (subagent/task primitive, or
 the sequential in-context fallback where none exists) — read it if you are unsure which
 primitive to use.
 
@@ -144,7 +144,7 @@ Dispatch every worker with the same shape — restate the read-only constraint i
 on hosts without tool-level enforcement it is the only thing enforcing it:
 
 ```
-Read references/<name>.md and follow it as your system prompt.
+Read references/development/<name>.md and follow it as your system prompt.
 You do no code or repo edits — use only Read/Grep/Glob on the codebase. Your ONE
 permitted write is your own section of the stored analysis file for this run at
 <the minted assessment_abs — the ABSOLUTE path, pasted in full> (section: <## Section for this worker>),
@@ -190,7 +190,7 @@ steps, in this order**:
    findings never blur together the way they do in a single multi-toggle list. Mark
    high/critical findings recommended. Because each window is its own decision, **selecting
    none is always reachable** — the user excludes every window.
-   → `references/platform-dispatch.md` § Selection windows for the host mechanism and the
+   → `references/lib/platform-dispatch.md` § Selection windows for the host mechanism and the
    batching rule where a host caps how many windows it can show at once.
 
 **Never collapse a gate into a single yes/no over the whole set, and never fold all findings
@@ -208,7 +208,7 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    `<project_root>/.ingrain-security/` folder from the mint JSON (a relative folder silently
    matches nothing, and it would wrongly report `none`). It checks for a prior analysis of
    this task before it classifies.
-   → `references/ingrain-relevance-triage.md` defines what it does; you only branch on its
+   → `references/development/ingrain-relevance-triage.md` defines what it does; you only branch on its
    keyword.
    - `minor` → state "no security review needed — minor change" and **STOP**. Dispatch no
      other worker. There is nothing to fold into the plan — carry on building it.
@@ -279,17 +279,15 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    yet; Step 7 runs a second pass once one does.
    1. Mint `rules_abs` with the `rules-path` command from your `INGRAIN-ASSESSMENT-PATHS`
       session context, exactly as you minted `assessment_abs`.
-   2. Probe with `ingrain --version` — a local check that reads no config and makes no
-      network call.
+   2. Probe that the CLI is available.
    3. From the plan and the selected threats, reason about which security features need org
-      guidance (e.g. "how do we authenticate service-to-service calls"), phrase one
-      natural-language query per distinct question — they match on meaning, not keywords —
-      and run each: `ingrain context security_rules "<query>" --json` (default limit 10;
-      raise with `--limit N`, 1–50, for a broad topic). On an unknown-subcommand error, retry
-      with the pre-rename spelling `ingrain context decisions "<query>" --json`.
+      guidance (e.g. "how do we authenticate service-to-service calls"), and run one query
+      per distinct question.
    4. Write the returned rules — id, title, and **full body verbatim** — into the sidecar's
       `## Retrieved rules` at `rules_abs`. Cite only what came back; never invent a rule or an
       id. Write **no sidecar at all** if nothing was retrieved.
+   → `references/lib/ingrain-cli.md` owns the probe, the query command and its flags, the
+   returned shape, and how to classify a failure.
    → `references/formatting/rules-file.md` owns the sidecar's schema and lifecycle.
    - **Sandbox or permission denial** → you are in the main session, so the host's native
      "allow this command?" prompt reaches the user directly. **Do not accept the review
@@ -318,7 +316,7 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    **It runs exactly once.** It is not part of the Step 8 loop and is never re-dispatched on a
    revision round — the critic is what carries its findings into the mitigations. Skip this
    step entirely if Step 5's probe reported the CLI absent, and say so when you do.
-   → `references/ingrain-rule-expander.md` owns the lookup and its failure modes.
+   → `references/development/ingrain-rule-expander.md` owns the lookup and its failure modes.
    - `fetch blocked — permission needed` → the lookup was denied by the sandbox and the worker
      could not surface a prompt itself. Ask the user for access using the same window
      primitive the gates use, and on grant **re-dispatch with exec access** — this recovery
@@ -421,7 +419,7 @@ scope — not the mitigation Descriptions. It fires when
 mitigations, and the working tree is dirty. **Nothing above this line applies to it:** the
 checklist, both gates, the critic loops, and the org-rules CLI lookup are Development only.
 
-**Read `references/verification-pass.md` NOW and follow it.** The full loop lives there — do
+**Read `references/testing/verification-pass.md` NOW and follow it.** The full loop lives there — do
 not run it from this section's summary: it is a pointer, not the procedure.
 
 **Announce:** open with "Using ingrain-security to verify the implemented mitigations."

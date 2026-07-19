@@ -2,7 +2,7 @@
 
 Each worker is dispatched as a **fresh worker subagent** (read-only on the
 codebase; its sole write is its own section of the assessment file) told to read
-its reference file at `references/<name>.md` and follow it. That abstraction maps
+its reference file at `references/development/<name>.md` and follow it. That abstraction maps
 differently onto each host. The dispatch *prompt* is always the same; only the
 *mechanism* below changes.
 
@@ -13,7 +13,7 @@ of the stored analysis file at the path this dispatch names."
 ## Host with a subagent / task primitive
 
 Use the host's subagent / task primitive, passing the dispatch prompt and telling
-the subagent to read the worker reference file from `references/<name>.md`. Dispatch one
+the subagent to read the worker reference file from `references/development/<name>.md`. Dispatch one
 worker per call and read the returned text. Where the host supports a per-subagent
 model, set the worker's recommended tier; otherwise ignore it (advisory).
 
@@ -25,7 +25,7 @@ model, set the worker's recommended tier; otherwise ignore it (advisory).
 ## No subagent primitive — sequential in-context fallback
 
 On a host with no subagent mechanism, run each worker **sequentially in the main
-session**: read `references/<name>.md`, follow it on the current INPUT, capture
+session**: read `references/development/<name>.md`, follow it on the current INPUT, capture
 the output, then move to the next step. This is the weakest mode — there is no
 isolation, and the main session is write-capable — so:
 
@@ -42,12 +42,14 @@ isolation, and the main session is write-capable — so:
 ## Org-rules retrieval and the CLI
 
 Rule retrieval happens twice in Development, and the two passes run in different places.
+`references/lib/ingrain-cli.md` owns the CLI itself — the commands, their flags, and the
+failure taxonomy the branches below name. This section owns only **which pass runs where**.
 
 **The first pass is the orchestrator's own**, in the main session — no worker, no dispatch.
-It needs the host's shell/exec for `ingrain --version` and
-`ingrain context security_rules "<query>"`, which the main session already has. Running there
-is the point: a sandbox or permission denial surfaces the host's **native approval prompt**
-("allow this command?") to the user directly, so there is nothing to relay.
+It needs the host's shell/exec for the probe and the retrieval command, which the main
+session already has. Running there is the point: a sandbox or permission denial surfaces the
+host's **native approval prompt** ("allow this command?") to the user directly, so there is
+nothing to relay.
 
 **The second pass is `ingrain-rule-expander`'s**, and it is the one narrow exception to the
 read-only rule: it runs the same two read-only `ingrain` invocations. Dispatch it with the
@@ -56,9 +58,9 @@ Bash for `ingrain`; Codex: the exec capability). Restate inline that it makes no
 runs no other commands. It is dispatched **exactly once** per review. All other workers —
 `ingrain-mitigation-generator` included — get no shell access.
 
-**Access denied vs. unavailable — two different failures.** If the expander's
-`ingrain context` call is **blocked by the host's sandbox / permission layer** (the binary
-and config are fine, exec just wasn't granted), the rules are recoverable: it first relies
+**Access denied vs. unavailable — two different failures.** On an **access denied** result
+for the expander's lookup (the binary and config are fine, exec just wasn't granted), the
+rules are recoverable: it first relies
 on the host's **native approval prompt** (Claude Code's "allow this command?"; Codex's
 exec-approval) so the user can grant access and the fetch retries. Where the host cannot
 surface such a prompt to a subagent, it returns the single-line
@@ -68,18 +70,16 @@ then asks the user for permission (using the host's selection-window / question 
 access. That recovery re-run is not a second expansion pass. Only on decline does the
 orchestrator fall back to the first pass's rules alone.
 
-Genuine unavailability is best-effort, not required: where the `ingrain` binary is not
-installed, or the CLI is unconfigured (no `INGRAIN_SYNC_URL` / API token) or returns
-nothing — cases the user cannot fix by granting access — both passes **degrade
-gracefully**, and mitigations are proposed without org rules with a note on why. A
-`command not found` on the first pass means the expander is skipped altogether. Rule
-retrieval never blocks or fails the review.
+Genuine unavailability is best-effort, not required: for every outcome the user cannot fix
+by granting access, both passes **degrade gracefully**, and mitigations are proposed without
+org rules with a note on why. A **not installed** result on the first pass means the expander
+is skipped altogether. Rule retrieval never blocks or fails the review.
 
 ## Testing's verifier
 
 The standing rule above — "your only write is your own section of the stored analysis
 file at the path this dispatch names" — is a **Development** rule. Testing's worker role
-(`references/verification-pass.md`) does not fit it: the `ingrain-threat-verifier`
+(`references/testing/verification-pass.md`) does not fit it: the `ingrain-threat-verifier`
 **writes nothing at all.** It has no section of its own; it returns its reasoning and the
 orchestrator concludes and records it. So drop the "your only write is…" clause from its
 dispatch and say **you write nothing** instead. It gets one narrow exception — read-only

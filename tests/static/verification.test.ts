@@ -20,8 +20,8 @@ import {
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
-const VERIFY = `${ROOT}skills/ingrain-security/references/verification-pass.md`;
-const VERIFIER_REF = `${ROOT}skills/ingrain-security/references/ingrain-threat-verifier.md`;
+const VERIFY = `${ROOT}skills/ingrain-security/references/testing/verification-pass.md`;
+const VERIFIER_REF = `${ROOT}skills/ingrain-security/references/testing/ingrain-threat-verifier.md`;
 
 /**
  * The contents of every fenced code block in `md`, joined. In a dispatch section that is the
@@ -75,7 +75,7 @@ Deno.test("SKILL.md: routes to a phase from repo state, then points at the refer
   assertStringIncludes(md, "## Phase select — do this FIRST");
   // Testing is a pointer section, not the procedure — the detail is read on demand.
   assertStringIncludes(md, "## Testing — verification");
-  assertStringIncludes(md, "Read `references/verification-pass.md` NOW and follow it.");
+  assertStringIncludes(md, "Read `references/testing/verification-pass.md` NOW and follow it.");
   // The three Testing conditions, and the signals they are read from.
   assertStringIncludes(md, "file_exists");
   assertStringIncludes(md, "git status --porcelain");
@@ -93,11 +93,11 @@ Deno.test("verification-pass.md: dispatches the read-only verifier via its refer
   const md = await Deno.readTextFile(VERIFY);
   // The one worker role and the read-reference dispatch mechanism.
   assertStringIncludes(md, "ingrain-threat-verifier");
-  assertStringIncludes(md, "Read references/ingrain-threat-verifier.md");
+  assertStringIncludes(md, "Read references/testing/ingrain-threat-verifier.md");
   // The read-only constraint is restated for the dispatched subagent.
   assertStringIncludes(md.toLowerCase(), "read-only");
   // Now a sibling reference in the same skill — no cross-skill path survives the merge.
-  assertStringIncludes(md, "references/platform-dispatch.md");
+  assertStringIncludes(md, "references/lib/platform-dispatch.md");
   assertEquals(md.includes("../ingrain-security/"), false, "cross-skill paths must be collapsed");
   // The prompt the orchestrator actually pastes hands the verifier both minted paths — the
   // mitigation to verify and the org rules behind it. Assert on the fenced block alone: the

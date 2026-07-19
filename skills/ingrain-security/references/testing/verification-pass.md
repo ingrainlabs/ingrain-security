@@ -19,7 +19,7 @@ whose mitigations were all declined.
 You orchestrate **one read-only worker per selected threat** — as many verifiers as there are
 `selected` rows in `## Threats` — and conclude from what they return yourself:
 
-- **`ingrain-threat-verifier`** (`references/ingrain-threat-verifier.md`) — one per selected
+- **`ingrain-threat-verifier`** (`references/testing/ingrain-threat-verifier.md`) — one per selected
   threat, each holding that threat, every `selected` mitigation tagged with it, and those
   mitigations' org rules (see **How to dispatch a verifier**).
 
@@ -73,8 +73,8 @@ prompts the user and stalls the run.
 
 Verify against **everything this branch added since it diverged from the branch it was cut
 from** — committed **and** uncommitted alike. By the time Testing runs, the coding agent has
-usually committed most of the implementation, so the uncommitted delta alone shows almost
-none of the code the mitigations were adopted for.
+often committed much of the implementation, so the uncommitted delta alone may show only a
+fraction of the code the mitigations were adopted for.
 
 **The parent branch is not assumed to be `main`.** Branches are routinely cut from other
 feature branches, release branches, or long-lived integration branches. Resolve the branch
@@ -182,7 +182,7 @@ A verifier is a role defined by a reference file, not a platform-native agent. Y
 its logic yourself — you dispatch a **fresh worker subagent** and tell it to become the
 verifier by reading its reference file. This keeps the check cross-platform: it works wherever
 a subagent primitive exists and degrades to sequential in-context execution where one does
-not. See `references/platform-dispatch.md` for the per-platform mapping (host with a
+not. See `references/lib/platform-dispatch.md` for the per-platform mapping (host with a
 subagent/task primitive → that primitive, one verifier per call; no-subagent fallback →
 sequential in-context execution).
 
@@ -198,7 +198,7 @@ files; the verifier **returns a justification and a level, and does not write th
 file** (you conclude and record, to avoid concurrent writes to one table):
 
 ```
-Read references/ingrain-threat-verifier.md and follow it as your system prompt.
+Read references/testing/ingrain-threat-verifier.md and follow it as your system prompt.
 You do no code or repo edits — use only Read/Grep/Glob on the codebase, plus read-only git
 (git diff <diff_ref>, git status, git show) to obtain the branch diff. You run NO ingrain/CLI
 commands — any org rule you need is in the rules sidecar named below. You write NOTHING —
