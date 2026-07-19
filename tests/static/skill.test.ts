@@ -16,7 +16,7 @@ import {
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
-const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/assessment-file.md`;
+const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/formatting/assessment-file.md`;
 const TRIAGE_REF = `${ROOT}skills/ingrain-security/references/ingrain-relevance-triage.md`;
 const PLATFORM_REF = `${ROOT}skills/ingrain-security/references/platform-dispatch.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
@@ -68,21 +68,21 @@ Deno.test("SKILL.md: workflow steps are in the required order", async () => {
  * is a terse tracker at the end enforcing that its steps were followed. Keeping them distinct
  * is the point — a checklist that grows prose stops being scannable and stops being a tracker.
  */
-Deno.test("SKILL.md: the Phase A checklist tracks every step in the flow", async () => {
+Deno.test("SKILL.md: the Development checklist tracks every step in the flow", async () => {
   const md = await Deno.readTextFile(SKILL);
-  assertChecklistTracksFlow(md, "## Phase A — the flow", "## Phase A — checklist");
+  assertChecklistTracksFlow(md, "## Development — the flow", "## Development — checklist");
 });
 
 Deno.test("SKILL.md: the flow holds no checkboxes and the checklist stays terse", async () => {
   const md = await Deno.readTextFile(SKILL);
   // The detailed procedure must not wear checkboxes — that conflates the two entities.
   assertEquals(
-    section(md, "## Phase A — the flow").includes("- [ ]"),
+    section(md, "## Development — the flow").includes("- [ ]"),
     false,
     "The flow contains checkboxes. The flow is the procedure; the checklist tracks it.",
   );
   // Every checklist item is ONE line. A caveat that needs a second line belongs in the flow.
-  for (const line of section(md, "## Phase A — checklist").split("\n")) {
+  for (const line of section(md, "## Development — checklist").split("\n")) {
     if (!line.startsWith("- [ ] ")) continue;
     assertEquals(
       line.length <= 160,
@@ -93,7 +93,7 @@ Deno.test("SKILL.md: the flow holds no checkboxes and the checklist stays terse"
 });
 
 Deno.test("SKILL.md: both gate checklist lines fence table-before-windows", async () => {
-  const list = section(await Deno.readTextFile(SKILL), "## Phase A — checklist");
+  const list = section(await Deno.readTextFile(SKILL), "## Development — checklist");
   // The most-guarded behavior in the skill: the findings table is displayed BEFORE any
   // selection window. The checklist is where that ordering is enforced.
   for (const gate of list.split("\n").filter((l) => l.includes("Gate "))) {
@@ -134,7 +134,7 @@ Deno.test("SKILL.md: mints the assessment path and defers its schema to the refe
   assertStringIncludes(md, "${coding_agent_root}");
   // The file's schema/template is defined in a dedicated reference file, and SKILL.md points
   // at it rather than restating it.
-  assertStringIncludes(md, "references/assessment-file.md");
+  assertStringIncludes(md, "references/formatting/assessment-file.md");
   // The path is minted by the bundled script (mint), not hand-built.
   assertStringIncludes(md, "scripts/assessment-path");
   assertStringIncludes(md, "mint");
@@ -192,7 +192,7 @@ Deno.test("ownership: SKILL.md does not restate what assessment-file.md owns", a
     assertEquals(
       skill.includes(fact),
       false,
-      `SKILL.md restates "${fact}", which references/assessment-file.md owns. ` +
+      `SKILL.md restates "${fact}", which references/formatting/assessment-file.md owns. ` +
         `Point at the reference instead of restating it.`,
     );
   }

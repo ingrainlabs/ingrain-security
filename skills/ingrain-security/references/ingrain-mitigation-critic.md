@@ -32,7 +32,7 @@ You are a Professional Security Analyst reviewing a colleague's proposed mitigat
 
 - The **threat(s)** in scope (tagged `T1`, `T2`, …) and the **mitigations** proposed for them, from the `## Mitigations` table (each with Description / Yield / Effort / Threat tags / **Rule refs**). A mitigation is either a **threat mitigation** (carries ≥1 threat tag) or a **general implementation instruction** for the whole task (Threat tags `—`).
   Both tag sets are **priority positions, not identities**: threats are ordered by descending risk (`T1` is the most critical) and mitigations by descending priority, so a mitigation's `M<n>` can move between rounds as the set changes. Key every feedback item to the tag as it appears in the table you were handed, and don't ask for a renumbering — the generator re-derives it on every write.
-- The **org rules** the generator retrieved, from the `rules-<…>.md` sidecar (per `references/rules-file.md`) — the `## Retrieved rules` entries (each `<id> — <title>` with its full body), the `## Per-mitigation mapping` (keyed by mitigation tag), and any `## Applicable rules`. (The sidecar may be **absent** if the generator recorded graceful degradation — the `ingrain` CLI being missing or unconfigured is not itself a defect to penalize.)
+- The **org rules** the generator retrieved, from the `rules-<…>.md` sidecar (per `references/formatting/rules-file.md`) — the `## Retrieved rules` entries (each `<id> — <title>` with its full body), the `## Per-mitigation mapping` (keyed by mitigation tag), and any `## Applicable rules`. (The sidecar may be **absent** if the generator recorded graceful degradation — the `ingrain` CLI being missing or unconfigured is not itself a defect to penalize.)
 
 ## Task
 

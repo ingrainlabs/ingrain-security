@@ -65,30 +65,20 @@ nothing — cases the user cannot fix by granting access — the worker **degrad
 gracefully**, proposing mitigations without org rules and noting why. Rule retrieval
 never blocks or fails the review.
 
-## Phase B's two reads
+## Testing's verifier
 
 The standing rule above — "your only write is your own section of the stored analysis
-file at the path this dispatch names" — is a **Phase A** rule. Phase B's two worker
-roles (`references/verification-pass.md`) do not fit it, in two ways:
+file at the path this dispatch names" — is a **Development** rule. Testing's worker role
+(`references/verification-pass.md`) does not fit it: the `ingrain-mitigation-verifier`
+**writes nothing at all.** It has no section of its own; it returns its reasoning and the
+orchestrator concludes and records it. So drop the "your only write is…" clause from its
+dispatch and say **you write nothing** instead. It gets one narrow exception — read-only
+git (`git diff HEAD`, `git status`, `git show`) to obtain the working-tree diff — and no
+shell or CLI access beyond it.
 
-- **They write nothing at all.** Neither the `ingrain-mitigation-verifier` nor the
-  `ingrain-blind-maturity-reviewer` has a section of its own; they return their reasoning
-  and the orchestrator reconciles and records it. So drop the "your only write is…"
-  clause from their dispatches and say **you write nothing** instead. Both get the same
-  narrow read-only-git exception (`git diff HEAD`, `git status`, `git show`) to obtain
-  the working-tree diff, and neither gets shell or CLI access beyond it.
-- **The blind reviewer is the one dispatch that carries no pointer.** Every other
-  dispatch withholds the content and names a path; that one withholds the path too — no
-  assessment file, no rules sidecar, no mitigation or threat data. It is given the task
-  title and nothing else, deliberately, so that its read is independent of the analysis
-  it is checking. See `references/verification-pass.md` → **How to dispatch the blind
-  reviewer**.
-
-On a host with a subagent primitive, fan out the per-mitigation verifiers and the single
-blind reviewer **together** — the blind reviewer depends on nothing they produce. On the
-sequential fallback, run them in the same session one at a time; the blind reviewer still
-gets only the task title, and the discipline of not telling it more is the only thing
-preserving its value there.
+On a host with a subagent primitive, fan out the per-mitigation verifiers **together** —
+each depends on nothing the others produce. On the sequential fallback, run them in the
+same session one at a time, in tag order.
 
 ## Selection windows (Gate 1 and Gate 2)
 

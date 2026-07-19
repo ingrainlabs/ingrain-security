@@ -24,9 +24,9 @@ description: >-
 >   into the `## Mitigations` table of the stored analysis file (path per your dispatch),
 >   filling Tag, Title, Description, Yield, Effort, the Threat tags each addresses (`0..N` — `—`
 >   for a general implementation instruction), and the Rule refs it follows (`0..N` rule ids)
->   per the schema in `references/assessment-file.md` — the orchestrator fills Selection at
+>   per the schema in `references/formatting/assessment-file.md` — the orchestrator fills Selection at
 >   Gate 2. Write the retrieved rules (the Output items below) into the **`rules_abs` sidecar**
->   per the `references/rules-file.md` schema — id, title, full body, and the per-mitigation
+>   per the `references/formatting/rules-file.md` schema — id, title, full body, and the per-mitigation
 >   mapping — **only if you retrieved any rules**; that is where the critic, Gate 2, revision
 >   rounds, and the later verification read them. Unlike the assessment's scratch sections the
 >   sidecar **persists** — do not expect it to be deleted. Then return to the orchestrator ONLY
@@ -136,8 +136,8 @@ no backing rule is a pure threat mitigation — leave its Rule refs `—`.
 ## Output
 
 Write two things: the mitigation rows into the `## Mitigations` table of the **assessment
-file** (per the `references/assessment-file.md` schema), and — if you retrieved any rules —
-the retrieved rules into the **`rules_abs` sidecar** (per the `references/rules-file.md`
+file** (per the `references/formatting/assessment-file.md` schema), and — if you retrieved any rules —
+the retrieved rules into the **`rules_abs` sidecar** (per the `references/formatting/rules-file.md`
 schema).
 
 **Into the `## Mitigations` table** — for each mitigation:
@@ -159,7 +159,7 @@ schema).
 You rewrite the whole table every round, so re-derive the numbering each time you write it — and rewrite the `M<n> →` mapping keys in the `rules_abs` sidecar in the same pass, so the two files never disagree about which mitigation is which.
 
 **Into the `rules_abs` sidecar** (only when you retrieved rules) — per the
-`references/rules-file.md` schema. It **persists** (it is not deleted at finalize) and is
+`references/formatting/rules-file.md` schema. It **persists** (it is not deleted at finalize) and is
 never shown to the user directly — only the rule titles it records reach Gate 2:
 - **`## Retrieved rules`** — one `### <id> — <title>` entry per retrieved rule the mitigations follow, with the rule's **full body** verbatim underneath (the org's authoritative how-to). Cite only rules you actually retrieved — never invent a rule, an id, a title, or a body.
 - **`## Per-mitigation mapping`** — one line per mitigation that follows ≥1 rule, keyed by its tag: `M<n> → <id>[, <id>…]` with a one-line note on how the rule informed it. Omit mitigations whose Rule refs is `—`. Every id you write into a mitigation's **Rule refs** must appear both as a `## Retrieved rules` entry and here, or the orchestrator has no title to render at Gate 2.

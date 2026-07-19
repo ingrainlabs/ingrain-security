@@ -28,7 +28,7 @@ back **without re-querying the CLI**. Follow this structure exactly.
   signal that no org rules back this task's mitigations, and downstream readers fall back to
   the mitigation Descriptions alone.
 - **Persistent — not deleted at finalize.** This is the key difference from the assessment
-  file's transient scratch sections. Once written it **stays**, so the Phase B verification
+  file's transient scratch sections. Once written it **stays**, so the Testing verification
   pass (which runs in a later session) can re-mint the path and read the rule
   descriptions. It is **git-ignored** (the folder self-ignores), so it stays uncommitted.
 - **Pre-approved for writing.** The `allow-assessment-write` hook auto-approves writes to
@@ -79,11 +79,6 @@ none.
 | Plan · Gate 2 (step 7) | orchestrator | Reads `## Per-mitigation mapping` + `## Retrieved rules` to resolve each **Rule ref** id → title for the "Follows rules" display |
 | Plan · finalize | orchestrator | **Leaves it in place** — persistent, never deleted |
 | Review | `ingrain-mitigation-verifier` | Reads its own mitigation's rule description(s) as supporting context for verification |
-
-Phase B's `ingrain-blind-maturity-reviewer` is deliberately **not** a reader of this file — it
-is given no rules and no path to them, so that its read of the implementation is independent of
-the analysis it is checking; see `references/verification-pass.md` → **How to dispatch the blind
-reviewer**.
 
 The file is never shown to the user directly; only the rule **titles** it records reach the
 user at Gate 2.

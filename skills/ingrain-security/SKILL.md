@@ -2,14 +2,14 @@
 name: ingrain-security
 description: >-
   Use at BOTH ends of a security-relevant change; it detects which phase to run from
-  repo state, so invoke it at either moment. The phases never overlap: Phase A runs only
-  before code for the task exists, Phase B only after.
-  **Phase A — plan review:** run AS THE FINAL STEP of building an implementation plan,
+  repo state, so invoke it at either moment. The phases never overlap: Development runs only
+  before code for the task exists, Testing only after.
+  **Development — plan review:** run AS THE FINAL STEP of building an implementation plan,
   ad-hoc inline or in a formal plan-mode / design-doc session. Invoke once the plan is
   comprehensive and detailed (affected files, concrete implementations, tests) but
   before you present it or write any code. It triages the change and folds selected
   threats and adopted mitigations back into the plan you produce.
-  **Phase B — verification:** run AFTER you have implemented code for that plan, but
+  **Testing — verification:** run AFTER you have implemented code for that plan, but
   before you present or commit it. It checks the working-tree diff against the
   mitigations the plan adopted and reports the maturity level each one reached and
   which still need work. It writes no code.
@@ -20,8 +20,8 @@ description: >-
 <SUBAGENT-STOP>
 If you were dispatched as a worker subagent (ingrain-relevance-triage, ingrain-threat-generator,
 ingrain-threat-critic, ingrain-risk-scorer, ingrain-mitigation-generator, ingrain-mitigation-critic,
-ingrain-mitigation-verifier, ingrain-blind-maturity-reviewer), do the one job you were given
-and return. Do NOT run this orchestration — neither Phase A nor Phase B — you are part of it.
+ingrain-mitigation-verifier), do the one job you were given
+and return. Do NOT run this orchestration — neither Development nor Testing — you are part of it.
 </SUBAGENT-STOP>
 
 <EXTREMELY-IMPORTANT>
@@ -39,16 +39,16 @@ away.
 
 ## Phase select — do this FIRST
 
-This skill has two phases. **Phase A — plan review** is the checklist below, and is
+This skill has two phases. **Development — plan review** is the checklist below, and is
 everything the `<EXTREMELY-IMPORTANT>` block describes: it runs on a finished plan, before
-code. **Phase B — verification** (`references/verification-pass.md`) runs on the code that
+code. **Testing — verification** (`references/verification-pass.md`) runs on the code that
 plan produced. Decide which one you are in **from repo state, before anything else** — never
 from a guess about what the user meant, and never by reading ahead into the checklist.
 
-**If the user named a phase, that is the answer.** "Verify the mitigations" → **Phase B**.
-"Review this plan" → **Phase A**. Skip the table.
+**If the user named a phase, that is the answer.** "Verify the mitigations" → **Testing**.
+"Review this plan" → **Development**. Skip the table.
 
-Otherwise resolve the state with **the mint call you already have to make**: Phase A mints
+Otherwise resolve the state with **the mint call you already have to make**: Development mints
 `assessment_abs` at Step 0 anyway, so run it now, keyed on this task's title, and read
 `file_exists` off its JSON. This is the same one shell call, not a new one — minting only
 resolves the path and ensures the folder, and is safe in either phase.
@@ -63,7 +63,7 @@ Use its **`assessment_abs`** — the **absolute** path — verbatim as the write
 every worker dispatch, every Write/Edit, and at finalize, and obey the `instruction` field
 it carries. The relative `assessment_path` is a **display form** only: put it in prose,
 tables and plan-file links, never in a write target.
-→ `references/assessment-file.md` owns what the script resolves, the name's derivation, and
+→ `references/formatting/assessment-file.md` owns what the script resolves, the name's derivation, and
 the file's schema — read it before your first write.
 
 If `file_exists: true`, read the bounded `## Mitigations` slice of that file (the bounded
@@ -71,28 +71,28 @@ read the context-window discipline permits). Then:
 
 | `file_exists` | `selected` mitigation rows | working tree | Phase |
 |---|---|---|---|
-| `false` | — | anything | **A** — no assessment for this task; there is nothing to verify |
-| `true` | none | anything | **A** — resume this task's analysis in place (Step 0's `file_exists: true`) |
-| `true` | 1+ | clean | **A** — the plan was reviewed, but no code exists yet to verify |
-| `true` | 1+ | dirty (`git status --porcelain` non-empty) | **B** — read `references/verification-pass.md` NOW |
+| `false` | — | anything | **Development** — no assessment for this task; there is nothing to verify |
+| `true` | none | anything | **Development** — resume this task's analysis in place (Step 0's `file_exists: true`) |
+| `true` | 1+ | clean | **Development** — the plan was reviewed, but no code exists yet to verify |
+| `true` | 1+ | dirty (`git status --porcelain` non-empty) | **Testing** — read `references/verification-pass.md` NOW |
 
-**Phase B requires all three: an assessment for THIS task, adopted mitigations in it, and a
-dirty tree.** Anything else is Phase A. Note what is deliberately *not* in the table:
+**Testing requires all three: an assessment for THIS task, adopted mitigations in it, and a
+dirty tree.** Anything else is Development. Note what is deliberately *not* in the table:
 
-- **A dirty tree is never on its own a Phase B signal.** A fresh task whose tree happens to
-  be dirty with unrelated WIP mints a fresh path → `file_exists: false` → row 1 → **Phase A**.
+- **A dirty tree is never on its own a Testing signal.** A fresh task whose tree happens to
+  be dirty with unrelated WIP mints a fresh path → `file_exists: false` → row 1 → **Development**.
   **Do not glob `.ingrain-security/` for "some assessment on this branch."** The mint is keyed
   on branch **+ task title**, and that keying is exactly what stops a new task from adopting a
   different task's assessment. Take `file_exists` at its word.
-- **`Latest stage` is not a Phase B guard.** An assessment already at `Latest stage: review`
-  whose tree is dirty again — the user revised the code after a verification round — is
-  **Phase B again**: re-verify every adopted mitigation and overwrite the `Justification` +
-  `Verification level` columns.
-  The plan did not change; the code did. Never re-run Phase A to "re-review" it.
-  (`Latest stage: review` records that a verification ran; it does not close the task.)
-- **A `minor` triage adopts no mitigations, so it never routes to B.** It lands on row 2. If
-  the user explicitly asked to verify, the override sends you to Phase B, which stops at "no
-  adopted mitigations to verify" — the correct, cheap answer. Otherwise row 2 resumes Phase A,
+- **`Latest stage: testing` does not mean Testing is done.** The field records that a
+  verification ran; it does not close the task, and it is never a reason to skip. An
+  assessment already at `Latest stage: testing` whose tree is dirty again — the user revised
+  the code after a verification round — is **Testing again**: re-verify every adopted
+  mitigation and overwrite the `Justification` + `Verification level` columns.
+  The plan did not change; the code did. Never re-run Development to "re-review" it.
+- **A `minor` triage adopts no mitigations, so it never routes to Testing.** It lands on row 2. If
+  the user explicitly asked to verify, the override sends you to Testing, which stops at "no
+  adopted mitigations to verify" — the correct, cheap answer. Otherwise row 2 resumes Development,
   where triage re-confirms `minor` in one dispatch and stops. Either way, nothing is verified,
   because by construction there is nothing to verify.
 
@@ -135,7 +135,7 @@ Read references/<name>.md and follow it as your system prompt.
 You do no code or repo edits — use only Read/Grep/Glob on the codebase. Your ONE
 permitted write is your own section of the stored analysis file for this run at
 <the minted assessment_abs — the ABSOLUTE path, pasted in full> (section: <## Section for this worker>),
-written to the schema in references/assessment-file.md — use exactly its fields and
+written to the schema in references/formatting/assessment-file.md — use exactly its fields and
 enum values. Write to that exact absolute path: never shorten it, never resolve it
 against a file you happen to be reading, and never create an .ingrain-security/ folder
 yourself — the one for this repo already exists.
@@ -185,10 +185,10 @@ into one combined list.** Never fold the information into the window options alo
 table comes first, the windows second; each window's options reference the table by finding
 tag rather than restating its detail.
 
-## Phase A — the flow
+## Development — the flow
 
 Each step is one dispatch; you hold the state between them. The tracker for these steps is
-**Phase A — checklist** at the end of this file.
+**Development — checklist** at the end of this file.
 
 0. **Triage** — dispatch `ingrain-relevance-triage` with the plan, the resolved
    `branch_slug` (or `unknown`), the task title, and the **absolute**
@@ -270,7 +270,7 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    addition to Read/Grep/Glob, and say so in its dispatch. Every other worker stays strictly
    Read/Grep/Glob.
    → `references/ingrain-mitigation-generator.md` owns the lookup and its failure modes;
-   `references/rules-file.md` owns the sidecar's schema and lifecycle.
+   `references/formatting/rules-file.md` owns the sidecar's schema and lifecycle.
    - `fetch blocked — permission needed` → the lookup was denied by the sandbox and the worker
      could not surface a prompt itself. **Do not accept the review without org rules yet.** Ask
      the user for access using the same window primitive the gates use, and on grant
@@ -332,12 +332,15 @@ building" in the conversation.
 Reached from Gate 1 (none selected) or Gate 2. Two writes:
 
 **1. Finalize the assessment file in place.** Fill `## Coverage / open items` with any
-`selected` threat left without a `selected` covering mitigation. Then **delete the two
+`selected` threat left without a `selected` covering mitigation, and set `## Task` →
+`Latest stage: development` — the plan review is the Development phase, and Testing is what
+later advances the field to `testing`. Then **delete the two
 transient sections — `## Threat critique` and `## Mitigation critique`** (heading and body):
 they are iteration scratch, and the finalized file carries only end results. **Leave the
-`rules-<…>.md` sidecar in place** — it is a persistent, linked artifact that the Phase B
-verification pass reads in a later session. Write to the minted `assessment_abs`; the file
-already lives there, so there is **no snapshot to copy** — finalizing it *is* persisting it.
+`rules-<…>.md` sidecar in place** — it is a persistent, linked artifact that the Testing
+verification pass reads in a later session. One write, to the minted `assessment_abs`; the
+file already lives there, so there is **no snapshot to copy** — finalizing it *is*
+persisting it.
 
 **2. Write the results into the plan file.** Incorporate the selected threats and adopted
 mitigations, plus two supporting things:
@@ -359,12 +362,12 @@ In plan mode, **name the plan file you write to**; ad-hoc, this is the inline pl
 building. The adopted mitigations are now part of the plan the coding agent implements —
 incorporate them and continue planning.
 
-## Phase B — verification
+## Testing — verification
 
-Phase B checks that the mitigations Gate 2 adopted were actually implemented. It fires when
-**Phase select** lands on Phase B — an assessment for this task exists, it carries `selected`
+Testing checks that the mitigations Gate 2 adopted were actually implemented. It fires when
+**Phase select** lands on Testing — an assessment for this task exists, it carries `selected`
 mitigations, and the working tree is dirty. **Nothing above this line applies to it:** the
-checklist, both gates, the critic loops, and the org-rules CLI lookup are Phase A only.
+checklist, both gates, the critic loops, and the org-rules CLI lookup are Development only.
 
 **Read `references/verification-pass.md` NOW and follow it.** The full loop lives there — do
 not run it from this section's summary: it is a pointer, not the procedure.
@@ -389,7 +392,7 @@ not run it from this section's summary: it is a pointer, not the procedure.
 | "I'll read the whole assessment file to see where we are" | Hold only the compact statuses workers return. The bounded gate slices and finalize are the only reads. |
 | "`.ingrain-security/assessment-….md` is clear enough — the worker will find it" | It won't. A relative path is resolved by whoever receives it, and a worker has no project root in view — it resolves against the file it was reading and creates a stray folder there. Pass the absolute `assessment_abs`, always. |
 | "I'll create the `.ingrain-security/` folder since it's missing" | It is not missing — the script created it at the repo root and it self-ignores, so `git status` never shows it. If you think it's absent, you resolved the path wrong. Re-run the mint script. |
-| "I'll delete the `rules-<…>.md` sidecar at finalize like the scratch sections" | The rules sidecar is a **persistent** linked artifact, not scratch — the Phase B verification pass reads it later. Only the two critique sections are deleted. |
+| "I'll delete the `rules-<…>.md` sidecar at finalize like the scratch sections" | The rules sidecar is a **persistent** linked artifact, not scratch — the Testing verification pass reads it later. Only the two critique sections are deleted. |
 | "No org rules came back, so I'll write an empty `rules-<…>.md`" | The sidecar is written **only when rules were retrieved**. No rules → no file; its absence is the signal, and Gate 2 / verification fall back to Descriptions. |
 | "The `ingrain` CLI errored / isn't configured, so I'll stop the review" | Genuine unavailability (binary absent, unconfigured, no matches) degrades gracefully — proceed without rules, note why, and still propose mitigations. |
 | "The `ingrain` fetch was blocked by the sandbox, so I'll just proceed without rules" | A permission/sandbox denial is recoverable, not graceful-degradation — ask the user for access (native prompt, or the generator's `fetch blocked — permission needed` signal → you prompt and re-dispatch) and retry. Only proceed without rules if the user declines. |
@@ -397,9 +400,9 @@ not run it from this section's summary: it is a pointer, not the procedure.
 | "I'll put all the detail in the window options and skip the table" | Display the findings as a table first, then present the single-choice windows — never the windows alone. |
 | "I'm in plan mode / keeping output lean, so I'll skip printing the gate table" | The gate table is mandatory visible output in every mode. Read the bounded slice of the assessment file — that read is the one the context-window discipline permits — and print the table before any window. |
 
-## Phase A — checklist
+## Development — checklist
 
-The procedure is **Phase A — the flow**; this is the tracker. Tick only what is actually
+The procedure is **Development — the flow**; this is the tracker. Tick only what is actually
 done. Work top to bottom — never skip a step, never reorder the pipeline, never batch. (The
 `ingrain-risk-scorer` re-tagging threats into risk order at step 3 is part of its job, not a
 resequencing.) Each step is one dispatch: dispatch every worker rather than answering its job
@@ -414,4 +417,4 @@ subset — never an unselected or unreviewed finding.
 - [ ] 5. Mitigations generated for the selected threats ONLY; org rules retrieved
 - [ ] 6. Mitigation critique loop closed — approved, or 3 rounds spent; mitigations frozen
 - [ ] 7. Gate 2 — table displayed FIRST, then one window per mitigation; `Selection` recorded
-- [ ] Finalize — critique sections deleted, sidecar kept, plan file carries the assessment link + Maintenance
+- [ ] Finalize — `Latest stage: development` set, critique sections deleted, sidecar kept, plan file carries the assessment link + Maintenance

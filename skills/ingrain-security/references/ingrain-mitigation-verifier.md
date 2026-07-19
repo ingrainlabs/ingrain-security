@@ -1,7 +1,7 @@
 ---
 name: ingrain-mitigation-verifier
 description: >-
-  INTERNAL worker of the ingrain-security Phase B verification pass — do NOT invoke
+  INTERNAL worker of the ingrain-security Testing verification pass — do NOT invoke
   directly or proactively; it is dispatched only by the ingrain-security
   orchestrator. Read-only, informed check that one adopted mitigation from the assessment
   file is implemented in the working-tree diff, and at what maturity level.
@@ -101,8 +101,8 @@ gaps back to the coding agent.
 ## Output
 
 Return exactly this shape. The justification leads because it is what the orchestrator weighs —
-it reconciles your read against a second, independent one, and a level with no reasoning behind
-it gives it nothing to weigh:
+it re-derives the level from the evidence you cite, and a level with no reasoning behind it
+gives it nothing to weigh:
 
 ```
 JUSTIFICATION: <≤256 chars — what the code does or fails to do against the Description, and why that is the level>

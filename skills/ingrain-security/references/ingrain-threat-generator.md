@@ -22,7 +22,7 @@ description: >-
 > - **Hand-off contract:** write the threat rows into the `## Threats` table of
 >   the stored analysis file (path per your dispatch), filling the descriptive columns (Tag,
 >   Title, Asset, Vector, Description, Assumptions) per the schema in
->   `references/assessment-file.md` — the risk-scorer fills the scoring columns and
+>   `references/formatting/assessment-file.md` — the risk-scorer fills the scoring columns and
 >   re-tags the rows into risk order, and the orchestrator fills Selection later; most
 >   tasks warrant 3–6 rows — keep it
 >   short and scoped (a target, not a hard cap). Then return to the
