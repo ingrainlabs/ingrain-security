@@ -335,21 +335,6 @@ Then close with a one-line verdict:
 This report goes to the **coding agent** as visible Markdown; the selection gates belong to
 Development.
 
-## Red flags — stop if you catch yourself thinking…
-
-| Thought | Reality |
-|---------|---------|
-| "`file_exists: false`, but I'm clearly verifying code I just wrote" | You minted the wrong title. The mint is keyed on branch + task slug, so a paraphrased title resolves to a different path. Recover the `## Task` Title from the assessment file and re-mint **verbatim** — never fall through to the plan review on code that is already written. |
-| "No assessment file, I'll threat-model it now" | Testing verifies an existing assessment. No assessment for the task → stop; Development runs at planning time, not after the code is written. |
-| "The tree is clean / `git diff HEAD` is empty, so there's nothing to verify" | You are diffing the wrong basis. The implementation is almost certainly **committed** — diff against the fork point `scripts/branch-diff` resolved, never a hardcoded trunk name and never `HEAD` except as the reported fallback. See `references/lib/branch-diff.md`. |
-| "I'll just eyeball the diff myself" | Dispatch a read-only `ingrain-threat-verifier` per selected threat — don't inline the analysis. |
-| "The mitigation is implemented exactly as its Description says, so it passes" | The Description is not the bar — the **threat** is. A control built to spec that still leaves a route to its threat is `weak` coverage. Ask what an attacker does next, not whether the words match. |
-| "I'll paste the verifier's justification into the table" | The **Justification** column is *your* conclusion, in your own words, ≤256 chars. Workers return justifications; they never write the table. |
-| "I'll write the results into a fresh file" | Write to the minted `assessment_abs` — the same file the plan review wrote. Never hand-build a path or create an `.ingrain-security/` folder. |
-| "Only threat mitigations matter" | The threat verifiers cover the tagged ones; the general-instruction pass covers the rest. Every `selected` row ends up with a level. |
-| "The org rule body overrides the mitigation Description" | Neither one is the bar — the threat is. Rule bodies and Descriptions are both context on what "closed" should look like here; what you judge is whether the threat is still reachable. |
-| "The file is already at `Latest stage: testing`, so it's done" | That only means a previous verification ran. If the code changed again, re-verify and overwrite the justifications and levels — they record the current implementation. |
-| "I found a gap, I'll fix the code" | Testing writes no code. Report the gap and ask the coding agent to revisit it. |
 
 ## Testing — checklist
 
