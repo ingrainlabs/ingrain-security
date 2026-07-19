@@ -4,16 +4,19 @@ Defines the org-rules **sidecar** the `ingrain-security` review persists next to
 assessment file. It is the twin of `assessment-file.md`: same folder, same branch + task
 slug, same minted-not-hand-built discipline — but where the assessment carries the
 analysis, this file carries the **org security rules** (id, title, and full body/description)
-the mitigation-generator retrieved, so the verification stage can read the rule descriptions
-back **without re-querying the CLI**. Follow this structure exactly.
+retrieved for the task, so the verification stage can read the rule descriptions back
+**without re-querying the CLI**. It is filled in two passes: the orchestrator retrieves from
+the plan and the selected threats before mitigations exist, and `ingrain-rule-expander`
+appends a second pass keyed on the mitigations once they do. Follow this structure exactly.
 
 ## Nature
 
 - **Path.** A single file written directly into `.ingrain-security/` at the project root, a
-  **sibling of the assessment file**. The orchestrator does not hand-build it: the
-  mitigation-generator (or the verification orchestrator) runs the bundled
+  **sibling of the assessment file**. Nobody hand-builds it: the orchestrator (in Development
+  at the retrieval step, or in the verification pass) runs the bundled
   `scripts/rules-path` script (`mint` subcommand) and uses its **`rules_abs`** — the absolute
-  path — as the write/read target; the relative `rules_path` is a display form for prose and
+  path — as the write/read target, passing that same absolute path to every worker that reads
+  or appends to it; the relative `rules_path` is a display form for prose and
   links only. The name is deterministic in the branch + task, keyed by the **same slug** as
   the assessment:
   `<project_root>/.ingrain-security/rules-<branch-slug>-<task-slug>.md`
@@ -22,11 +25,12 @@ back **without re-querying the CLI**. Follow this structure exactly.
   both absent → `rules.md`), and the `rules-` prefix always leads. Minting is shared with the
   assessment path (`scripts/lib/mint-path.sh`), so the two never drift.
 - **Created only when org rules are retrieved.** Unlike the assessment file, this file is
-  **conditional**: it is written during the mitigation step **only if** the mitigation-generator
-  actually retrieved org rules from the `ingrain` CLI. If the CLI is absent, unconfigured, or
-  returns nothing (graceful degradation), **no rules file is written** — its absence is the
-  signal that no org rules back this task's mitigations, and downstream readers fall back to
-  the mitigation Descriptions alone.
+  **conditional**: it exists **only if** a retrieval pass actually got rules back from the
+  `ingrain` CLI. The orchestrator's first pass normally creates it; if that pass returns
+  nothing, `ingrain-rule-expander` creates it later should its own pass find something. If the
+  CLI is absent, unconfigured, or both passes return nothing (graceful degradation), **no
+  rules file is written** — its absence is the signal that no org rules back this task's
+  mitigations, and downstream readers fall back to the mitigation Descriptions alone.
 - **Persistent — not deleted at finalize.** This is the key difference from the assessment
   file's transient scratch sections. Once written it **stays**, so the Testing verification
   pass (which runs in a later session) can re-mint the path and read the rule
@@ -45,8 +49,10 @@ Every field below is **required** unless marked optional.
 
 ### `## Retrieved rules` — one entry per retrieved org rule
 
-For each rule the generator retrieved and a mitigation follows, an entry keyed by its id.
-Render as a subsection per rule so the full body is readable:
+One entry per retrieved rule, keyed by its id — written by the orchestrator's first pass and
+**appended to** by `ingrain-rule-expander`'s second pass. An appender adds new entries after
+the existing ones and leaves those untouched, so the section reads as the accumulated result
+of both passes. Render as a subsection per rule so the full body is readable:
 
 - **`### <id> — <title>`** — the rule id (verbatim, machine-facing — matches a **Rule refs**
   entry in the assessment) and the rule title (verbatim).
@@ -74,9 +80,11 @@ none.
 
 | Stage | Actor | Action |
 |-------|-------|--------|
-| Plan · Mitigate (step 5) | `ingrain-mitigation-generator` | Creates & writes the file (only if rules retrieved); rewrites it on each revision round to stay in sync with `## Mitigations` |
-| Plan · Critique (step 6) | `ingrain-mitigation-critic` | Reads it by pointer to judge how faithfully mitigations follow the cited rules |
-| Plan · Gate 2 (step 7) | orchestrator | Reads `## Per-mitigation mapping` + `## Retrieved rules` to resolve each **Rule ref** id → title for the "Follows rules" display |
+| Plan · Retrieve rules (step 5) | orchestrator | Creates the file and writes `## Retrieved rules` from the first CLI pass (only if rules came back) |
+| Plan · Mitigate (step 6) | `ingrain-mitigation-generator` | Reads `## Retrieved rules`; writes **only** `## Per-mitigation mapping`, rewriting it each revision round to stay in sync with `## Mitigations` |
+| Plan · Expand rules (step 7) | `ingrain-rule-expander` | **Appends** second-pass rules to `## Retrieved rules` / `## Applicable rules` — once, never on a revision round; creates the file if step 5 found nothing |
+| Plan · Critique (step 8) | `ingrain-mitigation-critic` | Reads it by pointer to judge how faithfully mitigations follow the cited rules, and which appended rules go unapplied |
+| Plan · Gate 2 (step 9) | orchestrator | Reads `## Per-mitigation mapping` + `## Retrieved rules` to resolve each **Rule ref** id → title for the "Follows rules" display |
 | Plan · finalize | orchestrator | **Leaves it in place** — persistent, never deleted |
 | Review | `ingrain-threat-verifier` | Reads the rule description(s) behind its threat's covering mitigations as supporting context for verification |
 

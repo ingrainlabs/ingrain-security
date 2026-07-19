@@ -22,8 +22,8 @@ description: >-
 
 <SUBAGENT-STOP>
 If you were dispatched as a worker subagent (ingrain-relevance-triage, ingrain-threat-generator,
-ingrain-threat-critic, ingrain-risk-scorer, ingrain-mitigation-generator, ingrain-mitigation-critic,
-ingrain-threat-verifier), do the one job you were given
+ingrain-threat-critic, ingrain-risk-scorer, ingrain-mitigation-generator, ingrain-rule-expander,
+ingrain-mitigation-critic, ingrain-threat-verifier), do the one job you were given
 and return. Do NOT run this orchestration — neither Development nor Testing — you are part of it.
 </SUBAGENT-STOP>
 
@@ -105,11 +105,13 @@ Announce the phase you picked in your opening line, so a misroute costs the user
 
 **Announce:** open with "Using ingrain-security to assess this plan."
 
-You orchestrate six **read-only** worker roles, each defined by a reference file at
+You orchestrate seven **read-only** worker roles, each defined by a reference file at
 `references/<name>.md` (`ingrain-relevance-triage`, `ingrain-threat-generator`,
 `ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-mitigation-generator`,
-`ingrain-mitigation-critic`). You dispatch each as a fresh subagent, in order, holding the
-state between steps yourself — workers cannot call each other or you.
+`ingrain-rule-expander`, `ingrain-mitigation-critic`). You dispatch each as a fresh subagent,
+in order, holding the state between steps yourself — workers cannot call each other or you.
+One step is yours alone: at Step 5 you run the org-rules retrieval **in this session**, not
+through a worker.
 
 The process produces exactly **two things**: the **assessment file** (the hand-off medium
 the workers write section by section, and you finalize) and the **user-selected finding set
@@ -120,6 +122,14 @@ context. Hold only the compact statuses and pointers workers return; read a boun
 the assessment file only at the two gates and at finalize. The file is the shared state — you
 move data between workers by pointing them at its sections, never by pasting a prior worker's
 output into the next dispatch.
+
+**The one carve-out is Step 5.** Retrieving the org rules yourself means the CLI's rule bodies
+land in your context, because you are the one writing them into the sidecar. That is
+deliberate and it is the *only* bulk payload you handle directly. Write the rules straight
+through to the sidecar and then work from the sidecar's path, not from what you read — every
+later step (the generator, the expander, the critic, Gate 2) reads that file for itself. Do
+not carry rule bodies forward into a dispatch, and do not re-read the sidecar in full
+afterwards.
 
 ## How to dispatch a worker
 
@@ -257,36 +267,73 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
 
    - **1–N selected** → only those proceed to Step 5. Name the excluded ones in one line
      ("T2, T5 excluded — risk accepted").
-   - **None selected** → skip Steps 5–7. State "no threats selected — review closed", close
+   - **None selected** → skip Steps 5–9. State "no threats selected — review closed", close
      with a one-line verdict naming the threats as accepted risk, then **go to Finalize** — the
      all-`excluded` `## Threats` section is the preserved context. Then continue building the
      plan.
 
-5. **Mitigate** — dispatch `ingrain-mitigation-generator` with the **user-selected threats
-   only** (excluded threats are out of scope), `assessment_abs`, and `rules_abs` (mint the
-   sidecar path with the `rules-path` command from your `INGRAIN-ASSESSMENT-PATHS` session
-   context). It proposes both **threat mitigations** and **general implementation
-   instructions** for the full scoped task — both belong in the plan. It retrieves the org's
-   security rules with `ingrain context security_rules "<query>"` and folds them in, so
-   mitigations reflect established org practice.
+5. **Retrieve org rules** — **you run this yourself, in this session; there is no worker.**
+   The org's security rules are ingested knowledge — how *this* team implements auth,
+   validation, secrets, crypto — retrieved by semantic search over the `ingrain` CLI. This
+   first pass is driven by the plan and the selected threats, because no mitigation exists
+   yet; Step 7 runs a second pass once one does.
+   1. Mint `rules_abs` with the `rules-path` command from your `INGRAIN-ASSESSMENT-PATHS`
+      session context, exactly as you minted `assessment_abs`.
+   2. Probe with `ingrain --version` — a local check that reads no config and makes no
+      network call.
+   3. From the plan and the selected threats, reason about which security features need org
+      guidance (e.g. "how do we authenticate service-to-service calls"), phrase one
+      natural-language query per distinct question — they match on meaning, not keywords —
+      and run each: `ingrain context security_rules "<query>" --json` (default limit 10;
+      raise with `--limit N`, 1–50, for a broad topic). On an unknown-subcommand error, retry
+      with the pre-rename spelling `ingrain context decisions "<query>" --json`.
+   4. Write the returned rules — id, title, and **full body verbatim** — into the sidecar's
+      `## Retrieved rules` at `rules_abs`. Cite only what came back; never invent a rule or an
+      id. Write **no sidecar at all** if nothing was retrieved.
+   → `references/formatting/rules-file.md` owns the sidecar's schema and lifecycle.
+   - **Sandbox or permission denial** → you are in the main session, so the host's native
+     "allow this command?" prompt reaches the user directly. **Do not accept the review
+     without org rules yet:** re-run so the prompt surfaces, and proceed without rules only
+     if the user **declines** (or no permission channel exists), noting that access was
+     declined.
+   - **Genuine unavailability** — binary absent, CLI unconfigured, or no matches — degrades
+     gracefully: no sidecar, note why in one line, carry on. A `command not found` probe also
+     means **Step 7 is skipped**, since the expander has no CLI to reach either.
+
+6. **Mitigate** — dispatch `ingrain-mitigation-generator` with the **user-selected threats
+   only** (excluded threats are out of scope), `assessment_abs`, and `rules_abs` — pointing it
+   at the sidecar's `## Retrieved rules` so it grounds its proposals in established org
+   practice rather than its own knowledge alone. It proposes both **threat mitigations** and
+   **general implementation instructions** for the full scoped task — both belong in the plan.
+   It writes the mitigation rows and the sidecar's `## Per-mitigation mapping`. It is strictly
+   Read/Grep/Glob — **it runs no CLI**; the rules it needs are already on disk.
+
+7. **Expand rules** — dispatch `ingrain-rule-expander` at the `## Mitigations` table and the
+   sidecar, with `rules_abs` as its write target. Step 5 could only query what the threats
+   implied; now that concrete mitigations name concrete mechanisms, it searches for the rules
+   that pass could not have known to ask for, and **appends** them to the sidecar.
    **This is the one worker that gets the shell/exec tool** — dispatch it with Bash/exec in
    addition to Read/Grep/Glob, and say so in its dispatch. Every other worker stays strictly
    Read/Grep/Glob.
-   → `references/ingrain-mitigation-generator.md` owns the lookup and its failure modes;
-   `references/formatting/rules-file.md` owns the sidecar's schema and lifecycle.
+   **It runs exactly once.** It is not part of the Step 8 loop and is never re-dispatched on a
+   revision round — the critic is what carries its findings into the mitigations. Skip this
+   step entirely if Step 5's probe reported the CLI absent, and say so when you do.
+   → `references/ingrain-rule-expander.md` owns the lookup and its failure modes.
    - `fetch blocked — permission needed` → the lookup was denied by the sandbox and the worker
-     could not surface a prompt itself. **Do not accept the review without org rules yet.** Ask
-     the user for access using the same window primitive the gates use, and on grant
-     **re-dispatch with exec access**. Only if the user **declines** (or no permission channel
-     exists) do you proceed without rules, noting that access was declined.
+     could not surface a prompt itself. Ask the user for access using the same window
+     primitive the gates use, and on grant **re-dispatch with exec access** — this recovery
+     re-run is not a second pass. Only if the user **declines** (or no permission channel
+     exists) do you continue with Step 5's rules alone, noting that access was declined.
 
-6. **Critique mitigations** *(loop, max 3)* — dispatch `ingrain-mitigation-critic` at
-   `## Mitigations` **and the `rules-<…>.md` sidecar**, so it can judge the mitigations against
-   the rules they cite.
-   - `needs-revision` → re-dispatch `ingrain-mitigation-generator`, and repeat.
+8. **Critique mitigations** *(loop, max 3)* — dispatch `ingrain-mitigation-critic` at
+   `## Mitigations` **and the expanded `rules-<…>.md` sidecar**, so it can judge the
+   mitigations against the rules they cite *and* against the rules Step 7 added. A rule the
+   expander found that no mitigation applies is exactly the gap this critic reports.
+   - `needs-revision` → re-dispatch `ingrain-mitigation-generator` (only the generator — never
+     the expander), and repeat.
    - `approved`, or 3 rounds spent → **freeze** the mitigations.
 
-7. **Gate 2 — the user selects which mitigations to adopt.** Follow **How to ask the user**.
+9. **Gate 2 — the user selects which mitigations to adopt.** Follow **How to ask the user**.
    In order:
 
    1. **Read** the bounded `## Mitigations` slice, and the `rules-<…>.md` sidecar to resolve
@@ -399,8 +446,10 @@ not run it from this section's summary: it is a pointer, not the procedure.
 | "I'll create the `.ingrain-security/` folder since it's missing" | It is not missing — the script created it at the repo root and it self-ignores, so `git status` never shows it. If you think it's absent, you resolved the path wrong. Re-run the mint script. |
 | "I'll delete the `rules-<…>.md` sidecar at finalize like the scratch sections" | The rules sidecar is a **persistent** linked artifact, not scratch — the Testing verification pass reads it later. Only the two critique sections are deleted. |
 | "No org rules came back, so I'll write an empty `rules-<…>.md`" | The sidecar is written **only when rules were retrieved**. No rules → no file; its absence is the signal, and Gate 2 / verification fall back to Descriptions. |
-| "The `ingrain` CLI errored / isn't configured, so I'll stop the review" | Genuine unavailability (binary absent, unconfigured, no matches) degrades gracefully — proceed without rules, note why, and still propose mitigations. |
-| "The `ingrain` fetch was blocked by the sandbox, so I'll just proceed without rules" | A permission/sandbox denial is recoverable, not graceful-degradation — ask the user for access (native prompt, or the generator's `fetch blocked — permission needed` signal → you prompt and re-dispatch) and retry. Only proceed without rules if the user declines. |
+| "The `ingrain` CLI errored / isn't configured, so I'll stop the review" | Genuine unavailability (binary absent, unconfigured, no matches) degrades gracefully at Step 5 and Step 7 alike — proceed without rules, note why, and still propose mitigations. |
+| "The `ingrain` fetch was blocked by the sandbox, so I'll just proceed without rules" | A permission/sandbox denial is recoverable, not graceful-degradation. At Step 5 you are in the main session — re-run so the host's native prompt reaches the user. At Step 7 the worker returns `fetch blocked — permission needed` → you prompt and re-dispatch. Only proceed without rules if the user declines. |
+| "I'll have the mitigation-generator look up a rule it's missing" | The generator has no CLI. Step 5 retrieves before it runs and Step 7 expands after; on a revision round it re-reads the sidecar, which is already complete. |
+| "The expander found new rules — I'll run it again after the critic" | It runs **exactly once**. The critic flagging an unapplied rule is what folds new rules into the mitigations; re-dispatching the expander is not the mechanism. (Re-running it because the fetch was permission-blocked is a recovery, not a second pass.) |
 | "I'll cite a plausible-sounding org rule to back this mitigation" | Cite only rules actually returned by `ingrain context` — never invent a rule or an id. |
 | "I'll put all the detail in the window options and skip the table" | Display the findings as a table first, then present the single-choice windows — never the windows alone. |
 | "I'm in plan mode / keeping output lean, so I'll skip printing the gate table" | The gate table is mandatory visible output in every mode. Read the bounded slice of the assessment file — that read is the one the context-window discipline permits — and print the table before any window. |
@@ -419,7 +468,9 @@ subset — never an unselected or unreviewed finding.
 - [ ] 2. Threat critique loop closed — approved, or 3 rounds spent; threats frozen
 - [ ] 3. Risk scored; threats re-tagged into descending-risk order
 - [ ] 4. Gate 1 — table displayed in the conversation FIRST, then one window per threat; `Selection` recorded (zero selected ends the review)
-- [ ] 5. Mitigations generated for the selected threats ONLY; org rules retrieved
-- [ ] 6. Mitigation critique loop closed — approved, or 3 rounds spent; mitigations frozen
-- [ ] 7. Gate 2 — table displayed FIRST, then one window per mitigation; `Selection` recorded
+- [ ] 5. Org rules retrieved by YOU via the `ingrain` CLI, from plan + selected threats; sidecar written (or none, if nothing came back)
+- [ ] 6. Mitigations generated for the selected threats ONLY, grounded in the sidecar; generator got no CLI
+- [ ] 7. Rule expander dispatched ONCE — second pass keyed on the mitigations; appended to the sidecar (skipped only if the CLI is absent)
+- [ ] 8. Mitigation critique loop closed — approved, or 3 rounds spent; only the generator re-dispatched; mitigations frozen
+- [ ] 9. Gate 2 — table displayed FIRST, then one window per mitigation; `Selection` recorded
 - [ ] Finalize — `Latest stage: development` set, critique sections deleted, sidecar kept, plan file carries the assessment link + Maintenance

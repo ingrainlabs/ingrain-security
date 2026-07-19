@@ -1,5 +1,5 @@
 /**
- * Static lint of the 6 worker reference files. No model calls, no auth, no
+ * Static lint of the 7 worker reference files. No model calls, no auth, no
  * network — pure file reads.
  *
  * Workers are reference files under the single ingrain-security skill now
@@ -11,10 +11,11 @@
  * file, carries a recommended model, and an anti-trigger description so it isn't
  * fired directly outside the orchestrator.
  *
- * The mitigation-generator is the one worker granted a read-only `ingrain` CLI
- * lookup, and its ROLE is worded for that exception. Its phrasing is pinned in
- * ROLE_OVERRIDES rather than by loosening the shared assertion, so the strict
- * clause stays mandatory for every other worker.
+ * The rule-expander is the one worker granted a read-only `ingrain` CLI lookup —
+ * the second retrieval pass, keyed on the proposed mitigations — and its ROLE is
+ * worded for that exception. Its phrasing is pinned in ROLE_OVERRIDES rather than
+ * by loosening the shared assertion, so the strict clause stays mandatory for
+ * every other worker, the mitigation-generator now included.
  */
 
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
@@ -31,6 +32,7 @@ const WORKERS = [
   "ingrain-threat-critic",
   "ingrain-risk-scorer",
   "ingrain-mitigation-generator",
+  "ingrain-rule-expander",
   "ingrain-mitigation-critic",
 ] as const;
 
@@ -52,14 +54,14 @@ const STANDARD_ROLE = {
 };
 
 /**
- * The mitigation-generator may run a read-only `ingrain` CLI lookup, so its ROLE is
+ * The rule-expander may run a read-only `ingrain` CLI lookup, so its ROLE is
  * worded for that exception: the no-edits clause is broader (no edits at all, not just
  * code) and it names the dispatch path differently. Note "make no code edits" does not
  * contain "make no edits" as a substring, so the standard workers keep the strictly
  * stronger assertion — this override is not a back door for them.
  */
 const ROLE_OVERRIDES: Record<string, typeof STANDARD_ROLE> = {
-  "ingrain-mitigation-generator": {
+  "ingrain-rule-expander": {
     noEdits: "make no edits",
     writeTarget: "path per your dispatch",
   },
@@ -96,11 +98,11 @@ for (const name of WORKERS) {
       assertStringIncludes(prose, role.writeTarget);
     });
 
-    // The mitigation-generator is the one worker with a read-only CLI exception:
-    // it runs `ingrain context security_rules` to fetch org rules, but still edits
+    // The rule-expander is the one worker with a read-only CLI exception: it runs
+    // `ingrain context security_rules` for the second retrieval pass, but still edits
     // nothing. Guard that the exception is documented in its ROLE header.
-    if (name === "ingrain-mitigation-generator") {
-      await t.step("mitigation-generator documents the read-only ingrain CLI exception", () => {
+    if (name === "ingrain-rule-expander") {
+      await t.step("rule-expander documents the read-only ingrain CLI exception", () => {
         assertStringIncludes(prose, "ingrain context security_rules");
         assertStringIncludes(prose.toLowerCase(), "exception");
       });

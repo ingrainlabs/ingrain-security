@@ -187,7 +187,7 @@ earlier mode's transcript in its own subdir.
 | `test:ts`                | no              | 0                      | < 1s      | no   |
 | `test:offline`           | no              | 0                      | < 1s      | no   |
 | `ci` (+ lint, fmt:check) | no              | 0                      | a few s   | no   |
-| `test:agent`             | yes             | ~8 (6 workers + 2)     | a few min | yes  |
+| `test:agent`             | yes             | ~8 (7 workers + 2)     | a few min | yes  |
 | `test:integration`       | yes             | + full cycle to Gate 1 | 5–20 min  | yes  |
 
 ## Notes

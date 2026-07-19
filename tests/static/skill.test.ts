@@ -1,7 +1,7 @@
 /**
  * Static checks on the skill and hook wiring. No model calls. Guards the
  * workflow contract the live tests rely on: the strict step order, the two
- * announce/stop phrases, references to all 6 workers, and a valid SessionStart
+ * announce/stop phrases, references to all 7 workers, and a valid SessionStart
  * hook that injects the skill.
  */
 
@@ -36,6 +36,7 @@ const WORKERS = [
   "ingrain-threat-critic",
   "ingrain-risk-scorer",
   "ingrain-mitigation-generator",
+  "ingrain-rule-expander",
   "ingrain-mitigation-critic",
 ];
 
@@ -44,7 +45,7 @@ Deno.test("SKILL.md: frontmatter name is ingrain-security", async () => {
   assertEquals(fm.name, "ingrain-security");
 });
 
-Deno.test("SKILL.md: references all six workers", async () => {
+Deno.test("SKILL.md: references all seven workers", async () => {
   const md = await Deno.readTextFile(SKILL);
   for (const w of WORKERS) assertStringIncludes(md, w);
 });
@@ -246,8 +247,8 @@ Deno.test("platform-dispatch.md: covers the subagent primitive and the fallback"
   assertStringIncludes(md.toLowerCase(), "fallback");
 });
 
-Deno.test("ingrain-mitigation-generator.md: documents the ingrain rule-retrieval CLI", async () => {
-  const ref = `${ROOT}skills/ingrain-security/references/ingrain-mitigation-generator.md`;
+Deno.test("ingrain-rule-expander.md: documents the ingrain rule-retrieval CLI", async () => {
+  const ref = `${ROOT}skills/ingrain-security/references/ingrain-rule-expander.md`;
   const md = await Deno.readTextFile(ref);
   // The retrieval command and its output shape.
   assertStringIncludes(md, "ingrain context security_rules");
@@ -258,9 +259,9 @@ Deno.test("ingrain-mitigation-generator.md: documents the ingrain rule-retrieval
   assertStringIncludes(md.toLowerCase(), "proceed without rules");
 });
 
-Deno.test("SKILL.md: mitigation step retrieves rules", async () => {
+Deno.test("SKILL.md: the orchestrator's own step retrieves rules", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // Step 5 folds rule retrieval into the mitigation step.
+  // Step 5 is the orchestrator's first-pass retrieval, run in session — not a dispatch.
   assertStringIncludes(md, "ingrain context security_rules");
 });
 

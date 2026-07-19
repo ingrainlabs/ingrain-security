@@ -62,7 +62,8 @@ shape.
 
   The org security rules themselves do **not** live in this file — they are persisted to the
   **linked `rules-<branch-slug>-<task-slug>.md` sidecar** (see `references/formatting/rules-file.md`),
-  written by the `ingrain-mitigation-generator` when rules are retrieved. This file carries
+  written by the orchestrator's retrieval step and `ingrain-rule-expander` when rules are
+  retrieved. This file carries
   only the compact **Rule refs** ids (in `## Mitigations`) as the link into that sidecar.
 - **Living document.** Rewrite the relevant section at each commit point so the file
   always mirrors the current frozen state — critic-loop revisions and re-selection

@@ -39,31 +39,41 @@ isolation, and the main session is write-capable — so:
   content; the orchestrator does not read the full running analysis into its own
   context, only compact statuses and the bounded gate slices.
 
-## Mitigation-generator's CLI exception
+## Org-rules retrieval and the CLI
 
-Every worker is read-only, but the `ingrain-mitigation-generator` has one narrow
-exception: it runs the read-only `ingrain context security_rules "<query>"` lookup
-to fetch the org's security rules. Dispatch it with the host's shell/exec tool
-available **in addition to** Read/Grep/Glob (e.g. Claude Code: allow Bash for
-`ingrain`; Codex: the exec capability). Restate inline that it makes no
-edits and runs no other commands. All other workers get no shell access.
+Rule retrieval happens twice in Development, and the two passes run in different places.
 
-**Access denied vs. unavailable — two different failures.** If the `ingrain context`
-call is **blocked by the host's sandbox / permission layer** (the binary and config
-are fine, exec just wasn't granted), the rules are recoverable: the worker first relies
+**The first pass is the orchestrator's own**, in the main session — no worker, no dispatch.
+It needs the host's shell/exec for `ingrain --version` and
+`ingrain context security_rules "<query>"`, which the main session already has. Running there
+is the point: a sandbox or permission denial surfaces the host's **native approval prompt**
+("allow this command?") to the user directly, so there is nothing to relay.
+
+**The second pass is `ingrain-rule-expander`'s**, and it is the one narrow exception to the
+read-only rule: it runs the same two read-only `ingrain` invocations. Dispatch it with the
+host's shell/exec tool available **in addition to** Read/Grep/Glob (e.g. Claude Code: allow
+Bash for `ingrain`; Codex: the exec capability). Restate inline that it makes no edits and
+runs no other commands. It is dispatched **exactly once** per review. All other workers —
+`ingrain-mitigation-generator` included — get no shell access.
+
+**Access denied vs. unavailable — two different failures.** If the expander's
+`ingrain context` call is **blocked by the host's sandbox / permission layer** (the binary
+and config are fine, exec just wasn't granted), the rules are recoverable: it first relies
 on the host's **native approval prompt** (Claude Code's "allow this command?"; Codex's
 exec-approval) so the user can grant access and the fetch retries. Where the host cannot
-surface such a prompt to a subagent, the worker returns the single-line
+surface such a prompt to a subagent, it returns the single-line
 `fetch blocked — permission needed` signal instead of proceeding; the **orchestrator**
 then asks the user for permission (using the host's selection-window / question primitive
-— see **Selection windows** below) and, on grant, re-dispatches the generator with exec
-access. Only on decline does it fall back to proceeding without rules.
+— see **Selection windows** below) and, on grant, re-dispatches it with exec
+access. That recovery re-run is not a second expansion pass. Only on decline does the
+orchestrator fall back to the first pass's rules alone.
 
 Genuine unavailability is best-effort, not required: where the `ingrain` binary is not
 installed, or the CLI is unconfigured (no `INGRAIN_SYNC_URL` / API token) or returns
-nothing — cases the user cannot fix by granting access — the worker **degrades
-gracefully**, proposing mitigations without org rules and noting why. Rule retrieval
-never blocks or fails the review.
+nothing — cases the user cannot fix by granting access — both passes **degrade
+gracefully**, and mitigations are proposed without org rules with a note on why. A
+`command not found` on the first pass means the expander is skipped altogether. Rule
+retrieval never blocks or fails the review.
 
 ## Testing's verifier
 
