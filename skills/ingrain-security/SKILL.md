@@ -69,18 +69,12 @@ tables and plan-file links, never in a write target.
 → `references/formatting/assessment-file.md` owns what the script resolves, the name's derivation, and
 the file's schema — read it before your first write.
 
-The third signal is the **branch delta** — everything this branch added since it diverged from
-the branch it was cut from, **committed and uncommitted alike**. By the time Testing is due the
-coding agent has usually *committed* the implementation, so a clean working tree is **not**
-evidence that no code exists. Resolve it with the bundled `scripts/branch-diff` script; your
-SessionStart context carries the ready-to-run command. It is read-only and writes nothing:
-
-    bash <plugin>/skills/ingrain-security/scripts/branch-diff <host>
-
-Read **`delta_empty`** off its JSON: `false` means this branch has commits since the fork point,
-or an uncommitted change, or both. **Keep its `base_ref`, `diff_ref` and `fallback`** — Testing
-diffs against exactly that `diff_ref`. When no fork point resolves the script sets
-`fallback: true` and `diff_ref: HEAD`, and `delta_empty` degrades to the dirty-tree test.
+The third signal is the **branch delta**. Resolve it with the bundled `scripts/branch-diff`
+script and read **`delta_empty`** off its JSON: `false` means this branch has commits since the
+fork point, or an uncommitted change, or both. **Keep its `base_ref`, `diff_ref` and
+`fallback`** — Testing diffs against exactly that `diff_ref`.
+→ `references/lib/branch-diff.md` owns the script, the refs it returns, and why a clean working
+tree is **not** evidence that no code exists — read it before routing on the delta.
 
 If `file_exists: true`, read the bounded `## Mitigations` slice of that file (the bounded
 read the context-window discipline permits). Then:
@@ -431,13 +425,11 @@ threat Gate 1 selected, can it still be realized in the code as built? The threa
 scope — not the mitigation Descriptions. It fires when
 **Phase select** lands on Testing — an assessment for this task exists, it carries `selected`
 mitigations, and the branch delta is non-empty (`scripts/branch-diff` → `delta_empty: false`).
-**Nothing above this line applies to it:** the
-checklist, both gates, the critic loops, and the org-rules CLI lookup are Development only.
+**Nothing above this line applies to it:** Steps 0–9, both gates, the critic loops, and the
+org-rules CLI lookup are Development only.
 
 **Read `references/testing/verification-pass.md` NOW and follow it.** The full loop lives there — do
 not run it from this section's summary: it is a pointer, not the procedure.
-
-**Announce:** open with "Using ingrain-security to verify the implemented mitigations."
 
 ## Red flags — stop if you catch yourself thinking…
 
@@ -456,8 +448,6 @@ not run it from this section's summary: it is a pointer, not the procedure.
 | "I'll just answer the worker's job myself instead of dispatching" | Each worker runs in its own read-only subagent — dispatch it, don't inline it. |
 | "I'll read the whole assessment file to see where we are" | Hold only the compact statuses workers return. The bounded gate slices and finalize are the only reads. |
 | "`.ingrain-security/assessment-….md` is clear enough — the worker will find it" | It won't. A relative path is resolved by whoever receives it, and a worker has no project root in view — it resolves against the file it was reading and creates a stray folder there. Pass the absolute `assessment_abs`, always. |
-| "The tree is clean, so there's no code yet — Development" | Phase select tests the **branch delta**, not the tree. By the time verification is due the implementation is usually **committed**, which is a non-empty delta and routes to **Testing**. `delta_empty` is the signal; `git status` alone is not. |
-| "I'll work out the fork point myself with a merge-base loop" | `scripts/branch-diff` resolves it — one read-only call returning `base_ref`, `diff_ref` and `delta_empty`. Hand-rolling it is how the gate and the review end up disagreeing about what is under test. |
 | "I'll create the `.ingrain-security/` folder since it's missing" | It is not missing — the script created it at the repo root and it self-ignores, so `git status` never shows it. If you think it's absent, you resolved the path wrong. Re-run the mint script. |
 | "I'll delete the `rules-<…>.md` sidecar at finalize like the scratch sections" | The rules sidecar is a **persistent** linked artifact, not scratch — the Testing verification pass reads it later. Only the two critique sections are deleted. |
 | "No org rules came back, so I'll write an empty `rules-<…>.md`" | The sidecar is written **only when rules were retrieved**. No rules → no file; its absence is the signal, and Gate 2 / verification fall back to Descriptions. |
@@ -474,9 +464,8 @@ not run it from this section's summary: it is a pointer, not the procedure.
 The procedure is **Development — the flow**; this is the tracker. Tick only what is actually
 done. Work top to bottom — never skip a step, never reorder the pipeline, never batch. (The
 `ingrain-risk-scorer` re-tagging threats into risk order at step 3 is part of its job, not a
-resequencing.) Each step is one dispatch: dispatch every worker rather than answering its job
-yourself, and hold the state between them. Each gate incorporates exactly the selected
-subset — never an unselected or unreviewed finding.
+resequencing.) Each gate incorporates exactly the selected subset — never an unselected or
+unreviewed finding.
 
 - [ ] 0. Triage dispatched — bias to `major` when uncertain; `minor` → stop, `major` → open the assessment file
 - [ ] 1. Threats generated into `## Threats`, seeded from any prior analysis

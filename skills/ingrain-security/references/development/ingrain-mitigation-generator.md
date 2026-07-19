@@ -73,13 +73,14 @@ file** (per the `references/formatting/assessment-file.md` schema), and — if a
 any mitigation follows a rule — the `## Per-mitigation mapping` in the **`rules_abs` sidecar**
 (per the `references/formatting/rules-file.md` schema).
 
-**Into the `## Mitigations` table** — for each mitigation:
-- **Tag** — `M1`, `M2`, … assigned by the priority order below, not by the order you thought of them.
-- **Description** — detailed, task-specific guidance on how to tackle the threat(s) or, for a general instruction, how the whole change should be implemented.
-- **Yield** — how much value it adds over the current baseline of the task (what risk it removes).
-- **Effort** — how much work it takes to implement.
-- **threatTags** — the threat tag(s) (`T1`, `T2`, …) it addresses (the table's **Threat tags** column), or `—` for a general implementation instruction not tied to a threat. Reference only selected threats, and make sure every selected threat ends up covered by at least one **threat** mitigation.
-- **Rule refs** — the id(s) of the org rules this mitigation follows (**one mitigation may follow multiple rules**); `—` if it follows none (a pure threat mitigation). Each id must match a rule you recorded in the `rules_abs` sidecar — never invent one.
+**Into the `## Mitigations` table** — one row per mitigation, to the column spec in
+`references/formatting/assessment-file.md` → `## Mitigations`. That spec owns every column's
+constraint and enumerated values — **use it, do not work from memory**. Three things it leaves
+to you:
+
+- **Tag** — assigned by the priority order below, not by the order you thought of them.
+- **Threat tags** — reference only selected threats, and make sure every selected threat ends up covered by at least one **threat** mitigation.
+- **Rule refs** — each id must match a rule you recorded in the `rules_abs` sidecar; never invent one.
 
 ### Order the tags
 

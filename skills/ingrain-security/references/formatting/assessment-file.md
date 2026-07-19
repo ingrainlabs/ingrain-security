@@ -148,7 +148,7 @@ this table.
 
 | Column | Constraint |
 |--------|------------|
-| **Tag** | `M<n>` (e.g. `M1`) — contiguous from `M1`, no gaps, **ordered by descending priority**: threat mitigations first, ranked by the lowest-numbered (highest-risk) threat tag they cover, then by Yield then Effort; general implementation instructions last. Assigned by the `ingrain-mitigation-generator`, which re-derives them on every write. |
+| **Tag** | `M<n>` (e.g. `M1`) — contiguous from `M1`, no gaps, **ordered by descending priority**. Assigned by the `ingrain-mitigation-generator`, which re-derives them on every write (see `references/development/ingrain-mitigation-generator.md` → **Order the tags**). |
 | **Title** | string |
 | **Description** | string |
 | **Yield** | `high` \| `medium` \| `low` |

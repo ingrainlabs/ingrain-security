@@ -90,13 +90,12 @@ hasn't granted this command exec. Do **not** treat it as graceful degradation:
    decision once the user has been asked.
 
 **Graceful degradation — never block on the CLI.** This applies to every outcome the user
-*cannot* fix by granting access — **unconfigured**, **unsupported build**, **no matches**,
-and a **not installed** result you reach without having probed. In each case, **add no rules
-and proceed without rules** — leave any existing sidecar exactly as you found it, and write
-none if there was none. Do not fail or stall the review; the critique loop runs next
-regardless. In your return headline, note briefly that no further rules were retrieved and
-why (e.g. `no further rules retrieved — CLI not configured`). An **access denied** result is
-**not** one of these cases — it takes the branch above.
+*cannot* fix by granting access — the ones `references/lib/ingrain-cli.md` → **Failure
+taxonomy** classifies as such. In each case, **add no rules and proceed without rules** —
+leave any existing sidecar exactly as you found it, and write none if there was none. Do not
+fail or stall the review; the critique loop runs next regardless. In your return headline,
+note briefly that no further rules were retrieved and why (e.g.
+`no further rules retrieved — CLI not configured`).
 
 Finding nothing new is a legitimate outcome, not a failure. If the first pass already
 covered the ground, say so and return.

@@ -1,10 +1,8 @@
 # Platform dispatch reference
 
-Each worker is dispatched as a **fresh worker subagent** (read-only on the
-codebase; its sole write is its own section of the assessment file) told to read
-its reference file at `references/development/<name>.md` and follow it. That abstraction maps
-differently onto each host. The dispatch *prompt* is always the same; only the
-*mechanism* below changes.
+Each worker is dispatched as a **fresh worker subagent** told to read its reference file at
+`references/development/<name>.md` and follow it. That abstraction maps differently onto each
+host. The dispatch *prompt* is always the same; only the *mechanism* below changes.
 
 Always restate the constraint inline in the dispatch: "read-only on the codebase —
 use only Read/Grep/Glob and make no code edits; your only write is your own section
@@ -17,10 +15,9 @@ the subagent to read the worker reference file from `references/development/<nam
 worker per call and read the returned text. Where the host supports a per-subagent
 model, set the worker's recommended tier; otherwise ignore it (advisory).
 
-> Note: a general-purpose subagent typically has write-capable tools available.
-> The constraint here is advisory — enforced by the prompt and the worker's own
-> ROLE header, not by a tool allow-list. Keep workers off the codebase (no code
-> edits); their only write is their own section of the assessment file.
+> Note: a general-purpose subagent typically has write-capable tools available, so the
+> constraint above is advisory — enforced by the dispatch prompt and the worker's own
+> ROLE header, not by a tool allow-list.
 
 ## No subagent primitive — sequential in-context fallback
 
@@ -29,15 +26,10 @@ session**: read `references/development/<name>.md`, follow it on the current INP
 the output, then move to the next step. This is the weakest mode — there is no
 isolation, and the main session is write-capable — so:
 
-- Keep workers off the codebase by discipline: a worker does no code or repo edits;
-  its sole write is its own section of the stored analysis file
-  (at the path the dispatch specifies).
+- Hold the standing constraint above by discipline — nothing else will.
 - Run one worker step at a time, in strict order — never reorder or parallelize.
 - The orchestrator's writes — finalizing the assessment file and the two plan-file
-  writes at Gate 1 and Gate 2 — happen outside worker steps. Hand off between workers
-  by pointing them at sections of the assessment file rather than threading full
-  content; the orchestrator does not read the full running analysis into its own
-  context, only compact statuses and the bounded gate slices.
+  writes at Gate 1 and Gate 2 — happen outside worker steps.
 
 ## Org-rules retrieval and the CLI
 
@@ -58,22 +50,17 @@ Bash for `ingrain`; Codex: the exec capability). Restate inline that it makes no
 runs no other commands. It is dispatched **exactly once** per review. All other workers —
 `ingrain-mitigation-generator` included — get no shell access.
 
-**Access denied vs. unavailable — two different failures.** On an **access denied** result
-for the expander's lookup (the binary and config are fine, exec just wasn't granted), the
-rules are recoverable: it first relies
-on the host's **native approval prompt** (Claude Code's "allow this command?"; Codex's
-exec-approval) so the user can grant access and the fetch retries. Where the host cannot
-surface such a prompt to a subagent, it returns the single-line
-`fetch blocked — permission needed` signal instead of proceeding; the **orchestrator**
-then asks the user for permission (using the host's selection-window / question primitive
-— see **Selection windows** below) and, on grant, re-dispatches it with exec
-access. That recovery re-run is not a second expansion pass. Only on decline does the
-orchestrator fall back to the first pass's rules alone.
+**Relaying an access denial is a dispatch concern**, because a subagent cannot always reach
+the user. The expander first relies on the host's **native approval prompt** (Claude Code's
+"allow this command?"; Codex's exec-approval) so the fetch retries in place. Where the host
+cannot surface such a prompt to a subagent, it returns the single-line
+`fetch blocked — permission needed` signal instead of proceeding; the **orchestrator** then
+asks the user for permission (using the host's selection-window / question primitive — see
+**Selection windows** below) and, on grant, re-dispatches it with exec access. That recovery
+re-run is not a second expansion pass.
 
-Genuine unavailability is best-effort, not required: for every outcome the user cannot fix
-by granting access, both passes **degrade gracefully**, and mitigations are proposed without
-org rules with a note on why. A **not installed** result on the first pass means the expander
-is skipped altogether. Rule retrieval never blocks or fails the review.
+A **not installed** result on the first pass means there is no second pass to dispatch — the
+expander is skipped altogether.
 
 ## Testing's verifier
 
@@ -96,11 +83,7 @@ same session one at a time, in tag order.
 How to ask the user. Only the mechanism below is host-specific.** Read this
 section for *how* to show a selection on this host, not for *what* a gate does.
 
-The gate presents a per-finding selection as **multiple single-choice
-windows — one window per finding** — each a binary include/exclude decision
-labeled by tag + short title, with high/critical findings marked recommended.
-The user may select any subset, **including none**. The primitive is generic;
-only the mechanism changes per host:
+The primitive is generic; only the mechanism changes per host:
 
 - **Host with a windowed single-choice primitive** — present each finding in
   its own single-choice window (one window per finding). Where the host caps how
