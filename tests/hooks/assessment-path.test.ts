@@ -65,6 +65,7 @@ interface IPathJson {
   assessment_abs: string;
   basename: string;
   file_exists: boolean;
+  instruction: string;
 }
 
 async function runJson(
@@ -205,6 +206,94 @@ Deno.test("mint: host token selects root resolution but not the path", async () 
     const future = await runJson(["future", "mint", "--title", "T"], { projectDir: dir });
     assertEquals(future.assessment_dir, "ingrain-security");
     assertEquals(future.assessment_path, "ingrain-security/assessment-feature-foo-t.md");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mint: project-root anchoring
+//
+// The reported bug: a mint run from a subdirectory seeded `ingrain-security/` in
+// THAT subdirectory. The root now comes from `git rev-parse --show-toplevel`, which
+// answers the same from anywhere inside the repo.
+// ---------------------------------------------------------------------------
+
+Deno.test("mint: run from a subdirectory still anchors at the git repo root", async () => {
+  await withProject(async (dir) => {
+    await sh(`${gitRepo("feature/foo")} && mkdir -p docs`, dir);
+    const base = dir.split("/").pop()!;
+
+    // No CLAUDE_PROJECT_DIR: the root can only come from git.
+    const j = await runJson(["claude", "mint", "--title", "Add JWT auth"], {
+      cwd: `${dir}/docs`,
+    });
+    assertStringIncludes(j.project_root, base);
+    assertEquals(j.project_root.endsWith("/docs"), false);
+    assertStringIncludes(
+      j.assessment_abs,
+      "/ingrain-security/assessment-feature-foo-add-jwt-auth.md",
+    );
+
+    // The folder lands at the root, and nowhere near the cwd we were invoked from.
+    assertEquals(await exists(`${dir}/ingrain-security`), true);
+    assertEquals(await exists(`${dir}/docs/ingrain-security`), false);
+  });
+});
+
+Deno.test("mint: host=codex run from a subdirectory anchors at the git repo root", async () => {
+  await withProject(async (dir) => {
+    await sh(`${gitRepo("feature/foo")} && mkdir -p docs`, dir);
+    // A leaked CLAUDE_PROJECT_DIR must stay ignored even now that git outranks $PWD.
+    const j = await runJson(["codex", "mint", "--title", "T"], {
+      cwd: `${dir}/docs`,
+      projectDir: "/nonexistent/leaked",
+    });
+    assertEquals(j.project_root.includes("leaked"), false);
+    assertEquals(await exists(`${dir}/ingrain-security`), true);
+    assertEquals(await exists(`${dir}/docs/ingrain-security`), false);
+  });
+});
+
+Deno.test("mint: CLAUDE_PROJECT_DIR outranks a nested git repo at the cwd", async () => {
+  // A vendored dependency with its own .git must never retarget the assessment folder.
+  await withProject(async (dir) => {
+    await sh(`${gitRepo("feature/foo")} && mkdir -p vendor/lib`, dir);
+    await sh(gitRepo("main"), `${dir}/vendor/lib`);
+    const base = dir.split("/").pop()!;
+
+    const j = await runJson(["claude", "mint", "--title", "T"], {
+      cwd: `${dir}/vendor/lib`,
+      projectDir: dir,
+    });
+    assertStringIncludes(j.project_root, base);
+    assertEquals(j.project_root.endsWith("/vendor/lib"), false);
+    assertEquals(await exists(`${dir}/vendor/lib/ingrain-security`), false);
+  });
+});
+
+Deno.test("mint: a non-git dir falls back to $PWD", async () => {
+  await withProject(async (dir) => {
+    const base = dir.split("/").pop()!;
+    const j = await runJson(["claude", "mint", "--title", "T"], { cwd: dir });
+    assertStringIncludes(j.project_root, base);
+    assertEquals(j.branch_known, false);
+    assertEquals(await exists(`${dir}/ingrain-security`), true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mint: the instruction field
+//
+// It is what actually reaches the orchestrator's context alongside the path, so it
+// must carry the absolute path and say the folder must not be recreated elsewhere.
+// ---------------------------------------------------------------------------
+
+Deno.test("mint: instruction names assessment_abs and forbids a second folder", async () => {
+  await withProject(async (dir) => {
+    await sh(gitRepo("feature/foo"), dir);
+    const j = await runJson(["claude", "mint", "--title", "Add JWT auth"], { projectDir: dir });
+    assertStringIncludes(j.instruction, j.assessment_abs);
+    assertStringIncludes(j.instruction, "assessment_abs");
+    assertStringIncludes(j.instruction, "never create an ingrain-security/ folder anywhere else");
   });
 });
 

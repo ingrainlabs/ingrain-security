@@ -11,9 +11,13 @@ shape.
   root — it is **both** the living working copy the workers write during the run **and**
   its persisted record, so there is no separate temp file and no finalize copy. The
   orchestrator does not hand-build it: it runs the `scripts/assessment-path` script
-  (`mint` subcommand) once at review start and reuses its `assessment_path` throughout —
-  see SKILL.md → **The assessment file**. The name is deterministic in the branch + task:
-  `ingrain-security/assessment-<branch-slug>-<task-slug>.md`. The script resolves
+  (`mint` subcommand) once at review start and reuses its **`assessment_abs`** — the
+  absolute path — as the write target throughout; the relative `assessment_path` is a
+  display form for prose and links only. **Every write goes to the absolute path.**
+  See SKILL.md → **The assessment file**. The name is deterministic in the branch + task:
+  `<project_root>/ingrain-security/assessment-<branch-slug>-<task-slug>.md`. The script
+  resolves `<project_root>` from the git repo root — so it may be run from any
+  subdirectory — resolves
   `<branch-slug>` from the current git branch (`git branch --show-current`, not
   `.git/HEAD`, unreliable in a worktree/submodule), lowercased and reduced to `[a-z0-9-]`,
   and derives `<task-slug>` from the `## Task` Title by the same rule. Because the name
@@ -25,10 +29,10 @@ shape.
   call. Any unresolvable segment is dropped
   (branch unknown → `assessment-<task-slug>.md`; no usable title →
   `assessment-<branch-slug>.md`; both absent → `assessment.md`), and the `assessment-`
-  prefix always leads. The folder is **self-ignoring** (an inner `.gitignore` of `*` +
-  `!.gitignore`, seeded by the `ensure-assessment-dir` hook and re-ensured by the script),
-  so the file does not appear in `git status`; sharing it is an explicit
-  `git add -f <file>` opt-in.
+  prefix always leads. The folder is **self-ignoring** (an inner `.gitignore` of a bare `*`,
+  seeded by the `ensure-assessment-dir` hook and re-ensured by the script), so the whole
+  folder — the ignore file included — stays out of `git status`; sharing a file is an
+  explicit `git add -f <file>` opt-in.
 - **Hand-off medium.** Workers write their sections and return to the orchestrator
   only a branch keyword plus a one-line pointer. The orchestrator owns the
   title/banner and the finalize; it moves data between workers by pointer and does
@@ -42,15 +46,18 @@ shape.
   | `## Threat critique` | `ingrain-threat-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Risk score` | `ingrain-risk-scorer` (plan-level residual) |
   | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Selection at Gate 2) |
+  | `## Org rules` | `ingrain-mitigation-generator` — **transient**, deleted by the orchestrator at finalize |
   | `## Mitigation critique` | `ingrain-mitigation-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Coverage / open items`, `## Maintenance` | orchestrator (finalize) |
 - **Living document.** Rewrite the relevant section at each commit point so the file
   always mirrors the current frozen state — critic-loop revisions and re-selection
-  overwrite the prior contents of that section. The critique sections are iteration
-  scratch, not results: once their loop is done they are dead weight, and the
-  orchestrator **deletes both critique sections at finalize** — the finalized file
-  contains only end results. This is why the template below has
-  no critique sections.
+  overwrite the prior contents of that section. The two critique sections and the
+  `## Org rules` section are iteration scratch, not results: they exist only to feed the
+  mitigation loop (the critic and revision rounds read the org rules by pointer), so once
+  that loop is done they are dead weight. The orchestrator **deletes all three transient
+  sections at finalize** — `## Threat critique`, `## Mitigation critique`, and
+  `## Org rules` — so the finalized file contains only end results. This is why the
+  template below has none of them.
 
 ## Sections and fields
 
@@ -105,6 +112,10 @@ rationalizing numbers already chosen.
 
 ### `## Mitigations` — a Markdown table, one row per mitigation, with these columns:
 
+A mitigation is either a **threat mitigation** (carries ≥1 threat tag) or a **general
+implementation instruction** for the full scoped task (no threat tag). Both belong in
+this table.
+
 | Column | Constraint |
 |--------|------------|
 | **Tag** | `M<n>` (e.g. `M1`) |
@@ -112,18 +123,54 @@ rationalizing numbers already chosen.
 | **Description** | string |
 | **Yield** | `high` \| `medium` \| `low` |
 | **Effort** | `high` \| `medium` \| `low` |
-| **Threat tags** | **≥ 1** threat tag (e.g. `T1, T3`) |
+| **Threat tags** | `0..N` threat tags (e.g. `T1, T3`); `—` when the mitigation is a general implementation instruction not tied to a specific threat |
+| **Rule refs** | the org rule id(s) the mitigation follows, `0..N` comma-separated (e.g. `r-auth-01, r-log-03`); `—` when it follows no org rule (a pure threat mitigation). One mitigation may follow multiple rules. Ids are machine-facing — stored here, **never rendered to the user** (Gate 2 shows rule titles instead). Full rule detail lives in the transient `## Org rules` section. |
 | **Selection** | `selected` \| `excluded` \| `undecided` (optional until Gate 2) |
+
+**Follows org rules is derived, not stored twice.** A mitigation with ≥1 **Rule ref**
+follows org rules; an empty **Rule refs** (`—`) means a pure threat mitigation. Surface
+this as a computed indicator (e.g. at Gate 2) rather than a separate column: the
+indicator is the rule **title(s)**, resolved by looking each **Rule ref** id up in the
+per-mitigation citations of the transient `## Org rules` section. Titles are not stored
+in this table — no title column is added.
 
 **Gate 2 → Selection.** Record each mitigation's **Selection**:
 adopt → `selected`, decline → `excluded`; `undecided` only if the user is unsure.
 
+### `## Org rules` — transient, deleted at finalize
+
+The org security rules the `ingrain-mitigation-generator` retrieved, kept here so the
+`ingrain-mitigation-critic` and revision rounds can read them by pointer. The section
+itself is **never** shown to the user; the orchestrator reads its per-mitigation
+citations at Gate 2 to resolve each **Rule ref** id to a rule title for display, and
+nothing else here (bodies, applicable rules) leaves the file. The orchestrator **deletes
+the section at finalize** — so it is absent from the finalized template below. Content:
+
+- **Rules retrieved** — a one-line summary: the queries run and how many rules each
+  returned, or the graceful-degradation note if retrieval was skipped (e.g. `no org rules
+  retrieved — CLI not configured`).
+- **Per-mitigation citations** — one line per mitigation, keyed by its tag:
+  `M<n> → "<title>" (<id>)` with a one-line note on how the rule shaped it; `none` where
+  no retrieved rule applies to that mitigation.
+- **Applicable rules** — retrieved rules relevant to the change that do not map cleanly
+  onto a single mitigation, each as `"<title>" (<id>)`.
+
+Cite only rules actually retrieved — never invent a rule or an `id`.
+
 ### `## Coverage / open items`
 - Any threat whose **Selection** is `selected` that has no mitigation with
-  **Selection** `selected` covering it (via its **Threat tags**).
+  **Selection** `selected` covering it (via its **Threat tags**). Only **threat
+  mitigations** (those carrying threat tags) count toward covering a threat — general
+  implementation instructions are not expected to cover a specific threat.
 
 ### `## Maintenance (for the implementing agent)`
 - Instruction to keep the file in sync as the implementation evolves.
+- **How that agent locates this file.** It runs in a later session and has no minted path
+  in context, so it must **re-run** the `assessment-path` mint command from its
+  `INGRAIN-ASSESSMENT-PATHS` session context and write to the `assessment_abs` it
+  returns. Re-minting is deterministic in branch + title, so it resolves to this same
+  file. It must never resolve a relative `ingrain-security/…` string against the file it
+  is editing, and must never create the folder. 
 
 ## Template
 
@@ -155,9 +202,10 @@ Score: <0–100>
 Criticality: <low|medium|high|critical>
 
 ## Mitigations
-| Tag | Title | Description | Yield | Effort | Threat tags | Selection |
-|-----|-------|-------------|-------|--------|-------------|------------|
-| M1  | …     | …           | high  | medium | T1          | selected   |
+| Tag | Title | Description | Yield | Effort | Threat tags | Rule refs         | Selection |
+|-----|-------|-------------|-------|--------|-------------|-------------------|------------|
+| M1  | …     | …           | high  | medium | T1          | r-auth-01         | selected   |
+| M2  | …     | …           | medium| low    | —           | r-log-03          | selected   |
 
 ## Coverage / open items
 - <any selected threat with no selected mitigation covering it>
@@ -167,4 +215,9 @@ Update this file whenever the implementation diverges from the analysis — a ne
 surface, a threat's acceptance changes, or a mitigation is added, dropped, or
 altered. Keep the Selection columns and coverage honest against the code you write,
 and keep every enumerated field within its allowed values.
+
+To locate this file, re-run the `assessment-path` mint command from your
+INGRAIN-ASSESSMENT-PATHS session context and write to the absolute `assessment_abs`
+it returns — it resolves back to this same file. Do not resolve a relative path
+against the file you are editing, and do not create an `ingrain-security/` folder.
 ```

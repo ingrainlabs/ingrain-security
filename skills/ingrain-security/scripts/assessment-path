@@ -7,6 +7,11 @@
 # and its persisted record — there is no separate temp file and no finalize copy.
 # Emits ONE JSON object on stdout; diagnostics go to stderr.
 #
+# `assessment_abs` (absolute) is the CANONICAL write target: it is what every worker
+# dispatch and every Write/Edit must use. `assessment_path` is a display-only relative
+# form for prose and links. The emitted `instruction` field restates this, with the
+# path interpolated.
+#
 # Usage:
 #   assessment-path <host> mint --title "<task title>" [--branch-slug <slug>]
 #   assessment-path --help
@@ -15,6 +20,9 @@
 #           (Codex), or any future coding agent's token. It no longer appears in the
 #           assessment path (that always lives at `ingrain-security/…`); it only
 #           selects project-root resolution, exactly like `ensure-assessment-dir`.
+#
+# The project root is resolved from the git repo root, so running this from any
+# subdirectory still anchors the folder at the top of the repo.
 #
 # The path is deterministic in the branch + task, so it doubles as the task identity:
 #   ingrain-security/assessment-<branch-slug>-<task-slug>.md
@@ -49,8 +57,11 @@ mint flags:
   --branch-slug S     reuse an already-resolved branch slug (optional; else resolved
                       from git). Any unresolvable segment is dropped from the name.
 
-Output (relative assessment_path is canonical; assessment_abs is absolute):
-  ingrain-security/assessment-<branch-slug>-<task-slug>.md
+Output (assessment_abs is CANONICAL — the one path to write to; assessment_path is the
+relative display form for prose and links). The `instruction` field restates this with
+the path interpolated. The project root comes from the git repo root, so mint may be run
+from any subdirectory:
+  <project_root>/ingrain-security/assessment-<branch-slug>-<task-slug>.md
   Fallbacks: no branch -> assessment-<task-slug>.md; no title -> assessment-<branch-slug>.md;
   both absent -> assessment.md. The `assessment-` prefix always leads. `file_exists`
   is true when the file already exists (the run resumes the same task's prior analysis).
@@ -61,16 +72,42 @@ EOF
 
 # --- helpers (patterns reused from ensure-assessment-dir / session-start) ---------
 
-# Resolve the user's PROJECT root as a normalized forward-slash path. Verbatim from
-# ensure-assessment-dir: codex resolves from $PWD alone (and deliberately ignores a
-# leaked CLAUDE_PROJECT_DIR); every other host — including future ones — falls to the
-# CLAUDE_PROJECT_DIR||$PWD default. The `cd && pwd` idiom normalizes Git Bash paths.
+# Normalize a directory to an absolute, canonical forward-slash path. An empty argument
+# or an unreachable directory yields empty output and a non-zero status, so callers fall
+# through to the next candidate. The `cd && pwd` idiom also normalizes Git Bash paths.
+normalize_dir() {
+    [ -n "${1:-}" ] || return 1
+    cd "$1" 2>/dev/null && pwd
+}
+
+# The root of the git repository containing the current directory; empty when outside a
+# repo. `rev-parse --show-toplevel` answers from ANY subdirectory, which is what pins the
+# assessment folder to the repo root regardless of where the agent runs us from.
+resolve_git_root() {
+    git rev-parse --show-toplevel 2>/dev/null
+}
+
+# Resolve the user's PROJECT root as a normalized forward-slash path, by precedence
+# (shared verbatim with ensure-assessment-dir):
+#   codex:                      git repo root -> $PWD
+#   claude / any future host:   $CLAUDE_PROJECT_DIR -> git repo root -> $PWD
+# Codex exports no project-dir variable and deliberately IGNORES a leaked
+# CLAUDE_PROJECT_DIR — honoring a stray Claude var would seed the folder in the wrong
+# project. On Claude the exported variable outranks git, so a cwd inside a vendored
+# nested repo cannot retarget the folder. $PWD is the last resort (non-git checkouts).
 resolve_project_root() {
-    if [ "${1:-}" = "codex" ]; then
-        cd "$PWD" 2>/dev/null && pwd
-    else
-        cd "${CLAUDE_PROJECT_DIR:-$PWD}" 2>/dev/null && pwd
+    local root
+    if [ "${1:-}" != "codex" ]; then
+        root="$(normalize_dir "${CLAUDE_PROJECT_DIR:-}")" && [ -n "${root}" ] && {
+            printf '%s' "${root}"
+            return 0
+        }
     fi
+    root="$(normalize_dir "$(resolve_git_root)")" && [ -n "${root}" ] && {
+        printf '%s' "${root}"
+        return 0
+    }
+    normalize_dir "$PWD"
 }
 
 # Resolve the current git branch, anchored to the resolved project root. Uses
@@ -110,7 +147,8 @@ escape_for_json() {
 
 # Idempotently ensure the self-ignoring .gitignore (mirrors ensure-assessment-dir M5)
 # so the assessment — which can contain analysis of a private codebase — is never
-# swept into a commit, even if the SessionStart hook did not run.
+# swept into a commit, even if the SessionStart hook did not run. The bare `*` matches
+# this file too, so the whole folder stays out of `git status`; `git add -f` shares one.
 seed_gitignore() {
     local ignore="$1/.gitignore"
     [ -f "${ignore}" ] && return 0
@@ -118,7 +156,6 @@ seed_gitignore() {
         '# Assessments here can contain analysis of a private codebase, so they' \
         '# are ignored by default. Share one explicitly with: git add -f <file>' \
         '*' \
-        '!.gitignore' \
         > "${ignore}" 2>/dev/null || true
 }
 
@@ -127,7 +164,7 @@ seed_gitignore() {
 cmd_mint() {
     local host="$1" host_slug title="" slug_flag="" have_slug="false" project_root
     local branch branch_slug branch_known task_slug name basename
-    local assessment_dir assessment_path assessment_abs file_exists
+    local assessment_dir assessment_path assessment_abs file_exists instruction
     shift
 
     while [ $# -gt 0 ]; do
@@ -190,7 +227,13 @@ cmd_mint() {
 
     if [ -f "${assessment_abs}" ]; then file_exists="true"; else file_exists="false"; fi
 
-    printf '{"host":"%s","project_root":"%s","branch":"%s","branch_slug":"%s","branch_known":%s,"task_slug":"%s","assessment_dir":"%s","assessment_path":"%s","assessment_abs":"%s","basename":"%s","file_exists":%s}\n' \
+    # Carried in the JSON so the absolute path and the rule governing it arrive together,
+    # in the same tool result, at the moment the orchestrator is about to dispatch. A
+    # static sentence in SKILL.md is read thousands of tokens earlier and gets lost; this
+    # one is unmissable and already has the path substituted in.
+    instruction="Write the assessment ONLY to assessment_abs (${assessment_abs}). That folder is this repository's single ingrain-security/ directory and it already exists — never create an ingrain-security/ folder anywhere else, and never resolve the path against the file you happen to be editing. Pass assessment_abs verbatim to every worker dispatch and to every Write/Edit call; assessment_path is a display-only form for prose and links."
+
+    printf '{"host":"%s","project_root":"%s","branch":"%s","branch_slug":"%s","branch_known":%s,"task_slug":"%s","assessment_dir":"%s","assessment_path":"%s","assessment_abs":"%s","basename":"%s","file_exists":%s,"instruction":"%s"}\n' \
         "$(escape_for_json "${host_slug}")" \
         "$(escape_for_json "${project_root}")" \
         "$(escape_for_json "${branch}")" \
@@ -201,7 +244,8 @@ cmd_mint() {
         "$(escape_for_json "${assessment_path}")" \
         "$(escape_for_json "${assessment_abs}")" \
         "${basename}" \
-        "${file_exists}"
+        "${file_exists}" \
+        "$(escape_for_json "${instruction}")"
 }
 
 main() {

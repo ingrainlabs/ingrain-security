@@ -15,6 +15,8 @@ const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/assessment-fil
 const TRIAGE_REF = `${ROOT}skills/ingrain-security/references/ingrain-relevance-triage.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
+const SESSION_START = `${ROOT}hooks/start/session-start`;
+const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
 
 const WORKERS = [
   "ingrain-relevance-triage",
@@ -169,7 +171,7 @@ Deno.test("SKILL.md: mitigation step retrieves rules", async () => {
 
 // The assessment file must be written to the ABSOLUTE `assessment_abs`. A relative path
 // is resolved by whoever receives it, and a worker subagent has no project root in view —
-// it resolves against the file it was reading and creates a stray .ingrain-security/ folder
+// it resolves against the file it was reading and creates a stray ingrain-security/ folder
 // there. These fence the wording so a later doc edit cannot quietly reintroduce that.
 
 Deno.test("SKILL.md: dispatches workers with the absolute assessment_abs", async () => {
@@ -187,43 +189,7 @@ Deno.test("session-start: points the orchestrator at assessment_abs", async () =
 Deno.test("assessment-path: emits an instruction and anchors on the git repo root", async () => {
   const script = await Deno.readTextFile(PATH_SCRIPT);
   assertStringIncludes(script, '"instruction":"%s"');
-  // Root resolution lives in the shared lib the script sources; the anchoring behavior
-  // itself is covered end-to-end by the "run from a subdirectory" cases in
-  // tests/hooks/assessment-path.test.ts.
-  assertStringIncludes(script, "lib/project-root.sh");
-  assertStringIncludes(await Deno.readTextFile(PROJECT_ROOT_LIB), "rev-parse --show-toplevel");
-});
-
-/**
- * True when `script` really SOURCES `lib` — a `.` command line, in either style the scripts
- * use (`. "${SCRIPT_DIR}/…"` and `if ! . "${SCRIPT_DIR}/…"`).
- *
- * A plain substring search cannot answer this: every source line is preceded by a
- * `# shellcheck source=…/lib/project-root.sh` directive carrying the same text, so a script
- * that DELETED its source line and kept the comment would still pass one. The regression these
- * guards exist to catch would walk straight through.
- */
-async function sourcesLib(script: string, lib: string): Promise<boolean> {
-  const source = new RegExp(String.raw`^(?:if !\s+)?\.\s+\S*lib/${lib}\.sh`, "m");
-  return source.test(await Deno.readTextFile(script));
-}
-
-Deno.test("project-root.sh: is sourced by every script that resolves the project root", async () => {
-  // The lib exists to keep every one of these in lockstep — a copy drifting back into any of
-  // them is the regression this guards. Both hosts' allow-hooks are in the list: they resolve
-  // the project root exactly like the scripts do.
-  for (const script of [PATH_SCRIPT, ENSURE_DIR, ALLOW_HOOK, CODEX_ALLOW_HOOK]) {
-    assertEquals(await sourcesLib(script, "project-root"), true, `${script} must source the lib`);
-  }
-});
-
-Deno.test("assessment-write.sh: is sourced by both allow-hooks", async () => {
-  // The grant itself — the assessment naming and the folder containment check — lives in this
-  // one lib so the two hosts cannot drift apart on what they auto-approve. A hook that inlined
-  // its own check would pass every other test in this file.
-  for (const hook of [ALLOW_HOOK, CODEX_ALLOW_HOOK]) {
-    assertEquals(await sourcesLib(hook, "assessment-write"), true, `${hook} must source the lib`);
-  }
+  assertStringIncludes(script, "rev-parse --show-toplevel");
 });
 
 Deno.test("assessment-file.md: names assessment_abs as the write target", async () => {

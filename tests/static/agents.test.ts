@@ -95,8 +95,8 @@ for (const name of WORKERS) {
     // nothing. Guard that the exception is documented in its ROLE header.
     if (name === "ingrain-mitigation-generator") {
       await t.step("mitigation-generator documents the read-only ingrain CLI exception", () => {
-        assertStringIncludes(prose, "ingrain context security_rules");
-        assertStringIncludes(prose.toLowerCase(), "exception");
+        assertStringIncludes(body, "ingrain context security_rules");
+        assertStringIncludes(body.toLowerCase(), "exception");
       });
     }
 

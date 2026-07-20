@@ -38,11 +38,15 @@ Before you classify, look for an analysis that already exists for **this same ta
 the pipeline can build on prior work instead of restarting. This is read-only — use only
 Glob, Grep, and Read:
 
-1. **Glob the assessment folder** `ingrain-security/` for this branch:
-   `ingrain-security/assessment-<branch-slug>-*.md`, where `<branch-slug>` is the
-   `branch_slug` the orchestrator resolved via the `scripts/assessment-path` script
-   (so this glob and the file names always agree). If the branch is `unknown`,
-   Glob all `ingrain-security/assessment-*.md` instead.
+1. **Glob the assessment folder** for this branch, using the **absolute** folder path the
+   orchestrator passed you (`<project_root>/ingrain-security/`, from the
+   `scripts/assessment-path` script):
+   `<project_root>/ingrain-security/assessment-<branch-slug>-*.md`, where `<branch-slug>` is
+   the `branch_slug` the orchestrator resolved via the same script (so this glob and the
+   file names always agree). If the branch is `unknown`, Glob all
+   `<project_root>/ingrain-security/assessment-*.md` instead. Glob the absolute path, never
+   the bare relative `ingrain-security/…` — you have no project root in view, so a relative
+   glob silently matches nothing and you would wrongly report `none`.
 2. **Match on the task — strictly.** A shared branch may hold several concurrent tasks'
    assessments, so the glob can return files belonging to *other* work. For each candidate,
    read its `## Task` Title and **compare the branch and the title/description against the

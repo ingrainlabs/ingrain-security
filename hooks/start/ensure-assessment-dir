@@ -17,28 +17,51 @@
 
 set -uo pipefail
 
-# Resolve the user's PROJECT root — NOT the plugin root — as a normalized
-# forward-slash path (works uniformly on unix and, under Git Bash / MSYS, on
-# Windows). The host is passed as $1 by each hook.json ("claude" | "codex"):
-#   - codex: Codex exports no project-dir variable and run-hook.cmd does not
-#     change cwd, so the current directory is authoritative. We resolve from $PWD
-#     alone and deliberately IGNORE CLAUDE_PROJECT_DIR even if it leaked into the
-#     environment (e.g. a shell that also ran Claude Code) — honoring a stray
-#     Claude var would seed the folder in the wrong project.
-#   - claude (default): Claude Code exports CLAUDE_PROJECT_DIR (absolute project
-#     path); $PWD backs it up.
+# Normalize a directory to an absolute, canonical forward-slash path. An empty argument
+# or an unreachable directory yields empty output and a non-zero status, so callers fall
+# through to the next candidate.
 #
 # The `cd && pwd` idiom (same as session-start) normalizes the value so mkdir,
 # symlink tests and the printf writes work under Git Bash on Windows, where
 # CLAUDE_PROJECT_DIR is a native backslash path that MSYS does not convert for env
-# vars. Echoes empty on failure — callers no-op rather than risk writing to the
-# filesystem root (there is no `set -e` to abort us).
+# vars.
+normalize_dir() {
+    [ -n "${1:-}" ] || return 1
+    cd "$1" 2>/dev/null && pwd
+}
+
+# The root of the git repository containing the current directory; empty when outside a
+# repo. `rev-parse --show-toplevel` answers from ANY subdirectory, so the folder is
+# seeded at the top of the repo even when the host starts us in one of its children.
+resolve_git_root() {
+    git rev-parse --show-toplevel 2>/dev/null
+}
+
+# Resolve the user's PROJECT root — NOT the plugin root. Shared verbatim with
+# scripts/assessment-path. The host is passed as $1 by each hook.json:
+#   - codex: Codex exports no project-dir variable, so we resolve from the git repo
+#     root, falling back to $PWD. We deliberately IGNORE CLAUDE_PROJECT_DIR even if it
+#     leaked into the environment (e.g. a shell that also ran Claude Code) — honoring a
+#     stray Claude var would seed the folder in the wrong project.
+#   - claude (default): CLAUDE_PROJECT_DIR is authoritative and outranks git, so a cwd
+#     inside a vendored nested repo cannot retarget the folder; git root, then $PWD,
+#     back it up.
+#
+# Echoes empty on failure — callers no-op rather than risk writing to the filesystem
+# root (there is no `set -e` to abort us).
 resolve_project_root() {
-    if [ "${1:-}" = "codex" ]; then
-        cd "$PWD" 2>/dev/null && pwd
-    else
-        cd "${CLAUDE_PROJECT_DIR:-$PWD}" 2>/dev/null && pwd
+    local root
+    if [ "${1:-}" != "codex" ]; then
+        root="$(normalize_dir "${CLAUDE_PROJECT_DIR:-}")" && [ -n "${root}" ] && {
+            printf '%s' "${root}"
+            return 0
+        }
     fi
+    root="$(normalize_dir "$(resolve_git_root)")" && [ -n "${root}" ] && {
+        printf '%s' "${root}"
+        return 0
+    }
+    normalize_dir "$PWD"
 }
 
 # Seed README.md on first creation only — never clobber a user-edited one.
@@ -65,8 +88,9 @@ seed_readme() {
 }
 
 # Idempotently ensure the self-ignoring .gitignore (M5) so a routine `git add -A`
-# cannot sweep up the sensitive assessments. "Ensure present" (not "only if new")
-# so a folder created by an earlier version is retrofitted.
+# cannot sweep up the sensitive assessments. The bare `*` matches this file too, so
+# the whole folder — ignore file included — stays out of `git status`; `git add -f`
+# remains the explicit escape hatch for sharing one file.
 seed_gitignore() {
     local ignore="$1/.gitignore"
     [ -f "${ignore}" ] && return 0
@@ -74,7 +98,6 @@ seed_gitignore() {
         '# Assessments here can contain analysis of a private codebase, so they' \
         '# are ignored by default. Share one explicitly with: git add -f <file>' \
         '*' \
-        '!.gitignore' \
         > "${ignore}" 2>/dev/null || true
 }
 
