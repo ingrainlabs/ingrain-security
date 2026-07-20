@@ -10,6 +10,11 @@
  * edits) with its sole write being its own section of the stored assessment
  * file, carries a recommended model, and an anti-trigger description so it isn't
  * fired directly outside the orchestrator.
+ *
+ * The mitigation-generator is the one worker granted a read-only `ingrain` CLI
+ * lookup, and its ROLE is worded for that exception. Its phrasing is pinned in
+ * ROLE_OVERRIDES rather than by loosening the shared assertion, so the strict
+ * clause stays mandatory for every other worker.
  */
 
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
@@ -81,13 +86,14 @@ for (const name of WORKERS) {
     });
 
     await t.step("ROLE header declares codebase read-only with the allowed tools", () => {
-      assertStringIncludes(body.toLowerCase(), "read-only");
-      assertStringIncludes(body, "Read, Grep, and Glob");
-      assertStringIncludes(body.toLowerCase(), "make no code edits");
+      const role = ROLE_OVERRIDES[name] ?? STANDARD_ROLE;
+      assertStringIncludes(prose.toLowerCase(), "read-only");
+      assertStringIncludes(prose, "Read, Grep, and Glob");
+      assertStringIncludes(prose.toLowerCase(), role.noEdits);
       // The sole permitted write is the worker's own section of the stored analysis
       // file, located by the path the dispatch specifies (per-run, not a fixed literal).
-      assertStringIncludes(body, "stored analysis file");
-      assertStringIncludes(body, "path your dispatch specifies");
+      assertStringIncludes(prose, "stored analysis file");
+      assertStringIncludes(prose, role.writeTarget);
     });
 
     // The mitigation-generator is the one worker with a read-only CLI exception:
@@ -95,8 +101,8 @@ for (const name of WORKERS) {
     // nothing. Guard that the exception is documented in its ROLE header.
     if (name === "ingrain-mitigation-generator") {
       await t.step("mitigation-generator documents the read-only ingrain CLI exception", () => {
-        assertStringIncludes(body, "ingrain context security_rules");
-        assertStringIncludes(body.toLowerCase(), "exception");
+        assertStringIncludes(prose, "ingrain context security_rules");
+        assertStringIncludes(prose.toLowerCase(), "exception");
       });
     }
 

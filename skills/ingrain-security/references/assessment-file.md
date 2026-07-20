@@ -7,7 +7,7 @@ shape.
 
 ## Nature
 
-- **Path.** A single file written directly into `ingrain-security/` at the project
+- **Path.** A single file written directly into `.ingrain-security/` at the project
   root — it is **both** the living working copy the workers write during the run **and**
   its persisted record, so there is no separate temp file and no finalize copy. The
   orchestrator does not hand-build it: it runs the `scripts/assessment-path` script
@@ -15,7 +15,7 @@ shape.
   absolute path — as the write target throughout; the relative `assessment_path` is a
   display form for prose and links only. **Every write goes to the absolute path.**
   See SKILL.md → **The assessment file**. The name is deterministic in the branch + task:
-  `<project_root>/ingrain-security/assessment-<branch-slug>-<task-slug>.md`. The script
+  `<project_root>/.ingrain-security/assessment-<branch-slug>-<task-slug>.md`. The script
   resolves `<project_root>` from the git repo root — so it may be run from any
   subdirectory — resolves
   `<branch-slug>` from the current git branch (`git branch --show-current`, not
@@ -33,6 +33,14 @@ shape.
   seeded by the `ensure-assessment-dir` hook and re-ensured by the script), so the whole
   folder — the ignore file included — stays out of `git status`; sharing a file is an
   explicit `git add -f <file>` opt-in.
+- **Pre-approved.** An `allow-assessment-write` hook auto-approves writes to this file on
+  both hosts — `PreToolUse` on Claude Code, `PermissionRequest` on Codex — so expect **no
+  permission prompt** when writing it. The grant covers only `assessment*.md` directly
+  inside `.ingrain-security/` — which is exactly `assessment_abs`, and one more reason to
+  write there and nowhere else. Any other path you write still prompts the user and stalls
+  the run. On Codex the approval is per **patch**, not per file: a patch that touches the
+  assessment *and* any other file prompts as a whole, so keep assessment edits in their own
+  patch.
 - **Hand-off medium.** Workers write their sections and return to the orchestrator
   only a branch keyword plus a one-line pointer. The orchestrator owns the
   title/banner and the finalize; it moves data between workers by pointer and does
@@ -42,7 +50,7 @@ shape.
   |---------|-----------|
   | `## Task` | orchestrator (framing) |
   | `## Triage` | `ingrain-relevance-triage` |
-  | `## Threats` | `ingrain-threat-generator` (descriptive columns) → `ingrain-risk-scorer` (scoring columns) → orchestrator (Selection at Gate 1) — **filled in stages** |
+  | `## Threats` | `ingrain-threat-generator` (descriptive columns, working tags) → `ingrain-risk-scorer` (scoring columns, then re-tags the rows into risk order) → orchestrator (Selection at Gate 1) — **filled in stages** |
   | `## Threat critique` | `ingrain-threat-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Risk score` | `ingrain-risk-scorer` (plan-level residual) |
   | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Selection at Gate 2) |
@@ -72,8 +80,8 @@ must use **exactly one** of the listed values (lower-case, verbatim).
 - **Security relevant** — `true` | `false`.
 - **Surfaces** — bullet list (present when `major`).
 - **Prior analysis** — optional; a pointer to a prior analysis file found for this
-  task (its `ingrain-security/…` path and threat count, e.g.
-  `ingrain-security/assessment-<…>.md — 4 threats`), or `none`. Set by
+  task (its `.ingrain-security/…` path and threat count, e.g.
+  `.ingrain-security/assessment-<…>.md — 4 threats`), or `none`. Set by
   `ingrain-relevance-triage` when it finds a threats-bearing prior analysis of the same
   task (branch + title); the generator seeds from it.
 
@@ -83,7 +91,7 @@ One row per threat, with these columns:
 
 | Column | Constraint |
 |--------|------------|
-| **Tag** | `T<n>` (e.g. `T1`) |
+| **Tag** | `T<n>` (e.g. `T1`) — contiguous from `T1`, no gaps, **ordered by descending risk score**: `T1` is the most critical threat |
 | **Title** | string |
 | **Asset** | string |
 | **Vector** | string |
@@ -102,6 +110,15 @@ left-to-right, so this table doubles as a reasoning schema: writing the justific
 scores forces the reasoning to come first and drive the scores, rather than
 rationalizing numbers already chosen. 
 
+**The tag is a priority position, not an identity.** Rows are stored in tag order and risk
+descends down them, so a reader follows the threats from `T1` — the most critical — down to
+the least. The `ingrain-threat-generator` assigns tags in discovery order, which carries no
+priority; the `ingrain-risk-scorer` establishes this invariant at freeze, sorting the scored
+threats by risk and reassigning every tag (see `ingrain-risk-scorer.md` → **Order the tags**).
+Only the finalized file is guaranteed ordered — mid-loop, tags are the generator's working
+labels and may have gaps. A re-review re-scores the task and so may re-tag it: a tag means
+something only relative to the file it lives in.
+
 **Gate 1 → Selection.** When the user decides at Gate 1, record each threat's
 **Selection**: include → `selected`, exclude → `excluded`. Use
 `undecided` only if the user is explicitly unsure. Before Gate 1 the column is empty.
@@ -118,7 +135,7 @@ this table.
 
 | Column | Constraint |
 |--------|------------|
-| **Tag** | `M<n>` (e.g. `M1`) |
+| **Tag** | `M<n>` (e.g. `M1`) — contiguous from `M1`, no gaps, **ordered by descending priority**: threat mitigations first, ranked by the lowest-numbered (highest-risk) threat tag they cover, then by Yield then Effort; general implementation instructions last. Assigned by the `ingrain-mitigation-generator`, which re-derives them on every write. |
 | **Title** | string |
 | **Description** | string |
 | **Yield** | `high` \| `medium` \| `low` |
@@ -169,7 +186,7 @@ Cite only rules actually retrieved — never invent a rule or an `id`.
   in context, so it must **re-run** the `assessment-path` mint command from its
   `INGRAIN-ASSESSMENT-PATHS` session context and write to the `assessment_abs` it
   returns. Re-minting is deterministic in branch + title, so it resolves to this same
-  file. It must never resolve a relative `ingrain-security/…` string against the file it
+  file. It must never resolve a relative `.ingrain-security/…` string against the file it
   is editing, and must never create the folder. 
 
 ## Template
@@ -189,7 +206,7 @@ Verdict: <minor|major>
 Security relevant: <true|false>
 Surfaces:
 - …
-Prior analysis: <ingrain-security/assessment-<…>.md — N threats | none>
+Prior analysis: <.ingrain-security/assessment-<…>.md — N threats | none>
 
 ## Threats
 | Tag | Title | Asset | Vector | Description | Assumptions | Justification | Impact | Likelihood | Risk score | Criticality | Selection |
@@ -219,5 +236,5 @@ and keep every enumerated field within its allowed values.
 To locate this file, re-run the `assessment-path` mint command from your
 INGRAIN-ASSESSMENT-PATHS session context and write to the absolute `assessment_abs`
 it returns — it resolves back to this same file. Do not resolve a relative path
-against the file you are editing, and do not create an `ingrain-security/` folder.
+against the file you are editing, and do not create an `.ingrain-security/` folder.
 ```
