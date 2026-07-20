@@ -100,7 +100,7 @@ route elsewhere; here is what each actually means:
   code change earns another round. An
   assessment already at `Latest stage: testing` whose branch delta has grown again — the user revised
   the code after a verification round — is **Testing again**: re-test every selected threat and
-  overwrite the `Robustness`, `Justification` and `Verification level` columns.
+  overwrite the `Robustness` and `Justification` columns.
   Re-verification is driven by the code, which changed; the plan is unchanged. Never re-run
   Development to "re-review" it.
 - **A `minor` triage lands on row 2** — its scope holds no mitigations to verify. If
@@ -144,7 +144,7 @@ afterwards.
 
 A worker is a role a fresh subagent adopts by reading its reference file. Dispatch a **fresh
 worker subagent** and tell it to become that worker; the reference file is its logic.
-→ `references/lib/platform-dispatch.md` maps this onto your host (subagent/task primitive, or
+→ `references/development/dispatch.md` maps this onto your host (subagent/task primitive, or
 the sequential in-context fallback where none exists) — read it if you are unsure which
 primitive to use.
 
@@ -198,7 +198,7 @@ steps, in this order**:
    each finding stays a distinct choice of its own. Mark
    high/critical findings recommended. Because each window is its own decision, **selecting
    none is always reachable** — the user excludes every window.
-   → `references/lib/platform-dispatch.md` § Selection windows for the host mechanism and the
+   → `references/development/dispatch.md` § Selection windows for the host mechanism and the
    batching rule where a host caps how many windows it can show at once.
 
 **Never collapse a gate into a single yes/no over the whole set, and never fold all findings

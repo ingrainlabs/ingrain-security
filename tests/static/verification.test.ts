@@ -4,7 +4,7 @@
  * slim SKILL.md points at, reads the same per-task assessment file (by ABSOLUTE
  * assessment_abs), dispatches a read-only verifier per adopted mitigation, concludes each level
  * itself by weighing that verifier's justification on its evidence, and records a
- * Justification + Verification level + advances the stage to
+ * Justification + Robustness + advances the stage to
  * review. Testing has no Stop-hook reminder: it runs on the skill's description or an
  * explicit request, and the tail of this file guards that the hook stays removed.
  */
@@ -100,7 +100,9 @@ Deno.test("verification-pass.md: dispatches the read-only verifier via its refer
   // The read-only constraint is restated for the dispatched subagent.
   assertStringIncludes(md.toLowerCase(), "read-only");
   // Now a sibling reference in the same skill — no cross-skill path survives the merge.
-  assertStringIncludes(md, "references/lib/platform-dispatch.md");
+  assertStringIncludes(md, "references/development/dispatch.md");
+  // The verifier's own contract is stated here, not reached for across the phase boundary.
+  assertStringIncludes(md, "It writes nothing at all");
   assertEquals(md.includes("../ingrain-security/"), false, "cross-skill paths must be collapsed");
   // The prompt the orchestrator actually pastes hands the verifier both minted paths — the
   // mitigation to verify and the org rules behind it. Assert on the fenced block alone: the
@@ -154,13 +156,16 @@ Deno.test("verification-pass.md: verifies the branch diff since the fork point a
   assertStringIncludes(md, "references/formatting/assessment-file.md");
 });
 
-Deno.test("verification-pass.md: marks the assessment checked (Verification level + Latest stage: testing)", async () => {
+Deno.test("verification-pass.md: marks the assessment checked (Robustness + Latest stage: testing)", async () => {
   const md = await Deno.readTextFile(VERIFY);
   assertStringIncludes(md, "Latest stage: testing");
-  // The two columns the orchestrator records, and the maturity enum it picks from.
-  assertStringIncludes(md, "Verification level");
+  // The two columns the orchestrator records, and the enum it picks from.
+  assertStringIncludes(md, "Robustness");
   assertStringIncludes(md, "Justification");
   for (const v of ["`weak`", "`adequate`", "`strong`"]) assertStringIncludes(md, v);
+  // One concept, one name: `Verification level` was folded into `Robustness` because the
+  // mitigation column holds the same measure, carried across from the threats it covers.
+  assertEquals(md.includes("Verification level"), false, "one name for the concept: Robustness");
   // The old verdict enum is gone from the schema. Note this pins the ENUM, not the bare
   // words: the prose and the report's Gap column still legitimately say "insufficient".
   assertEquals(
@@ -205,14 +210,16 @@ Deno.test("verifier ref: INTERNAL worker, read-only with a narrow read-only-git 
   // fall back to HEAD, which would hide the committed implementation.
   assertStringIncludes(md, "git diff <diff_ref>");
   assertStringIncludes(md, "do not substitute `HEAD` for it");
-  // Grades on the maturity ladder, and leads with the JUSTIFICATION — not the level. The
+  // Grades on the Robustness ladder, and leads with the JUSTIFICATION — not the level. The
   // order is the point: a level written first is one the justification then argues for.
   for (const v of ["`weak`", "`adequate`", "`strong`"]) assertStringIncludes(md, v);
   assertOrder(md, "JUSTIFICATION", "LEVEL", "the verifier leads with its justification");
 });
 
-Deno.test("verification-pass.md: defines the three maturity levels", async () => {
-  const s = section(await Deno.readTextFile(VERIFY), "## Maturity levels");
+Deno.test("verification-pass.md: defines the three Robustness levels", async () => {
+  const s = section(await Deno.readTextFile(VERIFY), "## Robustness levels");
+  // The ladder is named by the column that carries it, not by a bare "level".
+  assertStringIncludes(s, "**Robustness**");
   for (const v of ["`weak`", "`adequate`", "`strong`"]) assertStringIncludes(s, v);
   // The ladder is negative testing: `weak` means the threat survives the change.
   assertStringIncludes(s.toLowerCase(), "can still be realized");
@@ -221,8 +228,8 @@ Deno.test("verification-pass.md: defines the three maturity levels", async () =>
   assertStringIncludes(s.toLowerCase(), "test");
 });
 
-Deno.test("verification-pass.md: the level is concluded from the justification's evidence", async () => {
-  const s = section(await Deno.readTextFile(VERIFY), "## Concluding the level");
+Deno.test("verification-pass.md: the Robustness is concluded from the justification's evidence", async () => {
+  const s = section(await Deno.readTextFile(VERIFY), "## Concluding the Robustness");
   const lower = s.toLowerCase();
   // The justification is read and weighed BEFORE the level — the level is re-derived, not
   // forwarded from the verifier.
@@ -243,20 +250,23 @@ Deno.test("verifier ref: reads its rule descriptions from the sidecar, runs no C
   assertEquals(md.includes("ingrain context"), false, "verifier must not run the CLI");
 });
 
-Deno.test("assessment-file.md: defines the Justification + Verification level columns", async () => {
+Deno.test("assessment-file.md: defines the Justification + Robustness columns", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
-  // The two columns and the maturity enum.
-  assertStringIncludes(md, "**Verification level**");
+  // The two columns and the enum.
+  assertStringIncludes(md, "**Robustness**");
   assertStringIncludes(md, "**Justification**");
   for (const v of ["`weak`", "`adequate`", "`strong`"]) assertStringIncludes(md, v);
   assertEquals(md.includes("**Verified**"), false, "the Verified column is renamed");
+  // One concept, one name. `Robustness` names the same measure in both tables: the threat
+  // column is the primary result, the mitigation column carries it across (weakest governs).
+  assertEquals(md.includes("Verification level"), false, "one name for the concept: Robustness");
   // It is the Testing verification pass that fills them, after the code is written.
   assertStringIncludes(md, "Testing");
   assertStringIncludes(md, "Latest stage: testing");
   // One string pins all three at once: the rename, the addition, and the ordering —
   // Justification sits immediately BEFORE the level so reasoning drives the conclusion.
-  assertStringIncludes(md, "| Selection | Justification | Verification level |");
-  assertStringIncludes(md, "Justification leads the Verification level on purpose");
+  assertStringIncludes(md, "| Selection | Justification | Robustness |");
+  assertStringIncludes(md, "Justification leads the Robustness on purpose");
   // Both Justifications in the file (Threats + Mitigations) carry the same 256-char cap.
   assertEquals(
     [...md.matchAll(/≤ 256 characters/g)].length,

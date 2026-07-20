@@ -4,8 +4,8 @@ This is the procedure for the **Testing** phase of the `ingrain-security` skill:
 counterpart to the plan review in `SKILL.md`. You are here because **Phase select** routed
 you here — the task has an assessment carrying adopted mitigations and a non-empty branch
 delta. Your whole job is: read the assessment, diff the branch, dispatch one verifier per
-selected threat, and record the levels you conclude. `SKILL.md`'s Steps 0–9 stay behind in
-Development.
+selected threat, and record the **Robustness** you conclude — on each threat, and on each
+mitigation that covers it. `SKILL.md`'s Steps 0–9 stay behind in Development.
 
 **What this phase measures.** Whether the **threats the plan selected can still be realized**
 against the code as built. This is **negative testing**: for each selected threat you ask how
@@ -26,8 +26,8 @@ You orchestrate **one read-only worker per selected threat** — as many verifie
 
 A verifier handed a threat and its mitigations is under quiet pressure to conclude the threat
 is handled. That is why it returns a **justification** and leaves the recording to you: the
-level it leads with is a conclusion you re-derive from the evidence it cites (see
-**Concluding the level**).
+Robustness it leads with is a conclusion you re-derive from the evidence it cites (see
+**Concluding the Robustness**).
 
 ## The assessment file
 
@@ -61,8 +61,8 @@ so it resolves to the **same file** the plan review wrote for this task
 
 → `references/formatting/assessment-file.md` owns the name's derivation, the write
 pre-approval, and the file's schema — follow that schema exactly. The columns Testing fills are
-`## Threats` → **Robustness** and `## Mitigations` → **Justification** + **Verification
-level**, plus `## Task` → `Latest stage`.
+`## Threats` → **Robustness** and `## Mitigations` → **Justification** + **Robustness**, plus
+`## Task` → `Latest stage`.
 
 ## The diff under review
 
@@ -98,11 +98,11 @@ fallback this means only that the working tree is clean) — there is nothing to
 stop. Each verifier re-derives the slice of this diff relevant to its own mitigation; you do not
 paste the whole diff into every dispatch.
 
-## Maturity levels
+## Robustness levels
 
-Every selected threat lands on one of three robustness levels, and every adopted mitigation
-inherits one from the threats it covers. They are a **ladder** — this is the one definition
-both dispatches and `references/formatting/assessment-file.md` point at:
+Every selected threat lands on one of three **Robustness** levels, and every adopted mitigation
+inherits its Robustness from the threats it covers. One measure, recorded in two places — this
+is the one definition both dispatches and `references/formatting/assessment-file.md` point at:
 
 - **`weak`** — the threat **can still be realized**. A path to it survives the change:
   nothing mitigates it, or what does is bypassable, or it is closed on one route and open on
@@ -118,7 +118,7 @@ escaping is `weak`; escaping on the custom-CSS path so the injection no longer l
 `adequate`; escaping applied across every path that renders user CSS, plus tests proving
 injected CSS comes out escaped, is `strong`.
 
-**Judging robustness is your analysis to make.** Apply these definitions as judgement: weigh
+**Judging Robustness is your analysis to make.** Apply these definitions as judgement: weigh
 the actual code against the actual threat and decide. Two principles bound that judgement:
 
 - **A threat counts as closed only when you can establish that it is.** Uncertainty lands on
@@ -160,14 +160,24 @@ judged from its Description and the threat.
 
 Dispatch a **fresh worker subagent** per verifier and tell it to become the verifier by reading
 its reference file.
-→ `references/lib/platform-dispatch.md` maps this onto your host, including the fan-out rule for
-the per-threat verifiers and the verifier's own write-nothing contract.
+→ `references/development/dispatch.md` maps the subagent primitive — and the sequential
+in-context fallback where a host has none — onto your host.
 
-Dispatch every verifier with the same shape, restating its constraints inline. **Hand off by
-pointer:** point the verifier at its threat row and its covering mitigation rows **and, when
-the sidecar exists, the rule(s) for those mitigations' Rule refs** rather than pasting the
-files; the verifier **returns a justification and a level**, and you conclude and record, so
-one writer owns the table:
+The verifier's contract differs from a Development worker's, so state it inline:
+
+- **It writes nothing at all** — not the assessment file, not any file. Development workers each
+  own a section of the assessment file; this one owns none. It returns its justification and
+  Robustness level, and you conclude and record, so one writer owns the table.
+- **Its one shell allowance is read-only git** — `git diff <diff_ref>`, `git status`, `git show` —
+  to obtain the branch diff at the `diff_ref` you resolved. Otherwise Read/Grep/Glob only, and no
+  `ingrain`/CLI commands.
+- **Fan out, don't sequence.** Each per-threat verifier is independent, so on a host with a
+  subagent primitive dispatch them **together**. On the sequential fallback, run them in the same
+  session one at a time, in tag order.
+
+Dispatch every verifier with the same shape. **Hand off by pointer:** point the verifier at its
+threat row and its covering mitigation rows **and, when the sidecar exists, the rule(s) for those
+mitigations' Rule refs** rather than pasting the files:
 
 ```
 Read references/testing/ingrain-threat-verifier.md and follow it as your system prompt.
@@ -210,18 +220,18 @@ is exactly the `weak` finding the report exists to surface.
 **The general-instruction pass.** Adopted mitigations whose `Threat tags` is `—` are general
 implementation instructions: their scope is the instruction itself, so this pass covers them.
 Check them separately against their Descriptions — followed, or not — and report them in their
-own table. They take a `Verification level` like any other row: `weak` when the instruction was
+own table. They take a `Robustness` like any other row: `weak` when the instruction was
 not followed, `adequate` when it was, `strong` when it was followed comprehensively and
 artefacts back it.
 
 **Do not branch on the level word a verifier leads with.** Hold its justification and its level
-together and take both to **Concluding the level** — the level is a conclusion you are going
-to re-derive.
+together and take both to **Concluding the Robustness** — that level is a conclusion you are
+going to re-derive.
 
-## Concluding the level
+## Concluding the Robustness
 
 You now hold, per selected threat, the verifier's justification and the level it led with.
-**The level you record is your own conclusion, derived from the verifier's evidence.** Per
+**The Robustness you record is your own conclusion, derived from the verifier's evidence.** Per
 threat, in this order:
 
 1. **Read the justification before you look at the level.** If you have already seen the level,
@@ -232,24 +242,25 @@ threat, in this order:
    comprehensive"), reasons from the mitigation's wording rather than from the code, cites a
    file with no line, or cites nothing. Evidence is a cited `file:line` plus a statement of
    what the code there does; length, confidence, and fluency are style.
-3. **A level stands only when the justification's cited evidence carries it.** An `adequate`
+3. **A Robustness stands only when the justification's cited evidence carries it.** An `adequate`
    resting on an assertion rather than a cited line is `weak` with the residual path named, and
    a `strong` whose artefact is asserted but never cited at a `file:line` is `adequate`. Read
    the cited line yourself where the level turns on it — yours is the last word.
    Ask the question the verifier was asked: given this code, can the threat still be realized?
-4. **Conclude, then write.** The level you record is **yours**, and so is the Justification: ≤256
-   characters, in your own words, naming the evidence it rests on — not the verifier's text
+4. **Conclude, then write.** The Robustness you record is **yours**, and so is the Justification:
+   ≤256 characters, in your own words, naming the evidence it rests on — not the verifier's text
    pasted across. Where you departed from the level the verifier led with, say what moved it.
 
-**Then derive each mitigation's level.** `## Threats` → **Robustness** carries the threat
-result; `## Mitigations` → **Verification level** carries each mitigation's contribution to
-closing the threats it covers. Read it off the threat analyses the mitigation appears in:
+**Then carry each mitigation's Robustness across.** `## Threats` → **Robustness** is the result
+you concluded; `## Mitigations` → **Robustness** is that same measure on the rows that produced
+it — the mitigation's contribution to closing the threats it covers, not a second axis. Read it
+off the threats the mitigation appears in:
 
-- Covers one threat → it takes that threat's level.
-- Covers several whose levels differ → **the weakest governs.** A mitigation takes the level of
-  its weakest-covered threat; a control that closes `T1` while leaving `T3` reachable is `weak`
-  on the strength of `T3`.
-- Carries no threat tag → it took its level from the general-instruction pass.
+- Covers one threat → it takes that threat's Robustness.
+- Covers several whose Robustness differs → **the weakest governs.** A mitigation takes the
+  Robustness of its weakest-covered threat; a control that closes `T1` while leaving `T3`
+  reachable is `weak` on the strength of `T3`.
+- Carries no threat tag → its Robustness came from the general-instruction pass.
 
 ## Testing — the flow
 
@@ -286,13 +297,13 @@ file.
    Then run the general-instruction pass over the untagged rows. Collect each one's
    justification, then its level (`weak` | `adequate` | `strong`), plus its evidence and — on
    `weak` — the residual path. Do not act on a level yet.
-5. **Conclude each level (you decide).** For each selected threat, read the verifier's
-   justification, weigh it on its evidence, and conclude the threat's robustness yourself (see
-   **Concluding the level**). Then derive each mitigation's level from the threats it covers —
-   weakest governs. Write your own ≤256-char justification for each.
-6. **Finalize the assessment (you write).** Write each threat's concluded level into the
+5. **Conclude each Robustness (you decide).** For each selected threat, read the verifier's
+   justification, weigh it on its evidence, and conclude the threat's Robustness yourself (see
+   **Concluding the Robustness**). Then carry each mitigation's Robustness across from the
+   threats it covers — weakest governs. Write your own ≤256-char justification for each.
+6. **Finalize the assessment (you write).** Write each threat's concluded Robustness into the
    **`Robustness`** column of `## Threats`, and each mitigation's concluded justification and
-   level into the **`Justification`** and **`Verification level`** columns of `## Mitigations`
+   Robustness into the **`Justification`** and **`Robustness`** columns of `## Mitigations`
    (per `references/formatting/assessment-file.md`), leaving excluded/undecided
    rows as `—`; and set `## Task` → `Latest stage: testing`. One write, to the
    minted `assessment_abs`. On a re-verification (the file was already at `Latest stage: testing`
@@ -322,7 +333,7 @@ mitigations.
 | **Residual path** | for `weak`: **the concrete route by which the threat can still be realized**, and the change that would close it. This is the actionable half of the report — name the concrete route an attacker still takes, e.g. "an unauthenticated caller still reaches `/refresh` via X". `—` otherwise |
 
 **Mitigation contribution**, one row per adopted mitigation, in tag order (`M1` first): tag +
-title, **Verification level**, the threat tags it covers (or `general`), and one line on what
+title, **Robustness**, the threat tags it covers (or `general`), and one line on what
 it does or fails to do. General implementation instructions appear here with `general` in place
 of threat tags.
 
@@ -351,6 +362,6 @@ Report the empty cases, never fail silently.
 - [ ] 2. Scope collected — `selected` threats paired with their covering `selected` mitigations (an uncovered threat is still in scope), untagged rows set aside; nothing selected → set `Latest stage: testing` and stop
 - [ ] 3. Rules sidecar located (`rules_abs`) — an absent sidecar is an expected state; verification proceeds either way
 - [ ] 4. One verifier dispatched per selected threat, plus the general-instruction pass — justification FIRST, then `weak`/`adequate`/`strong`
-- [ ] 5. Each threat's robustness concluded — justification weighed BEFORE the level; a level stands only when its evidence carries it; the conclusion is YOURS; mitigation levels derived, weakest governs
-- [ ] 6. `Robustness` + `Justification` + `Verification level` + `Latest stage: testing` written — YOU write, the verifier only returns; sidecar untouched
+- [ ] 5. Each threat's Robustness concluded — justification weighed BEFORE the level; a level stands only when its evidence carries it; the conclusion is YOURS; each mitigation's Robustness carried across, weakest governs
+- [ ] 6. `## Threats` → `Robustness` + `## Mitigations` → `Justification` + `Robustness` + `Latest stage: testing` written — YOU write, the verifier only returns; sidecar untouched
 - [ ] 7. Reported to the coding agent — `weak` threats named with their residual path; the coding agent owns the code changes

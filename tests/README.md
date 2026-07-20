@@ -14,9 +14,9 @@ from its path:
 
 | Folder                    | Holds                                                                      |
 | ------------------------- | -------------------------------------------------------------------------- |
-| `references/development/` | The seven Development worker roles, `ingrain-<role>.md`                    |
+| `references/development/` | The seven Development worker roles, `ingrain-<role>.md`, and `dispatch.md` |
 | `references/testing/`     | `verification-pass.md` (the Testing flow) and `ingrain-threat-verifier.md` |
-| `references/lib/`         | `platform-dispatch.md` — dispatch machinery, read by both phases           |
+| `references/lib/`         | `ingrain-cli.md`, `branch-diff.md` — phase-neutral utilities               |
 | `references/formatting/`  | `assessment-file.md`, `rules-file.md` — file schemas, read by both phases  |
 
 A worker's filename stem equals its frontmatter `name:`, so the static tests derive a worker's path

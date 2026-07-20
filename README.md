@@ -80,7 +80,7 @@ flowchart TD
         scope --> sidecar[read org rules from the sidecar]
         sidecar --> verify["one threat-verifier per selected threat<br/>+ general-instruction pass"]
         verify --> conclude[conclude robustness: weak / adequate / strong]
-        conclude --> record["record Robustness + Verification level<br/>Latest stage: testing"]
+        conclude --> record["record Robustness on threats + mitigations<br/>Latest stage: testing"]
         record --> weakQ{any threat weak?}
         weakQ -->|no| pass([All selected threats closed])
         weakQ -->|yes| revisit([Report residual paths])
@@ -115,7 +115,8 @@ attack still gets through. Whether a mitigation matches the wording of its Descr
 the bar; a control built to spec that still leaves its threat reachable is `weak` coverage.
 Judging robustness is left to the analyzing agent — the levels define what was tested, not a
 rubric to execute. It marks the assessment checked by recording each threat's **Robustness**
-and each mitigation's **Justification** + **Verification level**, and advancing the file's
+and, on each covering mitigation, its **Justification** + the **Robustness** it inherits, and
+advancing the file's
 stage to `testing`. It writes no code, runs no user gates, and makes no `ingrain` CLI call:
 each verifier reads the org rules back from the `rules-<…>.md` sidecar Development persisted.
 

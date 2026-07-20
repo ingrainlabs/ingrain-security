@@ -19,7 +19,7 @@ const SKILL = `${ROOT}skills/ingrain-security/SKILL.md`;
 const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/formatting/assessment-file.md`;
 const TRIAGE_REF =
   `${ROOT}skills/ingrain-security/references/development/ingrain-relevance-triage.md`;
-const PLATFORM_REF = `${ROOT}skills/ingrain-security/references/lib/platform-dispatch.md`;
+const DISPATCH_REF = `${ROOT}skills/ingrain-security/references/development/dispatch.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
 const SESSION_START = `${ROOT}hooks/start/session-start`;
@@ -118,7 +118,7 @@ Deno.test("SKILL.md: documents the read-reference dispatch mechanism", async () 
   // Generic-subagent dispatch reads each worker's reference file by path.
   assertStringIncludes(md, "Read references/development/<name>.md");
   // Cross-platform mapping lives in the reference doc.
-  assertStringIncludes(md, "references/lib/platform-dispatch.md");
+  assertStringIncludes(md, "references/development/dispatch.md");
   // The read-only constraint is restated for the dispatched subagents.
   assertStringIncludes(md.toLowerCase(), "read-only");
 });
@@ -200,8 +200,8 @@ Deno.test("ownership: SKILL.md does not restate what assessment-file.md owns", a
   }
 });
 
-Deno.test("ownership: platform-dispatch.md § Selection windows stays mechanism-only", async () => {
-  const md = await Deno.readTextFile(PLATFORM_REF);
+Deno.test("ownership: dispatch.md § Selection windows stays mechanism-only", async () => {
+  const md = await Deno.readTextFile(DISPATCH_REF);
   // The gate PROCEDURE (display the table first, then ask) is SKILL.md's; this file maps the
   // host MECHANISM only, and points back rather than restating the procedure.
   assertStringIncludes(md, "lives in SKILL.md");
@@ -241,9 +241,8 @@ Deno.test("SKILL.md: folds the assessment link + maintenance instruction into th
   assertStringIncludes(md.toLowerCase(), "in sync");
 });
 
-Deno.test("platform-dispatch.md: covers the subagent primitive and the fallback", async () => {
-  const ref = `${ROOT}skills/ingrain-security/references/lib/platform-dispatch.md`;
-  const md = await Deno.readTextFile(ref);
+Deno.test("dispatch.md: covers the subagent primitive and the fallback", async () => {
+  const md = await Deno.readTextFile(DISPATCH_REF);
   assertStringIncludes(md.toLowerCase(), "task primitive");
   assertStringIncludes(md.toLowerCase(), "fallback");
 });

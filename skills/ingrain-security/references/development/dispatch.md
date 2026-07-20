@@ -1,12 +1,16 @@
-# Platform dispatch reference
+# Development dispatch reference
 
-Each worker is dispatched as a **fresh worker subagent** told to read its reference file at
-`references/development/<name>.md` and follow it. That abstraction maps differently onto each
-host. The dispatch *prompt* is always the same; only the *mechanism* below changes.
+Each of the seven Development workers is dispatched as a **fresh worker subagent** told to read
+its reference file at `references/development/<name>.md` and follow it. That abstraction maps
+differently onto each host. The dispatch *prompt* is always the same; only the *mechanism* below
+changes.
 
 Always restate the constraint inline in the dispatch: "read-only on the codebase —
 use only Read/Grep/Glob and make no code edits; your only write is your own section
 of the stored analysis file at the path this dispatch names."
+
+Your own writes as orchestrator — finalizing the assessment file, and the two plan-file writes at
+Gate 1 and Gate 2 — happen between worker steps, never inside one.
 
 ## Host with a subagent / task primitive
 
@@ -22,14 +26,11 @@ model, set the worker's recommended tier; otherwise ignore it (advisory).
 ## Sequential in-context fallback
 
 Where the host lacks a subagent mechanism, run each worker **sequentially in the main
-session**: read `references/development/<name>.md`, follow it on the current INPUT, capture
-the output, then move to the next step. This mode shares one write-capable context across
-every worker, so:
+session**: read the worker's reference file, follow it on the current INPUT, capture the output,
+then move to the next step. This mode shares one write-capable context across every worker, so:
 
 - Discipline is the only enforcement here — hold the standing constraint yourself.
 - Run one worker step at a time, in strict order — never reorder or parallelize.
-- The orchestrator's writes — finalizing the assessment file and the two plan-file
-  writes at Gate 1 and Gate 2 — happen outside worker steps.
 
 ## Org-rules retrieval and the CLI
 
@@ -58,21 +59,6 @@ question primitive — see **Selection windows** below) and, on grant, re-dispat
 exec access. That recovery re-run completes the one expansion pass.
 
 A **not installed** result on the first pass skips the expander altogether.
-
-## Testing's verifier
-
-The standing rule above — "your only write is your own section of the stored analysis
-file at the path this dispatch names" — is a **Development** rule. Testing's worker role
-(`references/testing/verification-pass.md`) carries its own: the `ingrain-threat-verifier`
-**writes nothing at all.** It returns its reasoning, and the orchestrator concludes and
-records it. So drop the "your only write is…" clause from its dispatch and say **you write
-nothing** instead. Its one shell allowance is read-only git (`git diff <diff_ref>`,
-`git status`, `git show`) to obtain the branch diff at the `diff_ref` the orchestrator
-resolved.
-
-On a host with a subagent primitive, fan out the per-threat verifiers **together** — each
-one is independent. On the sequential fallback, run them in the same session one at a time,
-in tag order.
 
 ## Selection windows (Gate 1 and Gate 2)
 
