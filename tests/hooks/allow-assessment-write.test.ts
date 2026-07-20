@@ -23,6 +23,7 @@ import { fromFileUrl } from "@std/path";
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const HOOK = `${ROOT}hooks/claude/allow-assessment-write`;
 const MINT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
+const MINT_RULES = `${ROOT}skills/ingrain-security/scripts/rules-path`;
 
 interface IHookResult {
   code: number;
@@ -146,7 +147,14 @@ Deno.test("allow: the path the minter actually produces", async () => {
 Deno.test("allow: every file-editing tool, on both naming forms", async () => {
   await withProject(async (dir) => {
     for (const tool of ["Write", "Edit", "MultiEdit", "NotebookEdit"]) {
-      for (const name of ["assessment.md", "assessment-main-add-authn.md"]) {
+      for (
+        const name of [
+          "assessment.md",
+          "assessment-main-add-authn.md",
+          "rules.md",
+          "rules-main-add-authn.md",
+        ]
+      ) {
         const res = await runHook(
           payload(tool, `${dir}/.ingrain-security/${name}`, dir),
           { projectDir: dir },
@@ -154,6 +162,28 @@ Deno.test("allow: every file-editing tool, on both naming forms", async () => {
         assertEquals(res.allowed, true, `${tool} on ${name} should be allowed`);
       }
     }
+  });
+});
+
+Deno.test("allow: the rules sidecar path the minter actually produces", async () => {
+  await withProject(async (dir) => {
+    // Same contract as the assessment case: drive the REAL rules-path minter so a naming
+    // drift between the minter and the grant is caught here.
+    const out = await new Deno.Command("bash", {
+      args: [MINT_RULES, "claude", "mint", "--title", "Add authn"],
+      clearEnv: true,
+      env: {
+        PATH: Deno.env.get("PATH") ?? "",
+        HOME: Deno.env.get("HOME") ?? "",
+        CLAUDE_PROJECT_DIR: dir,
+      },
+      stdout: "piped",
+      stderr: "piped",
+    }).output();
+    const minted = JSON.parse(new TextDecoder().decode(out.stdout)) as { rules_abs: string };
+
+    const res = await runHook(payload("Write", minted.rules_abs, dir), { projectDir: dir });
+    assertEquals(res.allowed, true);
   });
 });
 
@@ -183,9 +213,20 @@ Deno.test("allow: project root from the git root when CLAUDE_PROJECT_DIR is unse
 // DEFER — outside the grant
 // ---------------------------------------------------------------------------
 
-Deno.test("defer: a file in the folder that is not an assessment", async () => {
+Deno.test("defer: a file in the folder that is neither an assessment nor a rules file", async () => {
   await withProject(async (dir) => {
-    for (const name of ["README.md", ".gitignore", "notes.txt", "assessment.md.bak"]) {
+    // The grant covers only assessment*.md and rules*.md — a `.bak` suffix, a decoy
+    // basename, or an unrelated name must all still fall through to the user's prompt.
+    for (
+      const name of [
+        "README.md",
+        ".gitignore",
+        "notes.txt",
+        "assessment.md.bak",
+        "rules.md.bak",
+        "evil.md",
+      ]
+    ) {
       const res = await runHook(
         payload("Write", `${dir}/.ingrain-security/${name}`, dir),
         { projectDir: dir },
@@ -247,6 +288,28 @@ Deno.test("defer: the target is a symlink", async () => {
     await sh(`ln -s /etc/passwd "${dir}/.ingrain-security/assessment-evil.md"`);
     const res = await runHook(
       payload("Write", `${dir}/.ingrain-security/assessment-evil.md`, dir),
+      { projectDir: dir },
+    );
+    assertEquals(res.allowed, false);
+  });
+});
+
+Deno.test("defer: a symlinked rules-* target", async () => {
+  await withProject(async (dir) => {
+    // The widened grant must apply the same symlink guard to rules*.md as to assessment*.md.
+    await sh(`ln -s /etc/passwd "${dir}/.ingrain-security/rules-evil.md"`);
+    const res = await runHook(
+      payload("Write", `${dir}/.ingrain-security/rules-evil.md`, dir),
+      { projectDir: dir },
+    );
+    assertEquals(res.allowed, false);
+  });
+});
+
+Deno.test("defer: a rules-named `..` traversal out of the folder", async () => {
+  await withProject(async (dir) => {
+    const res = await runHook(
+      payload("Write", `${dir}/.ingrain-security/../src/rules-x.md`, dir),
       { projectDir: dir },
     );
     assertEquals(res.allowed, false);

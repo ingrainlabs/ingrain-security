@@ -13,6 +13,7 @@
 #   hooks/start/ensure-assessment-dir            (SessionStart, both hosts)
 #   hooks/claude/allow-assessment-write          (PreToolUse, Claude only)
 #   skills/ingrain-security/scripts/assessment-path   (the sibling minter)
+#   skills/ingrain-security/scripts/branch-diff       (the fork-point resolver)
 #
 # Every function echoes empty and returns non-zero on failure, so callers can
 # fall through to the next candidate rather than risk acting on a bad path.
@@ -39,6 +40,18 @@ normalize_dir() {
 # children.
 resolve_git_root() {
     git rev-parse --show-toplevel 2>/dev/null
+}
+
+# Resolve the current git branch, anchored to the resolved project root. Uses
+# `branch --show-current` (fallback `rev-parse --abbrev-ref HEAD`) — never `.git/HEAD`,
+# unreliable in a worktree/submodule. Detached HEAD or a non-git dir yields empty
+# (git noise swallowed), which callers treat as an unknown branch.
+resolve_branch() {
+    local root="$1" branch
+    branch="$(git -C "${root}" branch --show-current 2>/dev/null)"
+    [ -n "${branch}" ] || branch="$(git -C "${root}" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+    [ "${branch}" = "HEAD" ] && branch=""
+    printf '%s' "${branch}"
 }
 
 # Resolve the user's PROJECT root — NOT the plugin root — as a normalized forward-slash

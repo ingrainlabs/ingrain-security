@@ -1,10 +1,26 @@
 # Tests
 
-Test suite for the `ingrain-security` plugin — the `ingrain-security` orchestrator skill and its six
-read-only worker roles. Built on Deno's test runner; it drives the `claude` CLI in headless mode and
-can exercise each worker in isolation by dispatching it the way the orchestrator does (its
-`skills/ingrain-security/references/<name>.md` body as the system prompt, restricted to read-only
-tools).
+Test suite for the `ingrain-security` plugin — the `ingrain-security` orchestrator skill and its
+read-only worker roles: seven in Development, plus Testing's `ingrain-threat-verifier`. Built on
+Deno's test runner; it drives the `claude` CLI in headless mode and can exercise each worker in
+isolation by dispatching it the way the orchestrator does (its
+`skills/ingrain-security/references/development/<name>.md` body as the system prompt, restricted to
+read-only tools).
+
+## Reference layout
+
+The skill's reference files are grouped by the phase that reads them, so a file's phase is visible
+from its path:
+
+| Folder                    | Holds                                                                      |
+| ------------------------- | -------------------------------------------------------------------------- |
+| `references/development/` | The seven Development worker roles, `ingrain-<role>.md`, and `dispatch.md` |
+| `references/testing/`     | `verification-pass.md` (the Testing flow) and `ingrain-threat-verifier.md` |
+| `references/lib/`         | `ingrain-cli.md`, `branch-diff.md` — phase-neutral utilities               |
+| `references/formatting/`  | `assessment-file.md`, `rules-file.md` — file schemas, read by both phases  |
+
+A worker's filename stem equals its frontmatter `name:`, so the static tests derive a worker's path
+from its name — keep the two in step when adding a worker.
 
 ## Requirements
 
@@ -22,9 +38,22 @@ Run all commands from this `tests/` directory.
 ```
 lib/      claudeRunner.ts (spawn helper) · matchers.ts (assertions) · sampleInputs.ts (canned plans) · reporter.ts (input/output printer)
 static/   offline lint of worker-reference frontmatter + advisory ROLE + skill/hook structure (no model calls)
+<<<<<<< HEAD
+<<<<<<< HEAD
 hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)
 shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
+<<<<<<< HEAD
+=======
+hooks/    assessment-hooks.test.ts — runs the assessment hook scripts under bash against a throwaway project (no model calls)
+>>>>>>> e98327b (Add temp file write (#6))
+=======
+hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)
+shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
+>>>>>>> b794e31 (tmp logic fix  (#12))
 agents/   agents.test.ts — table-driven live tests, one case per worker (dispatched via its reference file)
+=======
+agents/   agents.test.ts — table-driven live tests, one case per worker scenario (dispatched via its reference file)
+>>>>>>> eb54a90 (Test skill  (#14))
 skill/    trigger.test.ts (review starts / minor stops) · orchestration.test.ts (gated)
 ```
 
@@ -74,10 +103,12 @@ This is always on for the live tiers — Deno streams each test's output live (w
   pinned ShellCheck rather than trusting the runner image to preinstall one, and lints the same
   scripts from its own workflow step rather than through this tier — see **CI** below.
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
-  `skills/ingrain-security/references/<name>.md` body as the system prompt with
+  `skills/ingrain-security/references/development/<name>.md` body as the system prompt with
   `--allowed-tools Read,Grep,Glob`. The test asserts the output's _shape_ (a verdict keyword, a
   0–100 score, risk descending by threat tag, required fields). Assertions are loose because live
-  output varies.
+  output varies. The table has seven cases over six workers (`ingrain-relevance-triage` runs twice,
+  on a major and a minor plan); `ingrain-rule-expander` has no live case and is covered by `static/`
+  only.
 - **skill/** — a full session (skill + agents + hook). `trigger.test.ts` checks a security-relevant
   plan starts the review and a trivial one stops at triage. `orchestration.test.ts`
   (integration-gated) checks the workers fire in order through risk scoring and the run halts at
@@ -103,7 +134,7 @@ deno task ci                 # what CI runs: lint + fmt:check + test:offline
 **Needs an agent** — spawns `claude`, requires auth, costs model calls, can flake:
 
 ```bash
-deno task test:agent         # 6 per-worker tests + the 2 skill trigger tests
+deno task test:agent         # 7 live worker cases (6 workers; triage runs twice) + the 2 skill trigger tests
 deno task test:integration   # everything, incl. the full orchestration cycle (slow)
 
 # one worker only:
@@ -178,23 +209,24 @@ earlier mode's transcript in its own subdir.
 
 ## Tiers & rough cost
 
-| Command                  | Needs an agent? | Model calls            | Time      | Auth |
-| ------------------------ | --------------- | ---------------------- | --------- | ---- |
-| `test:static`            | no              | 0                      | < 1s      | no   |
-| `test:hooks`             | no              | 0                      | < 1s      | no   |
-| `test:shell`             | no              | 0                      | < 1s      | no   |
-| `test:ts`                | no              | 0                      | < 1s      | no   |
-| `test:offline`           | no              | 0                      | < 1s      | no   |
-| `ci` (+ lint, fmt:check) | no              | 0                      | a few s   | no   |
-| `test:agent`             | yes             | ~8 (6 workers + 2)     | a few min | yes  |
-| `test:integration`       | yes             | + full cycle to Gate 1 | 5–20 min  | yes  |
+| Command                  | Needs an agent? | Model calls             | Time      | Auth |
+| ------------------------ | --------------- | ----------------------- | --------- | ---- |
+| `test:static`            | no              | 0                       | < 1s      | no   |
+| `test:hooks`             | no              | 0                       | < 1s      | no   |
+| `test:shell`             | no              | 0                       | < 1s      | no   |
+| `test:ts`                | no              | 0                       | < 1s      | no   |
+| `test:offline`           | no              | 0                       | < 1s      | no   |
+| `ci` (+ lint, fmt:check) | no              | 0                       | a few s   | no   |
+| `test:agent`             | yes             | ~9 (7 worker cases + 2) | a few min | yes  |
+| `test:integration`       | yes             | + full cycle to Gate 1  | 5–20 min  | yes  |
 
 ## Notes
 
 - Live tests call the model, so an occasional flake is possible; re-run a single test with
   `--filter`. Assertions check shape, not exact wording, to minimize this.
-- Each worker is dispatched by inlining its `skills/ingrain-security/references/<name>.md` body (via
-  `workerDispatchPrompt` in `lib/claudeRunner.ts`) and restricting tools to `Read,Grep,Glob`; the
-  plugin is loaded via `--plugin-dir` pointing at the repo root (computed automatically).
+- Each worker is dispatched by inlining its
+  `skills/ingrain-security/references/development/<name>.md` body (via `workerDispatchPrompt` in
+  `lib/claudeRunner.ts`) and restricting tools to `Read,Grep,Glob`; the plugin is loaded via
+  `--plugin-dir` pointing at the repo root (computed automatically).
 - The orchestration test deliberately does **not** answer the interactive Gate 1/Gate 2 prompts —
   headless mode has no human — so it asserts the run _reaches_ Gate 1 and stops.

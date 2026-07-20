@@ -70,13 +70,14 @@ export const streamText = (events: StreamEvent[]): string => {
   return parts.join("\n");
 };
 
-/** The six worker skills the orchestrator dispatches. */
+/** The seven worker skills the orchestrator dispatches. */
 export const WORKERS = [
   "ingrain-relevance-triage",
   "ingrain-threat-generator",
   "ingrain-threat-critic",
   "ingrain-risk-scorer",
   "ingrain-mitigation-generator",
+  "ingrain-rule-expander",
   "ingrain-mitigation-critic",
 ] as const;
 
@@ -86,7 +87,7 @@ export const WORKERS = [
  * Workers are reference files under the single ingrain-security skill now, not
  * platform-native agents, so dispatch no longer shows up as a
  * `Task.subagent_type`. The orchestrator dispatches a generic subagent told to
- * read `references/<name>.md`, so we recover the worker from the Task prompt. The
+ * read `references/development/<name>.md`, so we recover the worker from the Task prompt. The
  * sequential in-context fallback reads the same reference via the Skill tool, so
  * we count that too.
  */
@@ -94,7 +95,7 @@ export const dispatchedWorkers = (events: StreamEvent[]): string[] => {
   const workers: string[] = [];
   for (const block of toolUses(events)) {
     if (block.name === "Task" && typeof block.input?.prompt === "string") {
-      const m = block.input.prompt.match(/references\/([a-z-]+)\.md/);
+      const m = block.input.prompt.match(/references\/development\/([a-z-]+)\.md/);
       if (m && (WORKERS as readonly string[]).includes(m[1])) {
         workers.push(m[1]);
         continue;
@@ -115,7 +116,9 @@ export const dispatchedWorkers = (events: StreamEvent[]): string[] => {
  * isolation without a platform-native agent definition.
  */
 export const workerDispatchPrompt = async (name: string, input: string): Promise<string> => {
-  const md = await Deno.readTextFile(`${PLUGIN_DIR}/skills/ingrain-security/references/${name}.md`);
+  const md = await Deno.readTextFile(
+    `${PLUGIN_DIR}/skills/ingrain-security/references/development/${name}.md`,
+  );
   const body = md.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
   return [
     `You have been dispatched as the \`${name}\` worker of the ingrain-security`,

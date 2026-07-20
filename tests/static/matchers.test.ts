@@ -1,7 +1,7 @@
 /**
  * Unit tests for `assertRiskDescendsByTag`. No model calls — the matcher is fed
  * literal fixtures in the bullet shape `ingrain-risk-scorer` is prompted to emit
- * (references/ingrain-risk-scorer.md), so its parsing and its two guarantees are
+ * (references/development/ingrain-risk-scorer.md), so its parsing and its two guarantees are
  * pinned offline rather than only via the live agent test.
  *
  * The guarantees: every risk score parses as a 0-100 value, and risk never rises
