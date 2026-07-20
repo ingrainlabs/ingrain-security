@@ -10,11 +10,6 @@
  * edits) with its sole write being its own section of the stored assessment
  * file, carries a recommended model, and an anti-trigger description so it isn't
  * fired directly outside the orchestrator.
- *
- * The mitigation-generator is the one worker granted a read-only `ingrain` CLI
- * lookup, and its ROLE is worded for that exception. Its phrasing is pinned in
- * ROLE_OVERRIDES rather than by loosening the shared assertion, so the strict
- * clause stays mandatory for every other worker.
  */
 
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
@@ -86,14 +81,13 @@ for (const name of WORKERS) {
     });
 
     await t.step("ROLE header declares codebase read-only with the allowed tools", () => {
-      const role = ROLE_OVERRIDES[name] ?? STANDARD_ROLE;
-      assertStringIncludes(prose.toLowerCase(), "read-only");
-      assertStringIncludes(prose, "Read, Grep, and Glob");
-      assertStringIncludes(prose.toLowerCase(), role.noEdits);
+      assertStringIncludes(body.toLowerCase(), "read-only");
+      assertStringIncludes(body, "Read, Grep, and Glob");
+      assertStringIncludes(body.toLowerCase(), "make no code edits");
       // The sole permitted write is the worker's own section of the stored analysis
       // file, located by the path the dispatch specifies (per-run, not a fixed literal).
-      assertStringIncludes(prose, "stored analysis file");
-      assertStringIncludes(prose, role.writeTarget);
+      assertStringIncludes(body, "stored analysis file");
+      assertStringIncludes(body, "path your dispatch specifies");
     });
 
     // The mitigation-generator is the one worker with a read-only CLI exception:

@@ -19,8 +19,7 @@ description: >-
 > - **Recommended model:** a cheap, basic model (advisory — applied only where the platform
 >   supports per-subagent model selection).
 > - **Hand-off contract:** read the mitigations from the `## Mitigations` section of
->   the stored analysis file (path per your dispatch) **and the retrieved rules from its
->   transient `## Org rules` section**, write your full Output into the
+>   the stored analysis file (path per your dispatch), write your full Output into the
 >   `## Mitigation critique` section (a transient section — the orchestrator deletes
 >   it at finalize), then return to the orchestrator ONLY the
 >   decisive verdict (`approved` or `needs-revision`) plus a one-line pointer to that

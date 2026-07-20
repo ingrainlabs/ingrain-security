@@ -20,8 +20,7 @@ description: >-
 >   supports per-subagent model selection).
 > - **Hand-off contract:** read the frozen threats from the `## Threats` section of
 >   the stored analysis file (path per your dispatch), fill each threat row's scoring columns
->   there (Justification, Impact, Likelihood, Risk score, Criticality), **re-tag the rows into
->   descending-risk order** (see **Order the tags**), and write the
+>   there (Justification, Impact, Likelihood, Risk score, Criticality), and write the
 >   plan-level residual risk into the `## Risk score` section — following the schema in
 >   `references/assessment-file.md` exactly. Then return to the orchestrator ONLY the
 >   overall plan score + criticality plus a one-line pointer — not the full score list.
@@ -50,9 +49,8 @@ For each threat (by tag), reason before you score:
 - Then, consistent with that reasoning, rate **likelihood** — how probable it is to be realized for this change.
 - Rate **impact** — how damaging it would be if realized.
 - Combine into a single **0–100 risk score** (likelihood × impact, normalized to 0–100; higher = more dangerous) and a **criticality** derived from it (low / medium / high / critical).
-- Give a one-line justification.
 
-Then an **overall plan score (0–100)** for the residual risk of the change as a whole, and a **criticality** derived from it (low / medium / high / critical), briefly justified.
+Then, for the change as a whole, briefly justify the residual risk first, then give an **overall plan score (0–100)** and a **criticality** derived from it (low / medium / high / critical).
 
 ## Output
 

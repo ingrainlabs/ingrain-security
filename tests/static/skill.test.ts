@@ -15,13 +15,6 @@ const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/assessment-fil
 const TRIAGE_REF = `${ROOT}skills/ingrain-security/references/ingrain-relevance-triage.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
-const SESSION_START = `${ROOT}hooks/start/session-start`;
-const ALLOW_HOOK = `${ROOT}hooks/claude/allow-assessment-write`;
-const CODEX_ALLOW_HOOK = `${ROOT}hooks/codex/allow-assessment-write`;
-const ALLOW_LIB = `${ROOT}skills/ingrain-security/scripts/lib/assessment-write.sh`;
-const ENSURE_DIR = `${ROOT}hooks/start/ensure-assessment-dir`;
-const PROJECT_ROOT_LIB = `${ROOT}skills/ingrain-security/scripts/lib/project-root.sh`;
-const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
 
 const WORKERS = [
   "ingrain-relevance-triage",
@@ -74,9 +67,9 @@ Deno.test("SKILL.md: documents the read-reference dispatch mechanism", async () 
 
 Deno.test("SKILL.md: documents the assessment file, its path, and living-document behavior", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // Dedicated section, and the single file written straight into .ingrain-security/.
+  // Dedicated section, and the single file written straight into ingrain-security/.
   assertStringIncludes(md, "## The assessment file");
-  assertStringIncludes(md, ".ingrain-security/assessment-<branch-slug>-<task-slug>.md");
+  assertStringIncludes(md, "ingrain-security/assessment-<branch-slug>-<task-slug>.md");
   // The host-root variable is still defined (used for the plan-file path).
   assertStringIncludes(md, "${coding_agent_root}");
   // It is written/updated as a living document.
@@ -92,7 +85,7 @@ Deno.test("SKILL.md: documents the assessment file, its path, and living-documen
 Deno.test("assessment-file.md: defines the strict on-disk format and its allowed values", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
   // The single in-repo artifact path.
-  assertStringIncludes(md, ".ingrain-security/assessment-<branch-slug>-<task-slug>.md");
+  assertStringIncludes(md, "ingrain-security/assessment-<branch-slug>-<task-slug>.md");
   // Enumerated fields carry their exact allowed values.
   assertStringIncludes(md, "very high"); // likelihood
   for (const v of ["selected", "excluded", "undecided"]) {
@@ -109,7 +102,7 @@ Deno.test("SKILL.md + assessment-file.md: the assessment file name is keyed by b
   const skill = await Deno.readTextFile(SKILL);
   const ref = await Deno.readTextFile(ASSESSMENT_REF);
   // Deterministic branch+task name (no timestamp) in both the skill and its schema ref.
-  const NAME = ".ingrain-security/assessment-<branch-slug>-<task-slug>.md";
+  const NAME = "ingrain-security/assessment-<branch-slug>-<task-slug>.md";
   assertStringIncludes(skill, NAME);
   assertStringIncludes(ref, "assessment-<branch-slug>-<task-slug>.md");
   // Branch is resolved with git (not the unreliable .git/HEAD read).
@@ -123,7 +116,7 @@ Deno.test("triage: instructs a prior-analysis lookup that seeds the generator", 
   const triage = await Deno.readTextFile(TRIAGE_REF);
   // The triage worker scans the durable folder for a prior analysis of this task.
   assertStringIncludes(triage.toLowerCase(), "check for prior analysis");
-  assertStringIncludes(triage, ".ingrain-security/assessment-<branch-slug>-*.md");
+  assertStringIncludes(triage, "ingrain-security/assessment-<branch-slug>-*.md");
   // It compares branch + title and emits a Prior analysis pointer.
   assertStringIncludes(triage, "Prior analysis");
   // The orchestrator forwards that pointer to the generator so it seeds prior threats.
@@ -253,54 +246,4 @@ Deno.test("hook.json: both platforms pass their host token to session-start", as
   // The assessment-folder hook keeps passing its host token too.
   assertStringIncludes(claude, "start/ensure-assessment-dir claude");
   assertStringIncludes(codex, "start/ensure-assessment-dir codex");
-});
-
-Deno.test("hook.json: Claude registers the PreToolUse auto-approve hook", async () => {
-  // Without this registration the assessment file prompts on every write, which is the
-  // whole reason the hook exists — and nothing else in the suite would notice.
-  const hook = JSON.parse(await Deno.readTextFile(HOOK_JSON));
-  const pre = hook.hooks?.PreToolUse;
-  assertEquals(Array.isArray(pre), true, "PreToolUse must be registered");
-  const serialized = JSON.stringify(pre);
-  assertStringIncludes(serialized, "claude/allow-assessment-write");
-  // The matcher must cover every file-editing tool the hook itself accepts.
-  for (const tool of ["Write", "Edit", "MultiEdit", "NotebookEdit"]) {
-    assertStringIncludes(serialized, tool);
-  }
-});
-
-Deno.test("hook.json: Codex registers the PermissionRequest auto-approve hook", async () => {
-  // Codex's prompt-skipping event is PermissionRequest, not PreToolUse — registering the
-  // hook anywhere else would leave the assessment file prompting on every write.
-  const hook = JSON.parse(await Deno.readTextFile(CODEX_HOOK_JSON));
-  const request = hook.hooks?.PermissionRequest;
-  assertEquals(Array.isArray(request), true, "PermissionRequest must be registered");
-  const serialized = JSON.stringify(request);
-  assertStringIncludes(serialized, "codex/allow-assessment-write");
-  // The matcher must cover every tool name the hook itself accepts. Codex reports
-  // `apply_patch`; Edit and Write are its documented aliases for the same tool.
-  for (const tool of ["apply_patch", "Edit", "Write"]) {
-    assertStringIncludes(serialized, tool);
-  }
-});
-
-Deno.test("allow-assessment-write: both hooks only ever allow, never deny", async () => {
-  // The hooks' core safety property, asserted on the sources themselves: they can remove a
-  // permission prompt but must never introduce a block. A "deny" verdict appearing here
-  // would mean the plugin can silently veto a user's edit.
-  const claude = await Deno.readTextFile(ALLOW_HOOK);
-  assertStringIncludes(claude, '"permissionDecision":"allow"');
-  assertEquals(claude.includes('"permissionDecision":"deny"'), false);
-
-  const codex = await Deno.readTextFile(CODEX_ALLOW_HOOK);
-  assertStringIncludes(codex, '"behavior":"allow"');
-  assertEquals(codex.includes('"behavior":"deny"'), false);
-  // Only additive patch verbs are approved: a delete or a move is outside the grant.
-  assertEquals(codex.includes("Delete File: "), false);
-
-  // Both hosts get their grant from the same shared test, so they cannot drift apart on it:
-  // the minter's naming, directly inside the assessment folder.
-  const lib = await Deno.readTextFile(ALLOW_LIB);
-  assertStringIncludes(lib, "assessment*.md");
-  assertStringIncludes(lib, "/.ingrain-security");
 });

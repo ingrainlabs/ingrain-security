@@ -23,8 +23,7 @@ description: >-
 >   the stored analysis file (path per your dispatch), filling the descriptive columns (Tag,
 >   Title, Asset, Vector, Description, Assumptions) per the schema in
 >   `references/assessment-file.md` — the risk-scorer fills the scoring columns and
->   re-tags the rows into risk order, and the orchestrator fills Selection later; most
->   tasks warrant 3–6 rows — keep it
+>   the orchestrator fills Selection later; most tasks warrant 3–6 rows — keep it
 >   short and scoped (a target, not a hard cap). Then return to the
 >   orchestrator ONLY a one-line headline (e.g. the threat count) plus a pointer to
 >   that section — not the full list.
@@ -71,7 +70,7 @@ Treat each revision round as a **fresh, complete threat-modeling pass** — not 
 Then reconcile that fresh model against what came before:
 
 - **Re-examine the whole task**, not only the flagged threats.
-- **Keep tags stable** for any threat that carries over — a threat that is still the same threat keeps its tag from the previous round (never renumber), so the critic can line its feedback up against it. Genuinely new threats take the next free tag. A dropped threat's tag is retired — gaps in the sequence are expected and correct; never reuse a tag or renumber to close a gap. The risk-scorer compacts the sequence at freeze, so a gap costs nothing and renumbering mid-loop only breaks the critic's references.
+- **Keep tags stable** for any threat that carries over — a threat that is still the same threat keeps its original tag (never renumber), so the critic and scorer can line up against it. Genuinely new threats take the next free tag. A dropped threat's tag is retired — gaps in the tag sequence are expected and correct; never reuse or renumber to close them.
 - **Account for every critique item** — fold the valid ones into the fresh model; for any you reject, say so and why.
 
 Close with a short **Reconciling the critique** section so the critic can confirm its points were handled rather than re-deriving the diff:

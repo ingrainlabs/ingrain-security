@@ -39,38 +39,12 @@ isolation, and the main session is write-capable — so:
   content; the orchestrator does not read the full running analysis into its own
   context, only compact statuses and the bounded gate slices.
 
-## Mitigation-generator's CLI exception
-
-Every worker is read-only, but the `ingrain-mitigation-generator` has one narrow
-exception: it runs the read-only `ingrain context security_rules "<query>"` lookup
-to fetch the org's security rules. Dispatch it with the host's shell/exec tool
-available **in addition to** Read/Grep/Glob (e.g. Claude Code: allow Bash for
-`ingrain`; Codex: the exec capability). Restate inline that it makes no
-edits and runs no other commands. All other workers get no shell access.
-
-**Access denied vs. unavailable — two different failures.** If the `ingrain context`
-call is **blocked by the host's sandbox / permission layer** (the binary and config
-are fine, exec just wasn't granted), the rules are recoverable: the worker first relies
-on the host's **native approval prompt** (Claude Code's "allow this command?"; Codex's
-exec-approval) so the user can grant access and the fetch retries. Where the host cannot
-surface such a prompt to a subagent, the worker returns the single-line
-`fetch blocked — permission needed` signal instead of proceeding; the **orchestrator**
-then asks the user for permission (using the host's selection-window / question primitive
-— see **Selection windows** below) and, on grant, re-dispatches the generator with exec
-access. Only on decline does it fall back to proceeding without rules.
-
-Genuine unavailability is best-effort, not required: where the `ingrain` binary is not
-installed, or the CLI is unconfigured (no `INGRAIN_SYNC_URL` / API token) or returns
-nothing — cases the user cannot fix by granting access — the worker **degrades
-gracefully**, proposing mitigations without org rules and noting why. Rule retrieval
-never blocks or fails the review.
-
 ## Selection windows (Gate 1 and Gate 2)
 
 At each gate, **first display the findings table in the conversation** (built
 from the bounded gate slice of the assessment file — see SKILL.md → **How to
 ask the user**), and in the same message **name the run's assessment file** (its
-`.ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) so the user can open the full analysis
+`ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) so the user can open the full analysis
 behind the table. This display step is host- and mode-independent: it happens on
 every platform, in plan mode and ad-hoc alike, before any selection mechanism
 below — the windows never substitute for it.
