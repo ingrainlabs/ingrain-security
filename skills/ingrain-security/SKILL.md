@@ -288,31 +288,14 @@ sections it needs — the file is the shared state, so your own context stays le
      and **stop here**. Do not dispatch any other worker; there is nothing to fold
      into the plan — carry on building it.
    - If the verdict is `major`: keep its **Surfaces** notes — you forward them to
-     the generator in Step 1 — and continue to run the full cycle. **Create or open the
-     assessment file** at the minted `assessment_abs` (see **The assessment file**;
-     `file_exists: true` means you are resuming this task's prior analysis) with its title +
-     banner and the `## Task` section; the triage worker's `## Triage` section
-     (verdict + Surfaces) is now in it. This is the hand-off medium for every step
-     that follows — its schema and template live in `references/assessment-file.md`.
-1. **Threats** — dispatch the `ingrain-threat-generator` worker, pointing it at the plan
-   **and the `## Triage` section** (Surfaces are starting points, not a ceiling).
-   **If triage returned a Prior analysis pointer**, also point the generator at that prior
-   snapshot's `## Threats` (and `## Mitigations`) so it **seeds from the prior analysis**
-   rather than starting from scratch — re-derive and refresh against the current plan, do
-   not blindly copy. It writes
-   the threat rows (descriptive columns, under working tags `T1…`; most tasks warrant 3–6 rows — a target, not a hard cap) into the `## Threats` table per the
-   `references/assessment-file.md` schema and returns a pointer. Its tags are in
-   discovery order and carry no priority — the `ingrain-risk-scorer` re-tags them in Step 3.
-2. **Critique threats** *(loop, max 3)* — dispatch the `ingrain-threat-critic` worker,
-   pointing it at the `## Threats` section. On `needs-revision`, re-dispatch
-   `ingrain-threat-generator` with a pointer to `## Threats` + `## Threat critique` and
-   repeat. Then **freeze** the threats (the frozen list lives in the `## Threats` section).
-3. **Risk score** — dispatch the `ingrain-risk-scorer` worker, pointing it at the frozen
-   `## Threats` section. It fills each row's scoring columns (Justification, Impact,
-   Likelihood, Risk score 0–100, Criticality) and writes the plan-level residual risk into
-   `## Risk score` — per the `references/assessment-file.md` schema. It then **re-tags the
-   threats into descending-risk order** — a contiguous `T1…Tn` with `T1` the most critical.
-   From here on the tag *is* the priority, and every stage below reads the table top-down.
+     the generator in Step 1 — and continue to run the full cycle.
+1. **Threats** — dispatch the `ingrain-threat-generator` worker with the plan **and the
+   triage Surfaces notes** (its starting points, not a ceiling) → threat list (`T1…`).
+2. **Critique threats** *(loop, max 3)* — dispatch the `ingrain-threat-critic` worker. On
+   `needs-revision`, re-dispatch `ingrain-threat-generator` with the prior list + critique
+   and repeat. Then **freeze** the threats.
+3. **Risk score** — dispatch the `ingrain-risk-scorer` worker with the frozen threats →
+   per-threat 0–100 (likelihood × impact) plus an overall plan score and criticality.
 4. **Ask user — select which threats to address (Gate 1).** Follow the two-step
    display-then-ask pattern (see **How to ask the user**). The user is deciding
    per threat whether it is worth acting on, so they must understand each
@@ -325,7 +308,11 @@ sections it needs — the file is the shared state, so your own context stays le
 
    | Column | Contents |
    |--------|----------|
+<<<<<<< HEAD
    | **Threat** | tag + short title (e.g. `T1 — unauthenticated token refresh`) |
+=======
+   | **Threat** | tag + short title (e.g. `T3 — unauthenticated token refresh`) |
+>>>>>>> dfe63ee (Rework threat schem (#5))
    | **Risk** | risk criticality + 0–100 score (e.g. `high · 78`) |
    | **What can go wrong** | the concrete failure, drawn from the threat's Vector/Description (not a generic category) |
    | **Why it matters** | the consequence if realized, grounded in the ingrain-risk-scorer's impact and score (what an attacker gains, what data or guarantee is lost) |
