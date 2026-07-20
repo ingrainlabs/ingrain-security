@@ -89,6 +89,9 @@ codex plugin marketplace add ingrainlabs/ingrain-security
 Installs are pinned to the `v<version>` git **tag**, not the default branch — you
 only ever receive tagged releases.
 
+Full setup — including the `ingrain` CLI binary, API token, and configuration — is
+documented at **[Getting started](https://docs.ingrainlabs.dev/getting-started/)**.
+
 ## Usage
 
 - **Automatic.** A SessionStart hook injects the skill into every session, so the
@@ -122,11 +125,12 @@ the skill manually.
 **Read-only guarantee.** The workers never edit code. The only writes the review
 makes are the assessment file and the findings folded into your plan.
 
-**Sandboxing & network access.** The review makes one outbound network call — the
-mitigation generator's read-only `ingrain context security_rules` lookup, which fetches
-your org's security rules (via `INGRAIN_SYNC_URL` + API token). If you run your coding
-agent under a sandbox that restricts network or command execution, **allow that
-`ingrain context` CLI run** so org-rule retrieval works. Without it the review still
+**Sandboxing & network access.** The review's only outbound network calls are the
+mitigation generator's read-only `ingrain context security_rules` lookups — one per
+distinct question it needs org guidance on — which fetch your org's security rules
+(via `INGRAIN_SYNC_URL` + API token). If you run your coding agent under a sandbox
+that restricts network or command execution, **allow those `ingrain context` CLI
+runs** so org-rule retrieval works. Without it the review still
 completes — it just degrades gracefully and proposes mitigations without your org's rules.
 
 **The assessment folder is git-ignored.** `.ingrain-security/` is ignored
