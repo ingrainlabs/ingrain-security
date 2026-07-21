@@ -3,19 +3,21 @@
  * network — pure file reads.
  *
  * Workers are reference files under the single ingrain-security skill now
- * (skills/ingrain-security/references/development/<name>.md), so the read-only guarantee is
- * advisory prose in the ROLE header rather than a platform-enforced `tools:`
- * frontmatter list. These checks guard that advisory contract: every worker
- * still declares itself read-only on the codebase (Read/Grep/Glob as its whole
- * toolset) with its sole write being its own section of the stored assessment
- * file, carries a recommended model, and an anti-trigger description so it isn't
- * fired directly outside the orchestrator.
+ * (skills/ingrain-security/references/development/<name>.md), so a worker's write
+ * target is advisory prose in the ROLE header rather than a platform-enforced
+ * `tools:` frontmatter list. These checks guard that advisory contract: every
+ * worker still names its sole write target — its own section of the stored
+ * analysis file — carries a recommended model, and has an anti-trigger description
+ * so it isn't fired directly outside the orchestrator.
  *
- * The rule-expander is the one worker granted a read-only `ingrain` CLI lookup —
- * the second retrieval pass, keyed on the proposed mitigations — and its ROLE is
- * worded for that exception. Its phrasing is pinned in ROLE_OVERRIDES rather than
- * by loosening the shared assertion, so the strict clause stays mandatory for
- * every other worker, the mitigation-generator now included.
+ * Workers DO write (the assessment file is their hand-off medium), so the ROLE
+ * header must not call itself read-only: a "read-only … whole toolset" clause next
+ * to a write contract is the exact contradiction that stalled workers mid-dispatch.
+ * The inverse assertion below is what keeps it from creeping back.
+ *
+ * The rule-expander is the one worker granted an `ingrain` CLI lookup — the second
+ * retrieval pass, keyed on the proposed mitigations — and its ROLE is worded for
+ * that exception. Its write-target phrasing is pinned in ROLE_OVERRIDES.
  */
 
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
@@ -49,26 +51,18 @@ const flattenProse = (md: string): string => md.replace(/^\s*>\s?/gm, "").replac
 
 /** The ROLE phrasing every worker shares, unless it appears in ROLE_OVERRIDES. */
 const STANDARD_ROLE = {
-  toolset: "read, grep, and glob alone to inspect the",
   writeTarget: "path your dispatch specifies",
 };
 
-/**
- * The rule-expander may run a read-only `ingrain` CLI lookup, so its ROLE is worded for that
- * exception: its toolset clause covers the codebase plus the two `ingrain` invocations, and it
- * names the dispatch path differently. The two toolset phrases are disjoint — neither contains
- * the other — so the standard workers keep the strictly narrower assertion and this override is
- * not a back door for them.
- */
+/** The rule-expander writes the rules sidecar instead, and names the dispatch path differently. */
 const ROLE_OVERRIDES: Record<string, typeof STANDARD_ROLE> = {
   "ingrain-rule-expander": {
-    toolset: "read, grep, and glob alone on the codebase",
     writeTarget: "path per your dispatch",
   },
 };
 
 for (const name of WORKERS) {
-  Deno.test(`worker ${name}: frontmatter and advisory read-only ROLE`, async (t) => {
+  Deno.test(`worker ${name}: frontmatter and advisory write-target ROLE`, async (t) => {
     const md = await Deno.readTextFile(`${REFERENCES_DIR}${name}.md`);
     const fm = parseFrontmatter(md);
     const body = splitFrontmatter(md);
@@ -88,22 +82,29 @@ for (const name of WORKERS) {
       assertStringIncludes(description.toLowerCase(), "reachable solely through a dispatch");
     });
 
-    await t.step("ROLE header declares codebase read-only with the allowed tools", () => {
+    await t.step("ROLE header names the worker's write target", () => {
       const role = ROLE_OVERRIDES[name] ?? STANDARD_ROLE;
-      assertStringIncludes(prose.toLowerCase(), "read-only");
-      assertStringIncludes(prose, "Read, Grep, and Glob");
-      assertStringIncludes(prose.toLowerCase(), role.toolset);
       // The sole permitted write is the worker's own section of the stored analysis
       // file, located by the path the dispatch specifies (per-run, not a fixed literal).
       assertStringIncludes(prose, "stored analysis file");
       assertStringIncludes(prose, role.writeTarget);
     });
 
-    // The rule-expander is the one worker with a read-only CLI exception: it runs
-    // `ingrain context security_rules` for the second retrieval pass, but still edits
-    // nothing. Guard that the exception is documented in its ROLE header.
+    await t.step("ROLE header does not call the worker read-only", () => {
+      // Workers write their section of the assessment file. A read-only clause here
+      // contradicts the hand-off contract two bullets down and stalls the dispatch.
+      assertEquals(
+        prose.toLowerCase().includes("read-only"),
+        false,
+        "ROLE header must not reintroduce a read-only restriction — workers write the assessment file",
+      );
+    });
+
+    // The rule-expander is the one worker with a CLI exception: it runs
+    // `ingrain context security_rules` for the second retrieval pass. Guard that the
+    // exception is documented in its ROLE header.
     if (name === "ingrain-rule-expander") {
-      await t.step("rule-expander documents the read-only ingrain CLI exception", () => {
+      await t.step("rule-expander documents the ingrain CLI exception", () => {
         assertStringIncludes(prose, "ingrain context security_rules");
         assertStringIncludes(prose.toLowerCase(), "exception");
       });

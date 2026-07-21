@@ -126,7 +126,7 @@ Announce the phase you picked in your opening line, so a misroute costs the user
 
 **Announce:** open with "Using ingrain-security to assess this plan."
 
-You orchestrate seven **read-only** worker roles, each defined by a reference file at
+You orchestrate seven worker roles, each defined by a reference file at
 `references/development/<name>.md` (`ingrain-relevance-triage`, `ingrain-threat-generator`,
 `ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-mitigation-generator`,
 `ingrain-rule-expander`, `ingrain-mitigation-critic`). You dispatch each as a fresh subagent,
@@ -159,13 +159,12 @@ worker subagent** and tell it to become that worker; the reference file is its l
 the sequential in-context fallback where none exists) — read it if you are unsure which
 primitive to use.
 
-Dispatch every worker with the same shape — restate the read-only constraint inline, because
-on hosts without tool-level enforcement it is the only thing enforcing it:
+Dispatch every worker with the same shape — restate its write target inline, because that path
+is per-run and the worker has no other way to learn it:
 
 ```
 Read references/development/<name>.md and follow it as your system prompt.
-You do no code or repo edits — use only Read/Grep/Glob on the codebase. Your ONE
-permitted write is your own section of the stored analysis file for this run at
+Your ONE permitted write is your own section of the stored analysis file for this run at
 <the minted assessment_abs — the ABSOLUTE path, pasted in full> (section: <## Section for this worker>),
 written to the schema in references/formatting/assessment-file.md — use exactly its fields and
 enum values. Write to that exact absolute path, character for character as pasted
@@ -192,8 +191,7 @@ you are the one who can check it, because the shell is yours alone — run
 `scripts/validate-assessment` with `--lenient` on `assessment_abs` after every worker that
 wrote it, and fix what it reports. A malformed section is cheapest to repair here, while the worker that produced it can
 still be re-dispatched with the violations quoted back to it, and while it is still upstream of
-the next worker, which reads the file for itself. This is a **read-only display + one bash
-call**, so the workers' Read/Grep/Glob constraint stands as written.
+the next worker, which reads the file for itself.
 
 **Model:** set each worker's model from the **Recommended model** line in its own reference
 file. You stay on the session model. Host-dependent — ignore where per-subagent model
@@ -333,16 +331,15 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    at the sidecar's `## Retrieved rules` so it grounds its proposals in established org
    practice. It proposes both **threat mitigations** and
    **general implementation instructions** for the full scoped task — both belong in the plan.
-   It writes the mitigation rows and the sidecar's `## Per-mitigation mapping`. It works from
-   the rules already on disk, with Read/Grep/Glob alone.
+   It writes the mitigation rows and the sidecar's `## Per-mitigation mapping`, and works from
+   the rules already on disk — it has no CLI of its own.
 
 7. **Expand rules** — dispatch `ingrain-rule-expander` at the `## Mitigations` table and the
    sidecar, with `rules_abs` as its write target. Step 5 queried from the threats; now that
    concrete mitigations name concrete mechanisms, it searches on those mechanisms and
    **appends** what it finds to the sidecar.
    **This is the one worker that gets the shell/exec tool** — dispatch it with Bash/exec in
-   addition to Read/Grep/Glob, and say so in its dispatch. Every other worker stays strictly
-   Read/Grep/Glob.
+   addition to its file tools, and say so in its dispatch. No other worker gets a shell.
    **It runs exactly once**, before the Step 8 loop — the critic is what carries its findings
    into the mitigations. Skip this
    step entirely if Step 5's probe reported the CLI absent, and say so when you do.
@@ -477,7 +474,7 @@ there; this section is a pointer, and the procedure is in that file.
 | The user excluded T2, but it looks important | Record it as accepted risk and move on — the selected subset is the scope. |
 | The critic flagged issues | Re-run the generator once with the feedback, then freeze. |
 | You have the revised set in hand | Freeze it and surface whatever is unresolved — each step gets exactly one critique pass. |
-| A worker's job looks quick enough to do yourself | Dispatch it: each worker runs in its own read-only subagent. |
+| A worker's job looks quick enough to do yourself | Dispatch it: each worker runs in its own subagent. |
 | You want to know where the run stands | Work from the compact statuses workers return; the bounded gate slices and finalize are the reads available to you. |
 | You are naming the assessment file to a worker | Pass the absolute `assessment_abs`. A worker has no project root in view, so a relative path resolves against the file it was reading and creates a stray folder there. |
 | `.ingrain-security/` appears to be missing | Re-run the mint script and use the path it returns — the script created the folder at the repo root, and it self-ignores, so `git status` stays silent about it. A missing folder means the path was resolved somewhere else. |
@@ -508,7 +505,7 @@ gate incorporates exactly the selected subset.
 - [ ] 3. Risk scored; threats re-tagged into descending-risk order
 - [ ] 4. Gate 1 — table displayed in the conversation FIRST, then one window per threat; `Selection` recorded (zero selected ends the review)
 - [ ] 5. Org rules retrieved by YOU via the `ingrain` CLI, from plan + selected threats; sidecar written (or none, if nothing came back)
-- [ ] 6. Mitigations generated for the selected threats ONLY, grounded in the sidecar; generator ran on Read/Grep/Glob alone
+- [ ] 6. Mitigations generated for the selected threats ONLY, grounded in the sidecar; generator ran without a shell of its own
 - [ ] 7. Rule expander dispatched ONCE — second pass keyed on the mitigations; appended to the sidecar (skipped only if the CLI is absent)
 - [ ] 8. Single mitigation critique pass done — approved, or one revision applied; only the generator re-dispatched; mitigations frozen
 - [ ] 9. Gate 2 — table displayed FIRST, then one window per mitigation; `Selection` recorded

@@ -119,8 +119,12 @@ Deno.test("SKILL.md: documents the read-reference dispatch mechanism", async () 
   assertStringIncludes(md, "Read references/development/<name>.md");
   // Cross-platform mapping lives in the reference doc.
   assertStringIncludes(md, "references/development/dispatch.md");
-  // The read-only constraint is restated for the dispatched subagents.
-  assertStringIncludes(md.toLowerCase(), "read-only");
+  // The per-run write target is restated inline for the dispatched subagents — it is the
+  // one thing a worker cannot learn from its own reference file.
+  assertStringIncludes(
+    md,
+    "Your ONE permitted write is your own section of the stored analysis file",
+  );
 });
 
 // SKILL.md is an orchestration spine: it owns SEQUENCE and ROUTING, the reference files own

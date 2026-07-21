@@ -4,8 +4,7 @@
 
 A Claude Code / Codex plugin. Once your implementation plan is comprehensive and
 detailed — but *before* any code is written or the plan is presented — Ingrain
-Security threat-models the plan and folds the results back into it. It is
-**read-only on your codebase**: it reads and reports, and leaves the code to you.
+Security threat-models the plan and folds the results back into it.
 
 - Repository: <https://github.com/ingrainlabs/ingrain-security>
 - License: MIT
@@ -36,13 +35,12 @@ the short version:
   `ingrain-rule-expander` afterwards — keyed on the mitigations actually proposed, so
   the search can ask what those concrete mechanisms imply. Both passes land in a rules
   sidecar next to the assessment.
-- **Read-only workers.** The orchestrator dispatches seven worker roles as fresh
+- **Worker roles.** The orchestrator dispatches seven worker roles as fresh
   subagents — `ingrain-relevance-triage`, `ingrain-threat-generator`,
   `ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-mitigation-generator`,
   `ingrain-rule-expander`, `ingrain-mitigation-critic` (defined under
   [`skills/ingrain-security/references/development/`](skills/ingrain-security/references/development/)).
-  Each uses only Read/Grep/Glob on your codebase; its sole write is its own section
-  of the assessment file.
+  Each worker's sole write is its own section of the assessment file.
 - **Two selection gates are yours.** At Gate 1 and Gate 2 you decide, per finding,
   what gets addressed. Selecting none is always allowed.
 - **Then the code gets tested against the threats.** Once the plan is implemented, the
@@ -198,8 +196,8 @@ the plugin still installs, but loses the SessionStart context injection and the
 assessment-folder seeding, so the automatic review won't fire. You can still invoke
 the skill manually.
 
-**Read-only guarantee.** The workers read your code and report on it. The review's only
-writes are the assessment file and the findings folded into your plan.
+**What the review writes.** The review's only writes are the assessment file and the
+findings folded into your plan.
 
 **Sandboxing & network access.** The review's only outbound network calls are the
 read-only `ingrain context security_rules` lookups of its two rule-retrieval passes —

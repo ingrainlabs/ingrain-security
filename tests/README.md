@@ -1,11 +1,11 @@
 # Tests
 
 Test suite for the `ingrain-security` plugin — the `ingrain-security` orchestrator skill and its
-read-only worker roles: seven in Development, plus Testing's `ingrain-threat-verifier`. Built on
-Deno's test runner; it drives the `claude` CLI in headless mode and can exercise each worker in
-isolation by dispatching it the way the orchestrator does (its
-`skills/ingrain-security/references/development/<name>.md` body as the system prompt, restricted to
-read-only tools).
+worker roles: seven in Development, plus Testing's `ingrain-threat-verifier`. Built on Deno's test
+runner; it drives the `claude` CLI in headless mode and can exercise each worker in isolation by
+dispatching it the way the orchestrator does (its
+`skills/ingrain-security/references/development/<name>.md` body as the system prompt, plus the
+assessment file it writes its section into).
 
 ## Reference layout
 
@@ -80,9 +80,11 @@ This is always on for the live tiers — Deno streams each test's output live (w
 ## How the tests work
 
 - **static/** — pure file reads. Asserts each worker reference file's frontmatter (name,
-  anti-trigger description) and the advisory **read-only** ROLE header (`Read, Grep, Glob` only, no
-  edits, recommended model), plus the orchestrator's step ordering, announce/stop phrases, the
-  read-reference dispatch mechanism, and a valid SessionStart hook.
+  anti-trigger description) and its advisory ROLE header — the named **write target** and the
+  recommended model, plus the inverse guard that no worker calls itself read-only (workers write the
+  assessment file; a read-only clause there contradicts their hand-off contract). Also the
+  orchestrator's step ordering, announce/stop phrases, the read-reference dispatch mechanism, and a
+  valid SessionStart hook.
 - **hooks/** — offline, no model calls, but unlike `static/` it **executes** the
   `hooks/start/ensure-assessment-dir` SessionStart hook under `bash` against a `Deno.makeTempDir()`
   project, asserting the durable folder/README/`.gitignore` are seeded and the `CLAUDE_PROJECT_DIR`
@@ -105,11 +107,13 @@ This is always on for the live tiers — Deno streams each test's output live (w
   scripts from its own workflow step rather than through this tier — see **CI** below.
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
   `skills/ingrain-security/references/development/<name>.md` body as the system prompt with
-  `--allowed-tools Read,Grep,Glob`. The test asserts the output's _shape_ (a verdict keyword, a
-  0–100 score, risk descending by threat tag, required fields). Assertions are loose because live
-  output varies. The table has seven cases over six workers (`ingrain-relevance-triage` runs twice,
-  on a major and a minor plan); `ingrain-rule-expander` has no live case and is covered by `static/`
-  only.
+  `--allowed-tools Read,Grep,Glob,Write,Edit`. Each case mints a real assessment file in a throwaway
+  project dir (via the bundled `scripts/assessment-path`) and hands the worker that absolute path as
+  its write target, then asserts the worker actually modified the seeded file and checks the
+  output's _shape_ (a verdict keyword, a 0–100 score, risk descending by threat tag, required
+  fields) over the return and the file together. Assertions are loose because live output varies.
+  The table has seven cases over six workers (`ingrain-relevance-triage` runs twice, on a major and
+  a minor plan); `ingrain-rule-expander` has no live case and is covered by `static/` only.
 - **skill/** — a full session (skill + agents + hook). `trigger.test.ts` checks a security-relevant
   plan starts the review and a trivial one stops at triage. `orchestration.test.ts`
   (integration-gated) checks the workers fire in order through risk scoring and the run halts at

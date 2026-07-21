@@ -5,9 +5,8 @@ its reference file at `references/development/<name>.md` and follow it. That abs
 differently onto each host. The dispatch *prompt* is always the same; only the *mechanism* below
 changes.
 
-Always restate the constraint inline in the dispatch: "read-only on the codebase —
-Read/Grep/Glob are your whole toolset; your one write is your own section
-of the stored analysis file at the path this dispatch names."
+Always restate the worker's write target inline in the dispatch: "your one write is your own
+section of the stored analysis file at the path this dispatch names."
 
 Your own writes as orchestrator — finalizing the assessment file, and the two plan-file writes at
 Gate 1 and Gate 2 — happen strictly between worker steps, once the worker has returned.
@@ -19,17 +18,12 @@ the subagent to read the worker reference file from `references/development/<nam
 worker per call and read the returned text. Where the host supports a per-subagent
 model, set the worker's recommended tier; otherwise ignore it (advisory).
 
-> Note: a general-purpose subagent typically has write-capable tools available, so the
-> constraint above is advisory — enforced by the dispatch prompt and the worker's own
-> ROLE header.
-
 ## Sequential in-context fallback
 
 Where the host lacks a subagent mechanism, run each worker **sequentially in the main
 session**: read the worker's reference file, follow it on the current INPUT, capture the output,
-then move to the next step. This mode shares one write-capable context across every worker, so:
+then move to the next step. This mode shares one context across every worker, so:
 
-- Discipline is the only enforcement here — hold the standing constraint yourself.
 - Run one worker step at a time, in the order the checklist lists them, letting each finish before the next begins.
 
 ## Org-rules retrieval and the CLI
@@ -43,12 +37,11 @@ host's shell/exec for the probe and the retrieval command. Running there is the 
 sandbox or permission denial surfaces the host's **native approval prompt** ("allow this
 command?") straight to the user.
 
-**The second pass is `ingrain-rule-expander`'s**, the one worker granted read-only `ingrain`
-invocations. Dispatch it with the host's shell/exec tool available **in addition to**
-Read/Grep/Glob (e.g. Claude Code: allow Bash for `ingrain`; Codex: the exec capability).
+**The second pass is `ingrain-rule-expander`'s**, the one worker granted the `ingrain` CLI.
+Dispatch it with the host's shell/exec tool available **in addition to** its file tools
+(e.g. Claude Code: allow Bash for `ingrain`; Codex: the exec capability).
 Restate inline that its writes are confined to the rules sidecar and its commands to the two
-read-only `ingrain` invocations. It is dispatched **exactly
-once** per review. Every other worker runs on Read/Grep/Glob alone.
+`ingrain` invocations. It is dispatched **exactly once** per review.
 
 **Relaying an access denial is a dispatch concern**, because reaching the user is the
 orchestrator's channel. The expander first relies on the host's **native approval prompt**
