@@ -30,10 +30,13 @@ const EXPECTED = [
   ".github/release.sh",
   "hooks/claude/allow-assessment-write",
   "hooks/start/session-start",
+  "skills/ingrain-security/scripts/lib/artifact-template.sh",
   "skills/ingrain-security/scripts/lib/project-root.sh",
   "skills/ingrain-security/scripts/lib/mint-path.sh",
+  "skills/ingrain-security/scripts/lib/validate-md.sh",
   "skills/ingrain-security/scripts/rules-path",
   "skills/ingrain-security/scripts/branch-diff",
+  "skills/ingrain-security/scripts/validate-assessment",
 ];
 
 /**

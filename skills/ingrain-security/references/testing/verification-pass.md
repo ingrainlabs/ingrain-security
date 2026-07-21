@@ -64,6 +64,18 @@ pre-approval, and the file's schema — follow that schema exactly. The columns 
 `## Threats` → **Robustness** and `## Mitigations` → **Justification** + **Robustness**, plus
 `## Task` → `Latest stage`.
 
+**Check the write.** Testing writes this file exactly once, at step 6, and that write is a
+finished file — so run the bundled **`scripts/validate-assessment`** script on `assessment_abs`
+straight after it, **strictly (no `--lenient`)**:
+
+    bash <plugin>/skills/ingrain-security/scripts/validate-assessment <assessment_abs>
+
+Fix exactly what it reports and re-run, at most twice; if violations survive, name them in one
+line of your report rather than closing over them quietly.
+→ `references/formatting/assessment-file.md` § **Validation — run it after every write** owns
+the modes, the exit codes and that bound. The `rules-<…>.md` sidecar is read-only here — Testing
+never writes it, so it is never re-validated.
+
 ## The diff under review
 
 Verify against the **branch delta** — everything this branch added since it diverged from the
@@ -150,7 +162,9 @@ the assessment with. Because it is keyed by the same branch + task slug, it reso
   verifier**).
 - **`file_exists: false`** — no org rules were retrieved for this task at planning time (the
   CLI was absent, unconfigured, or returned nothing). The verifiers judge from the threat and
-  the mitigation Descriptions alone — treat this as an expected input state.
+  the mitigation Descriptions alone — treat this as an expected input state. A sidecar **file**
+  may still be sitting on disk: the mint seeds an empty skeleton, and `file_exists` reports
+  content, not presence. Do not read it, and do not fill it.
 
 The rules are **supporting context only**: they sharpen what "closed" looks like for this org,
 and verification proceeds with or without them. A mitigation whose `Rule refs` is `—` is
@@ -293,7 +307,8 @@ file.
    never a finding.
 4. **Dispatch the verifiers.** Dispatch one `ingrain-threat-verifier` per selected threat (see
    **How to dispatch a verifier**), each pointed at its `T<n>` row, the `selected` mitigations
-   covering it, **and — when the sidecar exists — those mitigations' rule(s) in `rules_abs`**.
+   covering it, **and — when the sidecar carries rules (`file_exists: true`) — those
+   mitigations' rule(s) in `rules_abs`**.
    Then run the general-instruction pass over the untagged rows. Collect each one's
    justification, then its level (`weak` | `adequate` | `strong`), plus its evidence and — on
    `weak` — the residual path. Do not act on a level yet.
@@ -310,7 +325,11 @@ file.
    and the code changed again), **overwrite** the previous justifications and levels — they
    record the current implementation. The
    `rules-<…>.md` sidecar is a persistent planning artifact — **do not modify or delete it**.
-   This is the "mark checked" step — the file now records what was verified.
+   Then **validate the file strictly** — `scripts/validate-assessment <assessment_abs>` with no
+   `--lenient` — and fix what it reports before you report to the coding agent (see **The
+   assessment file** → Check the write). This is the "mark checked" step — the file now records
+   what was verified, so it is also the last moment a malformed row can be caught before the
+   next session inherits it.
 7. **Report to the coding agent.** Present the findings (see **Reporting format**) and close
    with a one-line verdict. If any threat is `weak`, ask the coding agent to revisit exactly
    those — naming the residual path for each.
@@ -363,5 +382,5 @@ Report the empty cases, never fail silently.
 - [ ] 3. Rules sidecar located (`rules_abs`) — an absent sidecar is an expected state; verification proceeds either way
 - [ ] 4. One verifier dispatched per selected threat, plus the general-instruction pass — justification FIRST, then `weak`/`adequate`/`strong`
 - [ ] 5. Each threat's Robustness concluded — justification weighed BEFORE the level; a level stands only when its evidence carries it; the conclusion is YOURS; each mitigation's Robustness carried across, weakest governs
-- [ ] 6. `## Threats` → `Robustness` + `## Mitigations` → `Justification` + `Robustness` + `Latest stage: testing` written — YOU write, the verifier only returns; sidecar untouched
+- [ ] 6. `## Threats` → `Robustness` + `## Mitigations` → `Justification` + `Robustness` + `Latest stage: testing` written — YOU write, the verifier only returns; sidecar untouched; then validated clean by `scripts/validate-assessment` with NO `--lenient`
 - [ ] 7. Reported to the coding agent — `weak` threats named with their residual path; the coding agent owns the code changes

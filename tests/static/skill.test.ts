@@ -200,6 +200,36 @@ Deno.test("ownership: SKILL.md does not restate what assessment-file.md owns", a
   }
 });
 
+/**
+ * The validator wiring. `scripts/validate-assessment` checks a written assessment file
+ * against the schema its reference file specifies, and the rule is that it runs after EVERY
+ * write — so `assessment-file.md` owns the contract (modes, exit codes, the retry bound) and
+ * SKILL.md carries only the when. A skill that stops naming it silently goes back to writing
+ * unchecked files, which is the regression these fence.
+ */
+Deno.test("validation: assessment-file.md owns the after-every-write contract", async () => {
+  const md = await Deno.readTextFile(ASSESSMENT_REF);
+  assertStringIncludes(md, "scripts/validate-assessment");
+  // Both modes, and which one belongs to a finished file.
+  assertStringIncludes(md, "--lenient");
+  assertStringIncludes(md.toLowerCase(), "finalize");
+  // The failure contract: bounded retries, and never a silent hand-off.
+  assertStringIncludes(md.toLowerCase(), "at most twice");
+});
+
+Deno.test("validation: SKILL.md runs it after every write and strictly at finalize", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  assertStringIncludes(md, "scripts/validate-assessment");
+  assertStringIncludes(md, "--lenient");
+  // The spine points at the owner rather than restating the contract.
+  assertStringIncludes(md, "references/formatting/assessment-file.md");
+  // The workers hold no shell, so the orchestrator validates what they wrote on return.
+  assertStringIncludes(md.toLowerCase(), "validate on every return");
+  // Finalize is the strict run, and the checklist tracks it.
+  assertStringIncludes(md, "validate it strictly — no `--lenient`");
+  assertStringIncludes(md, "assessment validated strictly");
+});
+
 Deno.test("ownership: dispatch.md § Selection windows stays mechanism-only", async () => {
   const md = await Deno.readTextFile(DISPATCH_REF);
   // The gate PROCEDURE (display the table first, then ask) is SKILL.md's; this file maps the
@@ -301,6 +331,16 @@ Deno.test("session-start: injects the branch-diff runner Phase select routes on"
   assertStringIncludes(hook, "${branch_diff_runner_escaped}");
   // The routing signal itself has to reach the agent, not just the command.
   assertStringIncludes(hook, "delta_empty");
+});
+
+Deno.test("session-start: injects the validator runner the after-every-write rule needs", async () => {
+  const hook = await Deno.readTextFile(SESSION_START);
+  assertStringIncludes(hook, "scripts/validate-assessment");
+  assertStringIncludes(hook, "validate_runner_escaped");
+  assertStringIncludes(hook, "${validate_runner_escaped}");
+  // The rule travels with the command: mid-run mode, and who runs it for the workers.
+  assertStringIncludes(hook, "--lenient");
+  assertStringIncludes(hook, "workers hold no shell");
 });
 
 Deno.test("assessment-path: emits an instruction and anchors on the git repo root", async () => {

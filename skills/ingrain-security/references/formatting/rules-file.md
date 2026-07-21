@@ -24,12 +24,16 @@ appends a second pass keyed on the mitigations once they do. Follow this structu
   fallbacks apply (branch unknown → `rules-<task-slug>.md`; no title → `rules-<branch-slug>.md`;
   both absent → `rules.md`), and the `rules-` prefix always leads. Minting is shared with the
   assessment path (`scripts/lib/mint-path.sh`), so the two always resolve to matching slugs.
-- **Created when org rules are retrieved.** This file is **conditional**: it exists exactly
-  when a retrieval pass got rules back from the `ingrain` CLI. The orchestrator's first pass
-  normally creates it; where that pass returns nothing, `ingrain-rule-expander` creates it
-  later should its own pass find something. Its presence tells downstream readers that org
-  rules back this task's mitigations; its absence tells them to judge from the mitigation
-  Descriptions alone.
+- **Filled when org rules are retrieved.** Minting **seeds the file with its empty skeleton**
+  (`## Retrieved rules`, `## Per-mitigation mapping`, both empty), so a retrieval pass fills
+  the sections in place rather than building the page; an existing file is never rewritten.
+  Its **content** is conditional: it carries rules exactly when a retrieval pass got them back
+  from the `ingrain` CLI. The orchestrator's first pass normally fills it; where that pass
+  returns nothing, `ingrain-rule-expander` fills it later should its own pass find something.
+  Because the file is seeded, **the presence of the file says nothing** — read the mint JSON
+  instead: **`file_exists: true`** (equivalently `template_only: false`) means org rules back
+  this task's mitigations; an untouched skeleton means judge from the mitigation Descriptions
+  alone.
 - **Persistent.** Once written it **stays** — the assessment file's scratch sections are
   deleted at finalize, this file survives it — so the Testing verification pass (which runs
   in a later session) can re-mint the path and read the rule descriptions. It is
@@ -95,8 +99,9 @@ To locate this file, re-run the `rules-path` mint command from the
 `INGRAIN-ASSESSMENT-PATHS` session context and use the absolute `rules_abs` it returns — it
 resolves back to this same file (deterministic in branch + title). Never resolve a relative
 `.ingrain-security/…` string against the file being edited, and never create the folder.
-`file_exists: false` means no org rules were retrieved for this task — do not fabricate one;
-fall back to the mitigation Descriptions.
+`file_exists: false` means no org rules were retrieved for this task — the file on disk is the
+minter's empty skeleton, and an empty `## Retrieved rules` is not an invitation to fill it:
+do not fabricate a rule; fall back to the mitigation Descriptions.
 
 ## Template
 

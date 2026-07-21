@@ -53,8 +53,11 @@ from a guess about what the user meant, and never by reading ahead into the chec
 
 Otherwise resolve the state with **two cheap shell calls**. The first is **the mint call you
 already have to make**: Development mints `assessment_abs` at Step 0 anyway, so run it now, keyed
-on this task's title, and read `file_exists` off its JSON — minting only resolves the path and
-ensures the folder, and is safe in either phase. The second resolves the **branch delta**.
+on this task's title, and read `file_exists` off its JSON — minting resolves the path, ensures
+the folder, and seeds the file's empty skeleton if it is not there yet, and is safe in either
+phase. **The seeded skeleton does not count as an assessment**: `file_exists` reports written
+content, so it stays `false` until a stage actually fills a section, and the table below reads
+the same as it always did. The second resolves the **branch delta**.
 
 **Do not hand-build the path.** Mint it with the bundled `scripts/assessment-path` script
 and reuse its output everywhere. Your SessionStart context carries the concrete,
@@ -68,6 +71,14 @@ it carries. The relative `assessment_path` is a **display form** only: put it in
 tables and plan-file links, never in a write target.
 → `references/formatting/assessment-file.md` owns what the script resolves, the name's derivation, and
 the file's schema — read it before your first write.
+
+**Every write to `assessment_abs` is followed by a validation run** — yours and every worker's
+alike. Run the bundled `scripts/validate-assessment` script on the path you just wrote, with
+`--lenient` while the run is in progress and **without it at finalize**, and fix what it
+reports before the next step. The ready-to-run command is in your
+`INGRAIN-ASSESSMENT-PATHS` session context.
+→ `references/formatting/assessment-file.md` § **Validation — run it after every write** owns the
+two modes, the exit codes and the bounded fix-and-re-run rule.
 
 The third signal is the **branch delta**. Resolve it with the bundled `scripts/branch-diff`
 script and read **`delta_empty`** off its JSON: `true` means the branch delta is empty; `false`
@@ -165,7 +176,7 @@ would not change how this specific change is reviewed or implemented, omit it.
 INPUT:
 <the finished, detailed implementation plan; plus POINTERS to the sections this
 worker must read — e.g. "read <the run's assessment file> § Threats and
-§ Threat critique" — on revision rounds, the pointer to the prior draft's section +
+§ Threat critique" — on the revision round, the pointer to the prior draft's section +
 the critic's itemized feedback>
 Write your full Output into your section of the assessment file, then RETURN ONLY:
 your branch keyword (minor/major, approved/needs-revision) or headline result, plus
@@ -175,6 +186,14 @@ a one-line pointer to the section you wrote. Do not return the full output.
 Branch on the keyword the worker leads its return with (`minor`/`major`,
 `approved`/`needs-revision`), and pass the **next** worker a pointer to the sections it must
 read.
+
+**Validate on every return, before you dispatch the next worker.** The worker wrote the file;
+you are the one who can check it, because the workers hold no shell — run
+`scripts/validate-assessment` with `--lenient` on `assessment_abs` after every worker that
+wrote it, and fix what it reports. A malformed section is cheapest to repair here, while the worker that produced it can
+still be re-dispatched with the violations quoted back to it — and it never reaches the next
+worker, which reads the file for itself. This is a **read-only display + one bash call**; it
+does not relax the workers' Read/Grep/Glob constraint.
 
 **Model:** set each worker's model from the **Recommended model** line in its own reference
 file. You stay on the session model. Host-dependent — ignore where per-subagent model
@@ -221,9 +240,12 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    - `minor` → state "no security review needed — minor change" and **STOP**. Dispatch no
      other worker. There is nothing to fold into the plan — carry on building it.
    - `major` → keep its **Surfaces** notes and any **Prior analysis pointer** for Step 1, then
-     **create or open the assessment file** at `assessment_abs` with its title + banner and the
-     `## Task` section (`file_exists: true` means you are resuming this task's prior analysis).
-     The worker's `## Triage` section is already in it.
+     **open the assessment file** at `assessment_abs` — the mint already seeded it with its
+     title, banner and every empty section, so fill the `## Task` fields in place rather than
+     writing the page over (`file_exists: true` means you are resuming this task's prior
+     analysis).
+     The worker's `## Triage` section is already in it. Then **validate it** (`--lenient` — the
+     file is a skeleton at this point, which is exactly what that mode is for).
 
 1. **Threats** — dispatch `ingrain-threat-generator`, pointing it at the plan **and the
    `## Triage` section** (Surfaces seed the search; extend beyond them). **If triage returned a
@@ -232,10 +254,11 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    not blindly copy. It writes the `## Threats` rows under working tags `T1…` and returns a
    pointer. Its tags record discovery order; the risk-scorer assigns priority at Step 3.
 
-2. **Critique threats** *(loop, max 3)* — dispatch `ingrain-threat-critic` at `## Threats`.
-   - `needs-revision` → re-dispatch `ingrain-threat-generator` with a pointer to `## Threats`
-     + `## Threat critique`, and repeat.
-   - `approved`, or 3 rounds spent → **freeze** the threats. Surface anything left unresolved.
+2. **Critique threats** *(single round)* — dispatch `ingrain-threat-critic` at `## Threats`.
+   - `needs-revision` → re-dispatch `ingrain-threat-generator` **once**, with a pointer to
+     `## Threats` + `## Threat critique`, then **freeze** the threats. Do not critique again.
+   - `approved` → **freeze** the threats.
+   - Either way, surface anything the critique left unresolved.
 
 3. **Risk score** — dispatch `ingrain-risk-scorer` at the frozen `## Threats`. It fills each
    row's scoring columns, writes the plan-level residual into `## Risk score`, and **re-tags
@@ -256,7 +279,8 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
       (`T1` first)**, with the columns below.
    3. **Present** one single-choice window per threat; mark high/critical recommended.
    4. **Record** each threat's `Selection` in `## Threats` (include → `selected`, exclude →
-      `excluded`; `undecided` only if the user is explicitly unsure).
+      `excluded`; `undecided` only if the user is explicitly unsure), then **validate**
+      (`--lenient`) — a mistyped `Selection` here silently drops a threat from Testing's scope.
 
    | Column | Contents |
    |--------|----------|
@@ -330,13 +354,14 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
      re-run completes the one expansion pass. Only if the user **declines** (or no permission channel
      exists) do you continue with Step 5's rules alone, noting that access was declined.
 
-8. **Critique mitigations** *(loop, max 3)* — dispatch `ingrain-mitigation-critic` at
+8. **Critique mitigations** *(single round)* — dispatch `ingrain-mitigation-critic` at
    `## Mitigations` **and the expanded `rules-<…>.md` sidecar**, so it can judge the
    mitigations against the rules they cite *and* against the rules Step 7 added. A rule the
    expander found that no mitigation applies is exactly the gap this critic reports.
-   - `needs-revision` → re-dispatch `ingrain-mitigation-generator` (only the generator — never
-     the expander), and repeat.
-   - `approved`, or 3 rounds spent → **freeze** the mitigations.
+   - `needs-revision` → re-dispatch `ingrain-mitigation-generator` **once** (only the
+     generator — never the expander), then **freeze** the mitigations. Do not critique again.
+   - `approved` → **freeze** the mitigations.
+   - Either way, surface anything the critique left unresolved.
 
 9. **Gate 2 — the user selects which mitigations to adopt.** Follow **How to ask the user**.
    In order:
@@ -348,7 +373,7 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    3. **Present** one single-choice window per mitigation, labeled by short title + the threat
       tag(s) it addresses (or `general`).
    4. **Record** each mitigation's `Selection` in `## Mitigations` (adopt → `selected`, decline
-      → `excluded`).
+      → `excluded`), then **validate** (`--lenient`).
 
    | Column | Contents |
    |--------|----------|
@@ -397,6 +422,14 @@ they are iteration scratch, and the finalized file carries only end results. **L
 verification pass reads in a later session. One write, to the minted `assessment_abs`; the
 file already lives at its final path, so **finalizing it in place *is* persisting it**.
 
+Then **validate it strictly — no `--lenient`**: this is the finished file, and the file is
+finalized only once the script comes back clean. Validate the `rules-<…>.md` sidecar the same
+way when one was written. Fix and re-run per the bounded rule
+(`references/formatting/assessment-file.md` § **Validation — run it after every write**); if
+anything survives two attempts, name it in your closing verdict rather than closing quietly
+over it. Everything downstream — the plan file's link, the implementing agent, the Testing
+pass in a later session — reads this file and never sees the run that wrote it.
+
 **2. Write the results into the plan file.** Incorporate the selected threats and adopted
 mitigations, plus two supporting things:
 
@@ -424,8 +457,8 @@ threat Gate 1 selected, can it still be realized in the code as built? The threa
 scope. It fires when
 **Phase select** lands on Testing — an assessment for this task exists, it carries `selected`
 mitigations, and the branch delta is non-empty (`scripts/branch-diff` → `delta_empty: false`).
-**Everything above this line belongs to Development:** Steps 0–9, both gates, the critic
-loops, and the org-rules CLI lookup.
+**Everything above this line belongs to Development:** Steps 0–9, both gates, the critique
+steps, and the org-rules CLI lookup.
 
 **Read `references/testing/verification-pass.md` NOW and follow it.** The full loop lives
 there; this section is a pointer, and the procedure is in that file.
@@ -442,8 +475,8 @@ there; this section is a pointer, and the procedure is in that file.
 | "I'll write mitigations even though the user selected zero threats" | Zero threats selected at Gate 1 ends the review — nothing proceeds to mitigation. |
 | "I'll make the gate one yes/no over the whole set" | Each gate is a per-finding selection — one single-choice include/exclude window per finding; the user decides each individually (zero is allowed). |
 | "The user excluded T2, but it's important — I'll mitigate it anyway" | Excluded findings are out of scope. Record them as accepted risk and move on. |
-| "The critic flagged issues but it's good enough" | Re-run the generator with the feedback (up to 3 rounds). |
-| "This loop could keep improving forever" | Cap each critic loop at 3 rounds; surface what's unresolved. |
+| "The critic flagged issues but it's good enough" | Re-run the generator once with the feedback, then freeze. |
+| "I'll critique the revised set once more to be sure" | There is exactly one critique pass per step. Freeze after the single revision and surface what's unresolved. |
 | "I'll just answer the worker's job myself instead of dispatching" | Each worker runs in its own read-only subagent — dispatch it, don't inline it. |
 | "I'll read the whole assessment file to see where we are" | Hold only the compact statuses workers return. The bounded gate slices and finalize are the only reads. |
 | "`.ingrain-security/assessment-….md` is clear enough — the worker will find it" | It won't. A relative path is resolved by whoever receives it, and a worker has no project root in view — it resolves against the file it was reading and creates a stray folder there. Pass the absolute `assessment_abs`, always. |
@@ -455,6 +488,8 @@ there; this section is a pointer, and the procedure is in that file.
 | "I'll have the mitigation-generator look up a rule it's missing" | The generator has no CLI. Step 5 retrieves before it runs and Step 7 expands after; on a revision round it re-reads the sidecar, which is already complete. |
 | "The expander found new rules — I'll run it again after the critic" | It runs **exactly once**. The critic flagging an unapplied rule is what folds new rules into the mitigations; re-dispatching the expander is not the mechanism. (Re-running it because the fetch was permission-blocked is a recovery, not a second pass.) |
 | "I'll cite a plausible-sounding org rule to back this mitigation" | Cite only rules actually returned by `ingrain context` — never invent a rule or an id. |
+| "The section it wrote looks right — no need to validate" | It looks right to you; the schema is what the next reader depends on. Run `scripts/validate-assessment` after every write (`--lenient` mid-run, strict at finalize) — an enum typo or a broken row is invisible until it breaks in a later session. |
+| "The validator failed and I can't satisfy it — I'll finalize anyway and say nothing" | Fix what it names, re-run at most twice, and if it still fails **say so in one line** naming the remaining violations. Quietly handing on a file you know is malformed is the one outcome the check exists to prevent. |
 | "I'll put all the detail in the window options and skip the table" | Display the findings as a table first, then present the single-choice windows — never the windows alone. |
 | "I'm in plan mode / keeping output lean, so I'll skip printing the gate table" | The gate table is mandatory visible output in every mode. Read the bounded slice of the assessment file — that read is the one the context-window discipline permits — and print the table before any window. |
 
@@ -464,15 +499,17 @@ The procedure is **Development — the flow**; this is the tracker. Tick only wh
 done. Work top to bottom — never skip a step, never reorder the pipeline, never batch. (The
 `ingrain-risk-scorer` re-tagging threats into risk order at step 3 belongs to its job.) Each
 gate incorporates exactly the selected subset — never an unselected or unreviewed finding.
+**After every write to `assessment_abs` — yours, or a worker's the moment it returns — run
+`scripts/validate-assessment` (`--lenient` until finalize) and fix what it reports.**
 
 - [ ] 0. Triage dispatched — bias to `major` when uncertain; `minor` → stop, `major` → open the assessment file
 - [ ] 1. Threats generated into `## Threats`, seeded from any prior analysis
-- [ ] 2. Threat critique loop closed — approved, or 3 rounds spent; threats frozen
+- [ ] 2. Single threat critique pass done — approved, or one revision applied; threats frozen
 - [ ] 3. Risk scored; threats re-tagged into descending-risk order
 - [ ] 4. Gate 1 — table displayed in the conversation FIRST, then one window per threat; `Selection` recorded (zero selected ends the review)
 - [ ] 5. Org rules retrieved by YOU via the `ingrain` CLI, from plan + selected threats; sidecar written (or none, if nothing came back)
 - [ ] 6. Mitigations generated for the selected threats ONLY, grounded in the sidecar; generator ran on Read/Grep/Glob alone
 - [ ] 7. Rule expander dispatched ONCE — second pass keyed on the mitigations; appended to the sidecar (skipped only if the CLI is absent)
-- [ ] 8. Mitigation critique loop closed — approved, or 3 rounds spent; only the generator re-dispatched; mitigations frozen
+- [ ] 8. Single mitigation critique pass done — approved, or one revision applied; only the generator re-dispatched; mitigations frozen
 - [ ] 9. Gate 2 — table displayed FIRST, then one window per mitigation; `Selection` recorded
-- [ ] Finalize — `Latest stage: development` set, critique sections deleted, sidecar kept, plan file carries the assessment link + Maintenance
+- [ ] Finalize — `Latest stage: development` set, critique sections deleted, sidecar kept, assessment validated strictly, plan file links it + Maintenance

@@ -65,6 +65,8 @@ interface IPathJson {
   assessment_abs: string;
   basename: string;
   file_exists: boolean;
+  template_seeded: boolean;
+  template_only: boolean;
   instruction: string;
 }
 
@@ -126,19 +128,103 @@ Deno.test("mint: writes into .ingrain-security/, keyed by branch + task", async 
   });
 });
 
-Deno.test("mint: file_exists reflects an already-present file (resume)", async () => {
+Deno.test("mint: file_exists reflects an already-WRITTEN file (resume)", async () => {
   await withProject(async (dir) => {
     await sh(gitRepo("feature/foo"), dir);
     const first = await runJson(["claude", "mint", "--title", "Add JWT auth"], {
       projectDir: dir,
     });
-    // The script does not create the .md; simulate a prior run having written it.
+    // The mint seeds a skeleton, which does not count as an assessment; simulate a prior
+    // run having written real analysis into it.
     await Deno.writeTextFile(first.assessment_abs, "# prior\n");
     const second = await runJson(["claude", "mint", "--title", "Add JWT auth"], {
       projectDir: dir,
     });
     assertEquals(second.assessment_path, first.assessment_path); // same task -> same file
     assertEquals(second.file_exists, true);
+    assertEquals(second.template_seeded, false);
+    assertEquals(second.template_only, false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mint: the seeded skeleton
+// ---------------------------------------------------------------------------
+
+Deno.test("mint: seeds the empty skeleton, structure only", async () => {
+  await withProject(async (dir) => {
+    await sh(gitRepo("feature/foo"), dir);
+    const j = await runJson(["claude", "mint", "--title", "Add JWT auth"], { projectDir: dir });
+    assertEquals(j.template_seeded, true);
+    assertEquals(j.template_only, true);
+    assertEquals(j.file_exists, false); // a skeleton is not an assessment
+
+    const md = await Deno.readTextFile(j.assessment_abs);
+    assertStringIncludes(md, "# Security assessment — Add JWT auth");
+    assertStringIncludes(md, "Title: Add JWT auth");
+    assertStringIncludes(md, "Latest stage: development");
+    for (
+      const section of [
+        "## Task",
+        "## Triage",
+        "## Threats",
+        "## Risk score",
+        "## Mitigations",
+        "## Coverage / open items",
+        "## Maintenance (for the implementing agent)",
+      ]
+    ) {
+      assertStringIncludes(md, `\n${section}\n`);
+    }
+    // Both table headers are on the page, and neither carries a data row.
+    assertStringIncludes(md, "| Tag | Title | Asset | Vector |");
+    assertStringIncludes(md, "| Tag | Title | Description | Yield | Effort |");
+    assertEquals(/^\|\s*[TM]\d/m.test(md), false, "skeleton must hold no example rows");
+  });
+});
+
+Deno.test("mint: re-minting leaves an untouched skeleton byte-identical", async () => {
+  await withProject(async (dir) => {
+    await sh(gitRepo("feature/foo"), dir);
+    const first = await runJson(["claude", "mint", "--title", "Add JWT auth"], {
+      projectDir: dir,
+    });
+    const seeded = await Deno.readTextFile(first.assessment_abs);
+    const second = await runJson(["claude", "mint", "--title", "Add JWT auth"], {
+      projectDir: dir,
+    });
+    assertEquals(second.template_seeded, false); // already there — not rewritten
+    assertEquals(second.template_only, true);
+    assertEquals(second.file_exists, false);
+    assertEquals(await Deno.readTextFile(first.assessment_abs), seeded);
+  });
+});
+
+Deno.test("mint: an appended line makes the file written, and is not clobbered", async () => {
+  await withProject(async (dir) => {
+    await sh(gitRepo("feature/foo"), dir);
+    const first = await runJson(["claude", "mint", "--title", "Add JWT auth"], {
+      projectDir: dir,
+    });
+    const written = await Deno.readTextFile(first.assessment_abs) + "\nVerdict: major\n";
+    await Deno.writeTextFile(first.assessment_abs, written);
+    const second = await runJson(["claude", "mint", "--title", "Add JWT auth"], {
+      projectDir: dir,
+    });
+    assertEquals(second.file_exists, true);
+    assertEquals(second.template_only, false);
+    assertEquals(await Deno.readTextFile(first.assessment_abs), written);
+  });
+});
+
+Deno.test("mint: with no title the skeleton drops the title, not the structure", async () => {
+  await withProject(async (dir) => {
+    await sh(gitRepo("feature/foo"), dir);
+    const j = await runJson(["claude", "mint"], { projectDir: dir });
+    const md = await Deno.readTextFile(j.assessment_abs);
+    assertEquals(md.startsWith("# Security assessment\n"), true);
+    assertStringIncludes(md, "\nTitle:\n");
+    assertStringIncludes(md, "\n## Mitigations\n");
   });
 });
 

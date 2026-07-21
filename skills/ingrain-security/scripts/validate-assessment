@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# Schema validator for the ingrain-security assessment file.
+#
+# The assessment file this plugin persists into `.ingrain-security/` has its shape
+# specified in prose only (`references/formatting/assessment-file.md`), and is written
+# across two phases by several different agents. This script checks a written file against
+# that shape and names every violation, so a missing section, a bad enum, a tag gap or a
+# mangled table row surfaces at the writer rather than at a downstream reader.
+#
+# The check is STRUCTURAL: sections, table headers, tag sequences, enumerated values,
+# numeric ranges, the 256-character justification cap, and the cross-references between
+# tables. It does NOT reason about which phase fills which column, so an unset (`—`)
+# Selection, Justification or Robustness always passes.
+#
+# It runs after EVERY write to the file, which is why it has two modes: `--lenient` while
+# the run is in progress (the file is legitimately incomplete), and strict at finalize (the
+# file must be whole). See references/formatting/assessment-file.md → Validation for the
+# contract the agents follow.
+#
+# Emits ONE JSON object on stdout; the violations also go to stderr, one per line, as
+# `<path>:<line>: <message>`.
+#
+# Usage:
+#   validate-assessment <file> [--lenient]
+#   validate-assessment --help
+#
+# Exit codes: 0 valid · 1 schema violations · 2 usage error / unreadable file.
+#
+# Uses `set -uo pipefail` WITHOUT `-e`: every check must run so one invocation reports the
+# whole list of violations rather than the first one.
+
+set -uo pipefail
+
+usage() {
+    cat <<'EOF'
+Validate an ingrain-security assessment file against its schema.
+Prints one JSON object to stdout and each violation to stderr.
+
+Usage:
+  validate-assessment <file> [--lenient]
+  validate-assessment --help
+
+Arguments:
+  <file>              the .md assessment file to check.
+
+Flags:
+  --lenient           the file is MID-RUN and not yet complete: waive the checks that can
+                      only hold once it is finished — a required section not written yet,
+                      a required field not filled in yet, a section whose table is still
+                      empty, non-contiguous T<n>/M<n> tags (mid-loop they are the
+                      generator's working labels) and rows not yet ordered by descending
+                      risk. That is exactly the shape the `assessment-path` minter seeds,
+                      so a freshly seeded skeleton passes lenient and fails strict.
+                      Everything already written is still checked in full. Drop the flag at
+                      finalize, where the file must be complete (see
+                      references/formatting/assessment-file.md).
+
+Checked (structure only — never which phase filled which column, so an unset `—` passes):
+  required sections and their order; Task/Triage/Risk score fields and their enumerated
+  values; both table headers; T<n>/M<n> tag form, uniqueness and sequence;
+  Impact/Likelihood/Criticality/Yield/Effort/Selection/Robustness values; Risk score 0-100
+  and descending; justifications <= 256 characters; every Threat tag resolving to a row of
+  the Threats table.
+
+Exit codes: 0 valid · 1 schema violations · 2 usage error / unreadable file.
+EOF
+}
+
+# --- helpers ----------------------------------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# escape_for_json lives in project-root.sh (shared with the hooks and the minters); every
+# parsing and checking routine lives in validate-md.sh. This script is argument handling
+# and the exit-code contract.
+# shellcheck source=lib/project-root.sh
+if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
+    printf 'validate-assessment: cannot load lib/project-root.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/validate-md.sh
+if ! . "${SCRIPT_DIR}/lib/validate-md.sh" 2>/dev/null; then
+    printf 'validate-assessment: cannot load lib/validate-md.sh\n' >&2
+    exit 1
+fi
+
+main() {
+    local path="" lenient="false"
+
+    case "${1:-}" in
+        -h | --help)
+            usage
+            return 0
+            ;;
+        "")
+            printf 'validate-assessment: missing <file>. Try --help.\n' >&2
+            return 2
+            ;;
+    esac
+
+    path="$1"
+    shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --lenient)
+                lenient="true"
+                shift
+                ;;
+            *)
+                printf 'validate-assessment: unknown flag "%s"\n' "$1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    VLD_LENIENT="${lenient}"
+
+    [ -f "${path}" ] || {
+        printf 'validate-assessment: no such file: %s\n' "${path}" >&2
+        return 2
+    }
+    [ -r "${path}" ] || {
+        printf 'validate-assessment: cannot read: %s\n' "${path}" >&2
+        return 2
+    }
+
+    vld_reset
+    vld_load "${path}"
+    vld_validate_assessment
+
+    vld_report_stderr "${path}"
+    vld_report_json "${path}"
+
+    [ "$(vld_error_count)" -eq 0 ] || return 1
+    return 0
+}
+
+main "$@"

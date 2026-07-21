@@ -29,8 +29,8 @@ description: >-
 >   never edit the assessment file. Then return to the orchestrator ONLY a one-line headline
 >   (how many new rules you added, or that you added none) plus a pointer to the sidecar.
 > - **You run exactly once.** The orchestrator dispatches you a single time, between the
->   mitigation step and the critique loop, so make this pass count — the rules you add here
->   are the full set the critic and the generator's revisions work from.
+>   mitigation step and the critique step, so make this pass count — the rules you add here
+>   are the full set the critic and the generator's revision work from.
 > - **Blocked-fetch signal:** if the `ingrain context` lookup is blocked by the
 >   host's sandbox / permission layer and you cannot surface a permission prompt
 >   yourself, do not silently proceed — return the single line
@@ -97,7 +97,7 @@ exec. Recover it rather than degrading:
 permission grant would leave unchanged — the ones `references/lib/ingrain-cli.md` →
 **Failure taxonomy** classifies as such. In each case, **add no rules and proceed without rules** —
 leave any existing sidecar exactly as you found it, and write none if there was none. Do not
-fail or stall the review; the critique loop runs next regardless. In your return headline,
+fail or stall the review; the critique step runs next regardless. In your return headline,
 note briefly that no further rules were retrieved and why (e.g.
 `no further rules retrieved — CLI not configured`).
 
@@ -116,5 +116,8 @@ Cite only rules you actually retrieved — never invent a rule, an id, a title, 
 - **`## Retrieved rules`** — one new `### <id> — <title>` entry per newly retrieved rule, with the rule's **full body** verbatim underneath. Add them after the existing entries; leave the existing ones byte-for-byte alone.
 - **`## Applicable rules`** — for a new rule that is relevant to the change but does not map cleanly onto any one mitigation, add an `<id> — <title>` line here instead. Create the section if it does not exist.
 - **`## Per-mitigation mapping`** — **do not write here.** The mapping is keyed by mitigation tag, and mitigation tags are re-derived by the generator on every write; a mapping line you add would go stale the moment the generator revises. Leave the section untouched even for a rule you believe belongs to a specific mitigation.
+
+**Keep the append well-formed.** Re-read what you wrote before you return: an append that
+breaks a `### <id> — <title>` entry costs the critic and Gate 2 the rules you just found.
 
 The mitigation critic reads the sidecar next and flags any retrieved rule that no mitigation applies, which is what routes your findings back into the mitigations on a revision round. That is the whole path: your findings reach the mitigations through the critic's report and the generator's revision.

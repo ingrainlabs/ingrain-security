@@ -38,6 +38,7 @@ Run all commands from this `tests/` directory.
 ```
 lib/      claudeRunner.ts (spawn helper) · matchers.ts (assertions) · sampleInputs.ts (canned plans) · reporter.ts (input/output printer)
 static/   offline lint of worker-reference frontmatter + advisory ROLE + skill/hook structure (no model calls)
+scripts/  validate-assessment.test.ts — runs the schema validator under bash over valid and one-defect-per-case fixtures (no model calls)
 <<<<<<< HEAD
 <<<<<<< HEAD
 hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)

@@ -54,7 +54,7 @@ Also judge how faithfully the mitigations use the retrieved rules: a mitigation 
 
 ## Verdict guidance
 
-Lean `approved` when the score is roughly **≥ 80 and every in-scope threat has real coverage**. Lean `needs-revision` when a selected threat is uncovered, a mitigation is too vague to implement, or a clearly relevant retrieved rule is ignored or misapplied. The loop is capped at 3 rounds — spend revisions on genuine coverage gaps.
+Lean `approved` when the score is roughly **≥ 80 and every in-scope threat has real coverage**. Lean `needs-revision` when a selected threat is uncovered, a mitigation is too vague to implement, or a clearly relevant retrieved rule is ignored or misapplied. The generator gets **one** pass at your feedback and the set is frozen after it — spend that single pass on genuine coverage gaps.
 
 ## Team policy
 

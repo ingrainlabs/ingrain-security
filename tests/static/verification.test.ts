@@ -133,6 +133,19 @@ Deno.test("verification-pass.md: writes to the absolute assessment_abs, minted n
   assertStringIncludes(md, ".ingrain-security/assessment-<branch-slug>-<task-slug>.md");
 });
 
+Deno.test("verification-pass.md: validates its one write against the schema, strictly", async () => {
+  const md = await Deno.readTextFile(VERIFY);
+  // Testing writes the assessment once, and that write is a FINISHED file — so it runs the
+  // validator without --lenient. Losing this leaves the last write of the whole lifecycle
+  // unchecked, in the session that hands the file to everyone downstream.
+  assertStringIncludes(md, "scripts/validate-assessment");
+  assertStringIncludes(md, "no `--lenient`");
+  // The contract itself belongs to the schema reference; this file points at it.
+  assertStringIncludes(md, "references/formatting/assessment-file.md");
+  // And the checklist tracks it, like every other step-6 obligation.
+  assertStringIncludes(md, "validated clean by `scripts/validate-assessment` with NO `--lenient`");
+});
+
 Deno.test("verification-pass.md: guards title drift, never falls back to Development", async () => {
   const md = await Deno.readTextFile(VERIFY);
   // A drifted --title mints a different path; falling through to Development would re-run the
@@ -286,9 +299,11 @@ Deno.test("rules-file.md: defines the persistent org-rules sidecar schema", asyn
   // Its sections: retrieved rules (id/title/body) + per-mitigation mapping.
   assertStringIncludes(md, "## Retrieved rules");
   assertStringIncludes(md, "## Per-mitigation mapping");
-  // It persists past finalize, and exists exactly when a pass retrieved rules.
+  // It persists past finalize. The minter seeds an empty skeleton, so it is the CONTENT
+  // that is conditional — the file carries rules exactly when a pass retrieved them.
   assertStringIncludes(md.toLowerCase(), "persist");
-  assertStringIncludes(md, "Created when org rules are retrieved");
+  assertStringIncludes(md, "Filled when org rules are retrieved");
+  assertStringIncludes(md, "skeleton");
 });
 
 /**

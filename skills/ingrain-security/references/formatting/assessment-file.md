@@ -35,6 +35,18 @@ shape.
   seeded by the `ensure-assessment-dir` hook and re-ensured by the script), so the whole
   folder — the ignore file included — stays out of `git status`; sharing a file is an
   explicit `git add -f <file>` opt-in.
+- **Seeded, never blank.** The same mint **writes this file's empty skeleton** when it does
+  not exist yet — every heading in schema order, both table headers with their separator
+  rows, and the field labels, with **no content**: no example rows, no placeholder values.
+  So no writer starts from a blank page or reproduces a table header from this document;
+  **fill the sections in place** rather than re-creating the page. An existing file is never
+  rewritten. The skeleton is deliberately valid under `validate-assessment --lenient` and
+  invalid strictly — an unfilled skeleton is not a finished assessment.
+  Because of the seeding, **`file_exists` reports written content, not the file's
+  presence**: an untouched skeleton reads as `false`, exactly like no file at all, which is
+  what keeps it usable as the Phase-select and resume signal. Two further fields say which
+  empty case you are in — `template_seeded` (this mint wrote the skeleton) and
+  `template_only` (the file is still an untouched skeleton).
 - **Pre-approved.** An `allow-assessment-write` hook auto-approves writes to this file on
   both hosts — `PreToolUse` on Claude Code, `PermissionRequest` on Codex — so expect **no
   permission prompt** when writing it. The grant covers only `assessment*.md` directly
@@ -202,6 +214,42 @@ produced it, so a mitigation's Robustness always tracks the threats it covers.
   returns. Re-minting is deterministic in branch + title, so it resolves to this same
   file. It must never resolve a relative `.ingrain-security/…` string against the file it
   is editing, and must never create the folder. 
+
+## Validation — run it after every write
+
+**Every time this file is written, it is checked with the bundled
+`scripts/validate-assessment` script.** No exceptions: after the orchestrator opens it, after
+each worker returns from writing its section, after a gate's `Selection` is recorded, and at
+finalize. The next reader is a different agent in a different context — a malformed row is
+invisible until it breaks there, and by then the run that produced it is over.
+
+**The orchestrator runs it, including for the workers.** Workers are Read/Grep/Glob only and
+hold no shell, so a worker writes its section and returns; the orchestrator validates that
+write before dispatching the next one, and re-dispatches the worker with the violations quoted
+back if something is wrong. (The `ingrain-rule-expander`, the one worker that carries exec,
+validates its own sidecar append.)
+
+Run it on the **same absolute path you just wrote to** (`assessment_abs`); the ready-to-run
+command, with the plugin root already substituted, is in your `INGRAIN-ASSESSMENT-PATHS`
+session context:
+
+    bash <plugin>/skills/ingrain-security/scripts/validate-assessment <assessment_abs> [--lenient]
+
+**Two modes, one rule.** Pass **`--lenient` while the run is in progress** — mid-run this
+file is incomplete by design (at Step 0 it holds only `## Task` and `## Triage`), and
+lenient waives exactly the checks that cannot hold yet: a section not written, a table not
+filled, tags not yet contiguous, rows not yet in risk order. Everything already on the page
+is still checked in full. **Drop the flag at finalize**, where the file must be whole.
+
+It exits `0` valid · `1` schema violations · `2` usage error, prints one JSON object on
+stdout and each violation on stderr as `<path>:<line>: <message>` — the line and the field
+are named, so the fix is local.
+
+**On exit 1: fix exactly the violations it names, then re-run — at most twice.** Fix by
+correcting what you wrote, never by inventing content to satisfy a check. If it still fails
+after the second attempt, **say so in one line naming the remaining violations** and carry
+on; do not loop, and do not hand on a file you know is malformed while staying quiet
+about it.
 
 ## Template
 
