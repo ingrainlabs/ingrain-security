@@ -27,7 +27,7 @@ shape.
   **same file** (the run resumes/updates it in place; `file_exists: true` signals this),
   while a different task or branch gets its own file. This is also **how two concurrent
   tasks on one branch stay isolated** — distinct titles mint distinct files, so parallel
-  reviews never clobber each other; the separation is structural — the filename enforces
+  reviews each keep to their own file; the separation is structural — the filename enforces
   it. Any unresolvable segment is dropped
   (branch unknown → `assessment-<task-slug>.md`; no usable title →
   `assessment-<branch-slug>.md`; both absent → `assessment.md`), and the `assessment-`
@@ -35,13 +35,14 @@ shape.
   seeded by the `ensure-assessment-dir` hook and re-ensured by the script), so the whole
   folder — the ignore file included — stays out of `git status`; sharing a file is an
   explicit `git add -f <file>` opt-in.
-- **Seeded, never blank.** The same mint **writes this file's empty skeleton** when it does
+- **Seeded with a skeleton.** The same mint **writes this file's empty skeleton** when it does
   not exist yet — every heading in schema order, both table headers with their separator
   rows, and the field labels, with **no content**: no example rows, no placeholder values.
   So no writer starts from a blank page or reproduces a table header from this document;
-  **fill the sections in place** rather than re-creating the page. An existing file is never
-  rewritten. The skeleton is deliberately valid under `validate-assessment --lenient` and
-  invalid strictly — an unfilled skeleton is not a finished assessment.
+  **fill the sections in place** rather than re-creating the page — an existing file is always
+  filled as it stands. The skeleton is deliberately valid under `validate-assessment --lenient`
+  and invalid strictly, which is what marks an unfilled skeleton apart from a finished
+  assessment.
   Because of the seeding, **`file_exists` reports written content, not the file's
   presence**: an untouched skeleton reads as `false`, exactly like no file at all, which is
   what keeps it usable as the Phase-select and resume signal. Two further fields say which
@@ -124,7 +125,7 @@ One row per threat, with these columns:
 | **Risk score** | integer `0`–`100` |
 | **Criticality** | `low` \| `medium` \| `high` \| `critical` |
 | **Selection** | `selected` \| `excluded` \| `undecided` (optional until Gate 1) |
-| **Robustness** | `weak` \| `adequate` \| `strong` — how well the adopted mitigations cover this threat in the implementation: `weak` = the threat can still be realized (a route survives, or the analysis leaves its closure unestablished); `adequate` = its realization routes are closed; `strong` = closed broadly **plus** artefacts that would fail if the control regressed. Concluded by the Testing pass from negative testing against the branch diff. Normative definitions: `references/testing/verification-pass.md` → **Robustness levels**. **Must not be set before that verification runs** — `—` until then, and for any row not `selected`. |
+| **Robustness** | `weak` \| `adequate` \| `strong` — how well the adopted mitigations cover this threat in the implementation: `weak` = the threat can still be realized (a route survives, or the analysis leaves its closure unestablished); `adequate` = its realization routes are closed; `strong` = closed broadly **plus** artefacts that would fail if the control regressed. Concluded by the Testing pass from negative testing against the branch diff. Normative definitions: `references/testing/verification-pass.md` → **Robustness levels**. **Set it from that verification's verdict** — it reads `—` until then, and for any row outside the `selected` set. |
 
 **Justification leads the scoring columns on purpose.** The scorer fills a row
 left-to-right, so this table doubles as a reasoning schema: writing the justification
@@ -163,10 +164,10 @@ this table.
 | **Yield** | `high` \| `medium` \| `low` |
 | **Effort** | `high` \| `medium` \| `low` |
 | **Threat tags** | `0..N` threat tags (e.g. `T1, T3`); `—` when the mitigation is a general implementation instruction not tied to a specific threat |
-| **Rule refs** | the org rule id(s) the mitigation follows, `0..N` comma-separated (e.g. `r-auth-01, r-log-03`); `—` when it follows no org rule (a pure threat mitigation). One mitigation may follow multiple rules. Ids are machine-facing — stored here, **never rendered to the user** (Gate 2 shows rule titles instead). Each id is the link into the persistent `rules-<…>.md` sidecar, where the rule's title and full body live (see `references/formatting/rules-file.md`). |
+| **Rule refs** | the org rule id(s) the mitigation follows, `0..N` comma-separated (e.g. `r-auth-01, r-log-03`); `—` when it follows no org rule (a pure threat mitigation). One mitigation may follow multiple rules. Ids are machine-facing — they stay in this file, and **the user sees rule titles** (Gate 2 resolves each id to its title). Each id is the link into the persistent `rules-<…>.md` sidecar, where the rule's title and full body live (see `references/formatting/rules-file.md`). |
 | **Selection** | `selected` \| `excluded` \| `undecided` (optional until Gate 2) |
-| **Justification** | string, **≤ 256 characters** — the reasoning behind this row's **Robustness**, concluded by the Testing orchestrator from the verifier's read. **Must not be set before that verification runs** — `—` until then, and for any row not `selected`. |
-| **Robustness** | `weak` \| `adequate` \| `strong` — this mitigation's contribution to closing the threats it covers, **derived from their `## Threats` → `Robustness`**: covering one threat, it takes that threat's value; covering several that differ, **the weakest governs**. A general implementation instruction (no threat tag) takes its value from whether the instruction was followed. The same measure as the threat column, projected onto the mitigation row — not a second axis; normative definitions: `references/testing/verification-pass.md` → **Robustness levels**. **Must not be set before that verification runs** — `—` until then, and for any row not `selected`. |
+| **Justification** | string, **≤ 256 characters** — the reasoning behind this row's **Robustness**, concluded by the Testing orchestrator from the verifier's read. **Set it from that verification's verdict** — it reads `—` until then, and for any row outside the `selected` set. |
+| **Robustness** | `weak` \| `adequate` \| `strong` — this mitigation's contribution to closing the threats it covers, **derived from their `## Threats` → `Robustness`**: covering one threat, it takes that threat's value; covering several that differ, **the weakest governs**. A general implementation instruction (no threat tag) takes its value from whether the instruction was followed. The same measure as the threat column, projected onto the mitigation row — not a second axis; normative definitions: `references/testing/verification-pass.md` → **Robustness levels**. **Set it from that verification's verdict** — it reads `—` until then, and for any row outside the `selected` set. |
 
 **Follows org rules is derived from Rule refs.** A mitigation with ≥1 **Rule ref**
 follows org rules; an empty **Rule refs** (`—`) means a pure threat mitigation. Surface
@@ -212,8 +213,8 @@ produced it, so a mitigation's Robustness always tracks the threats it covers.
   in context, so it must **re-run** the `assessment-path` mint command from its
   `INGRAIN-ASSESSMENT-PATHS` session context and write to the `assessment_abs` it
   returns. Re-minting is deterministic in branch + title, so it resolves to this same
-  file. It must never resolve a relative `.ingrain-security/…` string against the file it
-  is editing, and must never create the folder. 
+  file — and the mint is what resolves the path and ensures the folder, so `assessment_abs`
+  arrives ready to write to. 
 
 ## Validation — run it after every write
 
@@ -246,10 +247,9 @@ stdout and each violation on stderr as `<path>:<line>: <message>` — the line a
 are named, so the fix is local.
 
 **On exit 1: fix exactly the violations it names, then re-run — at most twice.** Fix by
-correcting what you wrote, never by inventing content to satisfy a check. If it still fails
+correcting what you wrote, so the file earns the pass on its content. If it still fails
 after the second attempt, **say so in one line naming the remaining violations** and carry
-on; do not loop, and do not hand on a file you know is malformed while staying quiet
-about it.
+on — two attempts is the bound, and saying it out loud is what the check exists to secure.
 
 ## Template
 
@@ -298,8 +298,8 @@ and keep every enumerated field within its allowed values.
 
 To locate this file, re-run the `assessment-path` mint command from your
 INGRAIN-ASSESSMENT-PATHS session context and write to the absolute `assessment_abs`
-it returns — it resolves back to this same file. Do not resolve a relative path
-against the file you are editing, and do not create an `.ingrain-security/` folder.
+it returns — it resolves back to this same file, and the mint is what resolves the
+path and ensures the folder.
 
 Org rules for this task (if any were retrieved) live in the linked sidecar
 .ingrain-security/rules-<branch-slug>-<task-slug>.md — re-mint it with the `rules-path`

@@ -6,8 +6,8 @@
  * (skills/ingrain-security/references/development/<name>.md), so the read-only guarantee is
  * advisory prose in the ROLE header rather than a platform-enforced `tools:`
  * frontmatter list. These checks guard that advisory contract: every worker
- * still declares itself read-only on the codebase (Read/Grep/Glob, no code
- * edits) with its sole write being its own section of the stored assessment
+ * still declares itself read-only on the codebase (Read/Grep/Glob as its whole
+ * toolset) with its sole write being its own section of the stored assessment
  * file, carries a recommended model, and an anti-trigger description so it isn't
  * fired directly outside the orchestrator.
  *
@@ -49,20 +49,20 @@ const flattenProse = (md: string): string => md.replace(/^\s*>\s?/gm, "").replac
 
 /** The ROLE phrasing every worker shares, unless it appears in ROLE_OVERRIDES. */
 const STANDARD_ROLE = {
-  noEdits: "make no code edits",
+  toolset: "read, grep, and glob alone to inspect the",
   writeTarget: "path your dispatch specifies",
 };
 
 /**
- * The rule-expander may run a read-only `ingrain` CLI lookup, so its ROLE is
- * worded for that exception: the no-edits clause is broader (no edits at all, not just
- * code) and it names the dispatch path differently. Note "make no code edits" does not
- * contain "make no edits" as a substring, so the standard workers keep the strictly
- * stronger assertion — this override is not a back door for them.
+ * The rule-expander may run a read-only `ingrain` CLI lookup, so its ROLE is worded for that
+ * exception: its toolset clause covers the codebase plus the two `ingrain` invocations, and it
+ * names the dispatch path differently. The two toolset phrases are disjoint — neither contains
+ * the other — so the standard workers keep the strictly narrower assertion and this override is
+ * not a back door for them.
  */
 const ROLE_OVERRIDES: Record<string, typeof STANDARD_ROLE> = {
   "ingrain-rule-expander": {
-    noEdits: "make no edits",
+    toolset: "read, grep, and glob alone on the codebase",
     writeTarget: "path per your dispatch",
   },
 };
@@ -82,16 +82,17 @@ for (const name of WORKERS) {
       assertExists(fm.description);
       const description = String(fm.description);
       assertEquals(description.trim().length > 0, true);
-      // Must steer the model away from invoking the worker directly.
+      // Must steer the model away from invoking the worker directly, by naming the
+      // orchestrator dispatch as the one way in.
       assertStringIncludes(description, "INTERNAL");
-      assertStringIncludes(description.toLowerCase(), "do not invoke directly");
+      assertStringIncludes(description.toLowerCase(), "reachable solely through a dispatch");
     });
 
     await t.step("ROLE header declares codebase read-only with the allowed tools", () => {
       const role = ROLE_OVERRIDES[name] ?? STANDARD_ROLE;
       assertStringIncludes(prose.toLowerCase(), "read-only");
       assertStringIncludes(prose, "Read, Grep, and Glob");
-      assertStringIncludes(prose.toLowerCase(), role.noEdits);
+      assertStringIncludes(prose.toLowerCase(), role.toolset);
       // The sole permitted write is the worker's own section of the stored analysis
       // file, located by the path the dispatch specifies (per-run, not a fixed literal).
       assertStringIncludes(prose, "stored analysis file");
@@ -112,8 +113,8 @@ for (const name of WORKERS) {
       assertStringIncludes(prose, "Recommended model:");
     });
 
-    await t.step("ROLE header tells the worker not to run the orchestration", () => {
-      assertStringIncludes(prose, "do not run the orchestration");
+    await t.step("ROLE header places the worker inside a pipeline the orchestrator drives", () => {
+      assertStringIncludes(prose, "you run one step of a larger pipeline");
     });
   });
 }

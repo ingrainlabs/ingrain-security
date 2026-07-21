@@ -5,7 +5,7 @@
 A Claude Code / Codex plugin. Once your implementation plan is comprehensive and
 detailed — but *before* any code is written or the plan is presented — Ingrain
 Security threat-models the plan and folds the results back into it. It is
-**read-only on your codebase**: it never edits code.
+**read-only on your codebase**: it reads and reports, and leaves the code to you.
 
 - Repository: <https://github.com/ingrainlabs/ingrain-security>
 - License: MIT
@@ -142,12 +142,12 @@ If a task has no assessment (or no adopted mitigations), there is nothing to ver
 
 Writes to that one file are approved automatically — by a `PreToolUse` hook on Claude
 Code and a `PermissionRequest` hook on Codex — so a review does not interrupt you with a
-permission prompt on every edit. The grant is deliberately narrow: only `assessment*.md`
-files sitting directly in the project's `.ingrain-security/` folder, and never through a
-symlink. On Codex, where an edit is an `apply_patch`, the patch must touch nothing but
-those files and may only add or update them. Everything else — including the folder's own
-`README.md` — still goes through your normal permission prompt, and the hook can only
-*skip* a prompt, never block an edit you asked for. Codex asks you to review and trust the
+permission prompt on every edit. The grant is deliberately narrow: `assessment*.md`
+files sitting directly in the project's `.ingrain-security/` folder, reached by a real path
+rather than a symlink. On Codex, where an edit is an `apply_patch`, the patch may add or
+update exactly those files. Everything else — including the folder's own
+`README.md` — still goes through your normal permission prompt, and the hook's only power
+is to *skip* a prompt: an edit you asked for always goes through. Codex asks you to review and trust the
 hook once, via `/hooks`.
 
 ## Installation
@@ -198,8 +198,8 @@ the plugin still installs, but loses the SessionStart context injection and the
 assessment-folder seeding, so the automatic review won't fire. You can still invoke
 the skill manually.
 
-**Read-only guarantee.** The workers never edit code. The only writes the review
-makes are the assessment file and the findings folded into your plan.
+**Read-only guarantee.** The workers read your code and report on it. The review's only
+writes are the assessment file and the findings folded into your plan.
 
 **Sandboxing & network access.** The review's only outbound network calls are the
 read-only `ingrain context security_rules` lookups of its two rule-retrieval passes —

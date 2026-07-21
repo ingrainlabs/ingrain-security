@@ -26,7 +26,8 @@ appends a second pass keyed on the mitigations once they do. Follow this structu
   assessment path (`scripts/lib/mint-path.sh`), so the two always resolve to matching slugs.
 - **Filled when org rules are retrieved.** Minting **seeds the file with its empty skeleton**
   (`## Retrieved rules`, `## Per-mitigation mapping`, both empty), so a retrieval pass fills
-  the sections in place rather than building the page; an existing file is never rewritten.
+  the sections in place rather than building the page; an existing file is always filled as it
+  stands.
   Its **content** is conditional: it carries rules exactly when a retrieval pass got them back
   from the `ingrain` CLI. The orchestrator's first pass normally fills it; where that pass
   returns nothing, `ingrain-rule-expander` fills it later should its own pass find something.
@@ -61,15 +62,15 @@ of both passes. Render as a subsection per rule so the full body is readable:
   entry in the assessment) and the rule title (verbatim).
 - The rule **body/description** underneath — the full text as returned by
   `ingrain context security_rules … --json` (the `body` field), the org's authoritative
-  guidance on *how to implement* the control. Keep it verbatim; do not summarize.
+  guidance on *how to implement* the control. Keep it verbatim, in full.
 
-Cite only rules actually retrieved — never invent a rule, an id, or a body.
+Cite exactly the rules a retrieval pass returned, with the id, title and body as they came back.
 
 ### `## Per-mitigation mapping` — which rules each mitigation follows
 
 One line per mitigation that follows ≥1 rule, keyed by its tag:
-`M<n> → <id>[, <id>…]` with a one-line note on how the rule(s) shaped it. Write nothing for a
-mitigation whose **Rule refs** is `—` (a pure threat mitigation with no backing rule). Every id
+`M<n> → <id>[, <id>…]` with a one-line note on how the rule(s) shaped it. A mitigation whose
+**Rule refs** is `—` (a pure threat mitigation with no backing rule) is simply absent here. Every id
 here must appear as an entry in `## Retrieved rules`, and must match that mitigation's
 **Rule refs** in the assessment — the three stay in sync.
 
@@ -85,7 +86,7 @@ none.
 |-------|-------|--------|
 | Plan · Retrieve rules (step 5) | orchestrator | Creates the file and writes `## Retrieved rules` from the first CLI pass (only if rules came back) |
 | Plan · Mitigate (step 6) | `ingrain-mitigation-generator` | Reads `## Retrieved rules`; writes **only** `## Per-mitigation mapping`, rewriting it each revision round to stay in sync with `## Mitigations` |
-| Plan · Expand rules (step 7) | `ingrain-rule-expander` | **Appends** second-pass rules to `## Retrieved rules` / `## Applicable rules` — once, never on a revision round; creates the file if step 5 found nothing |
+| Plan · Expand rules (step 7) | `ingrain-rule-expander` | **Appends** second-pass rules to `## Retrieved rules` / `## Applicable rules` — exactly once per review, before the critique loop; creates the file if step 5 found nothing |
 | Plan · Critique (step 8) | `ingrain-mitigation-critic` | Reads it by pointer to judge how faithfully mitigations follow the cited rules, and which appended rules go unapplied |
 | Plan · Gate 2 (step 9) | orchestrator | Reads `## Per-mitigation mapping` + `## Retrieved rules` to resolve each **Rule ref** id → title for the "Follows rules" display |
 | Plan · finalize | orchestrator | **Leaves it in place** — the file is persistent |
@@ -97,11 +98,11 @@ Only the rule **titles** it records reach the user, at Gate 2; the file itself s
 
 To locate this file, re-run the `rules-path` mint command from the
 `INGRAIN-ASSESSMENT-PATHS` session context and use the absolute `rules_abs` it returns — it
-resolves back to this same file (deterministic in branch + title). Never resolve a relative
-`.ingrain-security/…` string against the file being edited, and never create the folder.
+resolves back to this same file (deterministic in branch + title). The mint is what resolves
+the path and ensures the folder, so `rules_abs` is ready to write to as it comes back.
 `file_exists: false` means no org rules were retrieved for this task — the file on disk is the
-minter's empty skeleton, and an empty `## Retrieved rules` is not an invitation to fill it:
-do not fabricate a rule; fall back to the mitigation Descriptions.
+minter's empty skeleton, and an empty `## Retrieved rules` stays empty until a real retrieval
+pass fills it. Judge from the mitigation Descriptions in the meantime.
 
 ## Template
 

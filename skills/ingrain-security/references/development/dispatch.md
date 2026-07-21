@@ -6,11 +6,11 @@ differently onto each host. The dispatch *prompt* is always the same; only the *
 changes.
 
 Always restate the constraint inline in the dispatch: "read-only on the codebase —
-use only Read/Grep/Glob and make no code edits; your only write is your own section
+Read/Grep/Glob are your whole toolset; your one write is your own section
 of the stored analysis file at the path this dispatch names."
 
 Your own writes as orchestrator — finalizing the assessment file, and the two plan-file writes at
-Gate 1 and Gate 2 — happen between worker steps, never inside one.
+Gate 1 and Gate 2 — happen strictly between worker steps, once the worker has returned.
 
 ## Host with a subagent / task primitive
 
@@ -30,7 +30,7 @@ session**: read the worker's reference file, follow it on the current INPUT, cap
 then move to the next step. This mode shares one write-capable context across every worker, so:
 
 - Discipline is the only enforcement here — hold the standing constraint yourself.
-- Run one worker step at a time, in strict order — never reorder or parallelize.
+- Run one worker step at a time, in the order the checklist lists them, letting each finish before the next begins.
 
 ## Org-rules retrieval and the CLI
 
@@ -46,7 +46,8 @@ command?") straight to the user.
 **The second pass is `ingrain-rule-expander`'s**, the one worker granted read-only `ingrain`
 invocations. Dispatch it with the host's shell/exec tool available **in addition to**
 Read/Grep/Glob (e.g. Claude Code: allow Bash for `ingrain`; Codex: the exec capability).
-Restate inline that it makes no edits and runs no other commands. It is dispatched **exactly
+Restate inline that its writes are confined to the rules sidecar and its commands to the two
+read-only `ingrain` invocations. It is dispatched **exactly
 once** per review. Every other worker runs on Read/Grep/Glob alone.
 
 **Relaying an access denial is a dispatch concern**, because reaching the user is the

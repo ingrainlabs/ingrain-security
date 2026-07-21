@@ -258,8 +258,9 @@ Deno.test("SKILL.md: documents the pointer-based hand-off and context-window dis
   const md = await Deno.readTextFile(SKILL);
   // Workers hand off via pointers, not by pasting full content.
   assertStringIncludes(md.toLowerCase(), "pointer");
-  // The orchestrator does not read the full running analysis into its context.
-  assertStringIncludes(md.toLowerCase(), "running analysis");
+  // The orchestrator's reads of the analysis are bounded to the gates and finalize.
+  assertStringIncludes(md.toLowerCase(), "context-window discipline");
+  assertStringIncludes(md.toLowerCase(), "bounded slice of the assessment file");
 });
 
 Deno.test("SKILL.md: folds the assessment link + maintenance instruction into the plan", async () => {

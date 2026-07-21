@@ -41,8 +41,8 @@ build and degrade gracefully.
 ```
 
 `body` is the org's authoritative guidance on *how to implement* the control. Keep it
-**verbatim** wherever it is written down — never summarize it, and never invent a rule, an id,
-a title, or a body that the CLI did not return.
+**verbatim** wherever it is written down, and record exactly the rules the CLI returned — the
+id, title and body as they came back are the whole of what you have to work with.
 
 ## Failure taxonomy
 
