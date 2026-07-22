@@ -12,10 +12,11 @@
 #   skills/ingrain-security/scripts/rules-path        (label: rules)
 #
 # A mint seeds this skeleton into the artifact when the file does not exist yet, so no
-# writer ever starts from a blank page or has to reproduce a table header from prose. The
-# skeleton carries ONLY structure — every heading in schema order, both table headers with
-# their separator rows, and the field labels — and no content: no example rows and no
-# placeholder values that could survive into the finalized file.
+# writer ever starts from a blank page. The skeleton carries ONLY structure — every heading
+# in schema order and the field labels of the sections whose fields are fixed — and no
+# content: no example entries and no placeholder values that could survive into the
+# finalized file. `## Threats` and `## Mitigations` are seeded empty; the worker that fills
+# each writes its `### <id> — <title>` entries under the heading.
 #
 # It is deliberately valid under `validate-assessment --lenient` (sections present but
 # unfilled is exactly what leniency waives) and deliberately INVALID strictly: an unfilled
@@ -72,24 +73,21 @@ Security relevant:
 Surfaces:
 
 ## Threats
-| Tag | Title | Asset | Vector | Description | Assumptions | Justification | Impact | Likelihood | Risk score | Criticality | Selection | Robustness |
-|-----|-------|-------|--------|-------------|-------------|---------------|--------|------------|------------|-------------|-----------|------------|
 
 ## Risk score
 Score:
 Criticality:
 
 ## Mitigations
-| Tag | Title | Description | Yield | Effort | Threat tags | Rule refs | Selection | Justification | Robustness |
-|-----|-------|-------------|-------|--------|-------------|-----------|-----------|---------------|------------|
 
 ## Coverage / open items
 
 ## Maintenance (for the implementing agent)
 Update this file whenever the implementation diverges from the analysis — a new
 surface, a threat's acceptance changes, or a mitigation is added, dropped, or
-altered. Keep the Selection columns and coverage honest against the code you write,
-and keep every enumerated field within its allowed values.
+altered. Keep the Selection fields and coverage honest against the code you write,
+and keep every enumerated field within its allowed values. Ids are permanent: add a
+new threat with the next free \`T<n>\` and never renumber the existing ones.
 
 To locate this file, re-run the \`assessment-path\` mint command from your
 INGRAIN-ASSESSMENT-PATHS session context and write to the absolute \`assessment_abs\`

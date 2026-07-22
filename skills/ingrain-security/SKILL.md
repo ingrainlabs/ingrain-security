@@ -69,6 +69,13 @@ Use its **`assessment_abs`** — the **absolute** path — verbatim as the write
 every worker dispatch, every Write/Edit, and at finalize, and obey the `instruction` field
 it carries. The relative `assessment_path` is a **display form** only: put it in prose,
 tables and plan-file links; every write target takes the absolute form.
+
+**Change that file with the Edit or Write tool, always** — yours and every worker's alike.
+`allow-assessment-write` pre-approves both for this path, so the change lands with no
+permission prompt and the user sees the before/after. Your shell has a different job: it runs
+this plugin's four read-only scripts and the `ingrain` CLI, and it never edits the assessment
+file. Every field is its own line, so almost every change is a one-line Edit; where one is
+long, it is still an Edit — the cost of pasting it is what buys a reviewable change.
 → `references/formatting/assessment-file.md` owns what the script resolves, the name's derivation, and
 the file's schema — read it before your first write.
 
@@ -76,9 +83,11 @@ the file's schema — read it before your first write.
 alike. Run the bundled `scripts/validate-assessment` script on the path you just wrote, with
 `--lenient` while the run is in progress and **without it at finalize**, and fix what it
 reports before the next step. The ready-to-run command is in your
-`INGRAIN-ASSESSMENT-PATHS` session context.
+`INGRAIN-ASSESSMENT-PATHS` session context — **run it exactly as given, nothing appended**: the
+verdict is the `"valid"` field of the JSON it prints on stdout, and appending anything (a `;`,
+a pipe, a redirect) only costs the hook's pre-approval.
 → `references/formatting/assessment-file.md` § **Validation — run it after every write** owns the
-two modes, the exit codes and the bounded fix-and-re-run rule.
+two modes, how to read the result and the bounded fix-and-re-run rule.
 
 The third signal is the **branch delta**. Resolve it with the bundled `scripts/branch-diff`
 script and read **`delta_empty`** off its JSON: `true` means the branch delta is empty; `false`
@@ -210,7 +219,7 @@ steps, in this order**:
    there on top of whatever the plan and assessment files record: printing it is a read-only
    display action, permitted in every mode.
 2. **Then present the selection windows** — one single-choice include/exclude window per
-   finding, labeled by tag + short title (e.g. `T1 — unauthenticated token refresh`). One
+   finding, labeled by id + short title (e.g. `T01 — unauthenticated token refresh`). One
    window, one finding, one binary choice keeps every decision isolated and deliberate, so
    each finding stays a distinct choice of its own. Mark
    high/critical findings recommended. Because each window is its own decision, **selecting
@@ -220,7 +229,7 @@ steps, in this order**:
 
 **Keep every finding a decision of its own: one table row, one window, one binary choice.**
 The table comes first and the windows second; each window's options reference the table by
-finding tag, leaving the detail where the user can compare it side by side.
+finding id, leaving the detail where the user can compare it side by side.
 
 ## Development — the flow
 
@@ -247,8 +256,9 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
 1. **Threats** — dispatch `ingrain-threat-generator`, pointing it at the plan **and the
    `## Triage` section** (Surfaces seed the search; extend beyond them). **If triage returned a
    Prior analysis pointer**, also point it at that snapshot's `## Threats` and `## Mitigations`
-   so it **seeds from the prior analysis** — re-derive and refresh it against the current plan. It writes the `## Threats` rows under working tags `T1…` and returns a
-   pointer. Its tags record discovery order; the risk-scorer assigns priority at Step 3.
+   so it **seeds from the prior analysis** — re-derive and refresh it against the current plan. It writes one `### T<n>` entry per threat into `## Threats` and returns a
+   pointer. Ids are assigned in discovery order and are **permanent**; the risk-scorer sets
+   priority at Step 3 by scoring, not by renumbering.
 
 2. **Critique threats** *(single round)* — dispatch `ingrain-threat-critic` at `## Threats`.
    - `needs-revision` → re-dispatch `ingrain-threat-generator` **once**, with a pointer to
@@ -258,10 +268,10 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    - Either way, surface anything the critique left unresolved.
 
 3. **Risk score** — dispatch `ingrain-risk-scorer` at the frozen `## Threats`. It fills each
-   row's scoring columns, writes the plan-level residual into `## Risk score`, and **re-tags
-   the threats into descending-risk order** — contiguous `T1…Tn`, `T1` the most critical. From
-   here the tag *is* the priority and every stage reads the table top-down. (The re-tag belongs
-   to the scorer's job.)
+   entry's five scoring field lines and writes the plan-level residual into `## Risk score`.
+   It moves and renumbers nothing: ids are permanent, and from here **priority is the risk
+   score**, applied by whoever displays the threats. Every stage that shows them sorts by risk
+   score descending, breaking ties by impact, then likelihood, then id.
 
 4. **Gate 1 — the user selects which threats to address.** Follow **How to ask the user**.
    The user is deciding per threat whether it is worth acting on, so they must understand each
@@ -269,11 +279,12 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
 
    1. **Read** the bounded `## Threats` slice — this read is **required**, and it is exactly
       the read the context-window discipline permits. If the slice is empty or its scoring
-      columns are unfilled, stop and re-dispatch `ingrain-risk-scorer` (or
-      `ingrain-threat-generator` where the rows themselves are missing); the gate resumes once
-      the table has content to show.
-   2. **Display** the scored threats as a Markdown table in the conversation, **in tag order
-      (`T1` first)**, with the columns below.
+      fields still read `—`, stop and re-dispatch `ingrain-risk-scorer` (or
+      `ingrain-threat-generator` where the entries themselves are missing); the gate resumes once
+      the section has content to show.
+   2. **Display** the scored threats as a Markdown table in the conversation, **sorted by risk
+      score descending** (ties: impact, then likelihood, then id) — the ids will not be in
+      order — with the columns below.
    3. **Present** one single-choice window per threat; mark high/critical recommended.
    4. **Record** each threat's `Selection` in `## Threats` (include → `selected`, exclude →
       `excluded`; `undecided` only if the user is explicitly unsure), then **validate**
@@ -281,20 +292,20 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
 
    | Column | Contents |
    |--------|----------|
-   | **Threat** | tag + short title (e.g. `T1 — unauthenticated token refresh`) |
+   | **Threat** | id + short title (e.g. `T01 — unauthenticated token refresh`) |
    | **Risk** | risk criticality + 0–100 score (e.g. `high · 78`) |
    | **What can go wrong** | the concrete failure, drawn from the threat's Vector/Description and stated in this change's terms |
    | **Why it matters** | the consequence if realized, grounded in the scorer's impact and score (what an attacker gains, what data or guarantee is lost) |
    | **Local impact in the plan** | which specific part of *this* change the threat lands on (the component, file, or step from the plan) |
 
-   Keep the table faithful to the frozen threats and scores — every cell traces back to a row
+   Keep the table faithful to the frozen threats and scores — every cell traces back to an entry
    the workers wrote. Flag high/critical rows (e.g. `⚑ high · 78`) so the table and the windows tell the
    same story. In the same message, **name the run's assessment file** (its relative
    `.ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) and **the plan file**
    these decisions feed into — a **mention only**; the plan-file write happens at finalize.
 
    - **1–N selected** → only those proceed to Step 5. Name the excluded ones in one line
-     ("T2, T5 excluded — risk accepted").
+     ("T02, T05 excluded — risk accepted").
    - **None selected** → skip Steps 5–8. State "no threats selected — review closed", close
      with a one-line verdict naming the threats as accepted risk, then **go to Finalize** — the
      all-`excluded` `## Threats` section is the preserved context. Then continue building the
@@ -347,23 +358,24 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
 
    1. **Read** the bounded `## Mitigations` slice, and the `rules-<…>.md` sidecar to resolve
       rule titles.
-   2. **Display** the frozen mitigations as a Markdown table in the conversation, **in tag
-      order (`M1` first)**, with the columns below.
+   2. **Display** the frozen mitigations as a Markdown table in the conversation, **ordered by
+      the highest risk score among the threats each covers**, general instructions last, with
+      the columns below.
    3. **Present** one single-choice window per mitigation, labeled by short title + the threat
-      tag(s) it addresses (or `general`).
+      id(s) it addresses (or `general`).
    4. **Record** each mitigation's `Selection` in `## Mitigations` (adopt → `selected`, decline
       → `excluded`), then **validate** (`--lenient`).
 
    | Column | Contents |
    |--------|----------|
    | **Mitigation** | short title of the proposed mitigation |
-   | **Addresses** | the threat tag(s) it covers (`T1`, `T3`, …), or `— (general)` for a general implementation instruction |
+   | **Addresses** | the threat id(s) it covers (`T01`, `T03`, …), or `— (general)` for a general implementation instruction |
    | **What it does** | the task-specific guidance, from the mitigation's Description |
    | **Yield** | the risk it removes over the current baseline |
    | **Effort** | how much work it takes to implement |
    | **Follows rules** | the **title(s)** of the org rule(s) it follows, resolved from that mitigation's entry in the sidecar (e.g. `Authenticated service calls`); `—` for a pure threat mitigation |
 
-   Keep the table faithful to the frozen mitigations — every cell traces back to a row the
+   Keep the table faithful to the frozen mitigations — every cell traces back to an entry the
    generator wrote. For each id in a mitigation's **Rule refs**, take the title from its
    `### <id> — <title>` entry in the sidecar. **Print rule titles** — the ids are
    machine-facing and stay in the file. Where an id has no matching sidecar entry (or no
@@ -453,7 +465,7 @@ there; this section is a pointer, and the procedure is in that file.
 | You are ready to score risk | Score once the threats are frozen — Step 2 freezes them, Step 3 scores them. |
 | The user selected zero threats at Gate 1 | Close the review there: record the threats as accepted risk and go to Finalize. |
 | You are opening a gate | Present it as a per-finding selection — one single-choice include/exclude window per finding, each decided on its own (zero selected is a valid outcome). |
-| The user excluded T2, but it looks important | Record it as accepted risk and move on — the selected subset is the scope. |
+| The user excluded T02, but it looks important | Record it as accepted risk and move on — the selected subset is the scope. |
 | The critic flagged issues | Re-run the generator once with the feedback, then freeze. |
 | You have the revised set in hand | Freeze it and surface whatever is unresolved — each step gets exactly one critique pass. |
 | A worker's job looks quick enough to do yourself | Dispatch it: each worker runs in its own subagent. |
@@ -476,8 +488,7 @@ there; this section is a pointer, and the procedure is in that file.
 ## Development — checklist
 
 The procedure is **Development — the flow**; this is the tracker. Tick only what is actually
-done. Work top to bottom, one step at a time, in the order listed. (The
-`ingrain-risk-scorer` re-tagging threats into risk order at step 3 belongs to its job.) Each
+done. Work top to bottom, one step at a time, in the order listed. Each
 gate incorporates exactly the selected subset.
 **After every write to `assessment_abs` — yours, or a worker's the moment it returns — run
 `scripts/validate-assessment` (`--lenient` until finalize) and fix what it reports.**
@@ -485,7 +496,7 @@ gate incorporates exactly the selected subset.
 - [ ] 0. Triage dispatched — bias to `major` when uncertain; `minor` → stop, `major` → open the assessment file
 - [ ] 1. Threats generated into `## Threats`, seeded from any prior analysis
 - [ ] 2. Single threat critique pass done — approved, or one revision applied; threats frozen
-- [ ] 3. Risk scored; threats re-tagged into descending-risk order
+- [ ] 3. Risk scored — five scoring fields per threat plus the plan-level residual; ids untouched
 - [ ] 4. Gate 1 — table displayed in the conversation FIRST, then one window per threat; `Selection` recorded (zero selected ends the review)
 - [ ] 5. Org rules retrieved by YOU via the `ingrain` CLI, from plan + selected threats; sidecar written (or none, if nothing came back)
 - [ ] 6. Mitigations generated for the selected threats ONLY, grounded in the sidecar; generator ran without a shell of its own

@@ -37,8 +37,13 @@ host's shell/exec for the probe and the retrieval command. Running there is the 
 sandbox or permission denial surfaces the host's **native approval prompt** ("allow this
 command?") straight to the user, so the fetch retries in place.
 
-**No worker carries a shell.** Every Development worker is dispatched with file tools alone
-and works from the rules already on disk; the sidecar's path is what you pass them.
+**Every Development worker is dispatched with exactly five tools: Read, Grep, Glob, Edit and
+Write** — it inspects the plan and repo with the first three, and writes its own section of
+the assessment file with Edit or Write, which `allow-assessment-write` pre-approves for that
+path. It works from the rules already on disk; the sidecar's path is what you pass them.
+
+**No worker carries a shell**, so a worker that needs the file changed changes it with Edit or
+Write. There is no fallback where it stages the text somewhere else for you to transplant.
 
 ## Selection windows (Gate 1 and Gate 2)
 
@@ -50,10 +55,10 @@ The primitive is generic; only the mechanism changes per host:
 
 - **Host with a windowed single-choice primitive** — present each finding in
   its own single-choice window (one window per finding). Where the host caps how
-  many windows it can show per call, present consecutive batches in table order —
-  which is tag order, and tags run highest-priority-first — e.g. T1–T4, then
-  T5–T8 — and merge the choices.
+  many windows it can show per call, present consecutive batches in the order the table
+  displayed them — which is highest-priority-first — e.g. the first four, then the next
+  four — and merge the choices.
   Zero-selection is inherent — the user reaches it by excluding every window, so
   the windows themselves carry the **"None"** case.
 - **Text fallback** — where the host lacks a windowed primitive, ask the user to
-  reply with the tags to include (e.g. `T1 T3`) or `none`.
+  reply with the ids to include (e.g. `T01 T03`) or `none`.

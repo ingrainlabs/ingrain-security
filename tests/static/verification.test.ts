@@ -265,22 +265,22 @@ Deno.test("verifier ref: reads its rule descriptions from the sidecar, runs no C
   assertEquals(md.includes("ingrain context"), false, "verifier must not run the CLI");
 });
 
-Deno.test("assessment-file.md: defines the Justification + Robustness columns", async () => {
+Deno.test("assessment-file.md: defines the Justification + Robustness fields", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
-  // The two columns and the enum.
+  // The two fields and the enum.
   assertStringIncludes(md, "**Robustness**");
   assertStringIncludes(md, "**Justification**");
   for (const v of ["`weak`", "`adequate`", "`strong`"]) assertStringIncludes(md, v);
-  assertEquals(md.includes("**Verified**"), false, "the Verified column is renamed");
-  // One concept, one name. `Robustness` names the same measure in both tables: the threat
-  // column is the primary result, the mitigation column carries it across (weakest governs).
+  assertEquals(md.includes("**Verified**"), false, "the Verified field is renamed");
+  // One concept, one name. `Robustness` names the same measure in both sections: the threat
+  // field is the primary result, the mitigation field carries it across (weakest governs).
   assertEquals(md.includes("Verification level"), false, "one name for the concept: Robustness");
   // It is the Testing verification pass that fills them, after the code is written.
   assertStringIncludes(md, "Testing");
   assertStringIncludes(md, "Latest stage: testing");
-  // One string pins all three at once: the rename, the addition, and the ordering —
+  // One string pins the ordering the template teaches: within a mitigation entry,
   // Justification sits immediately BEFORE the level so reasoning drives the conclusion.
-  assertStringIncludes(md, "| Selection | Justification | Robustness |");
+  assertStringIncludes(md, "Selection: selected\nJustification: …\nRobustness: adequate");
   assertStringIncludes(md, "Justification leads the Robustness on purpose");
   // Both Justifications in the file (Threats + Mitigations) carry the same 256-char cap.
   assertEquals(

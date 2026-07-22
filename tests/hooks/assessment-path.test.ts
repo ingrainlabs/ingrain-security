@@ -176,10 +176,12 @@ Deno.test("mint: seeds the empty skeleton, structure only", async () => {
     ) {
       assertStringIncludes(md, `\n${section}\n`);
     }
-    // Both table headers are on the page, and neither carries a data row.
-    assertStringIncludes(md, "| Tag | Title | Asset | Vector |");
-    assertStringIncludes(md, "| Tag | Title | Description | Yield | Effort |");
-    assertEquals(/^\|\s*[TM]\d/m.test(md), false, "skeleton must hold no example rows");
+    // Threats and Mitigations are seeded as bare headings — the workers write the entries.
+    assertEquals(
+      /^### /m.test(md),
+      false,
+      "skeleton must hold no example entries",
+    );
   });
 });
 

@@ -91,21 +91,68 @@ Surfaces:
 Prior analysis: none
 
 ## Threats
-| Tag | Title | Asset | Vector | Description | Assumptions | Justification | Impact | Likelihood | Risk score | Criticality | Selection | Robustness |
-|-----|-------|-------|--------|-------------|-------------|---------------|--------|------------|------------|-------------|-----------|------------|
-| T1 | Token replay | refresh token | network | A captured token is replayed. | Transport is TLS. | Replay is cheap and the token is long-lived. | high | medium | 78 | high | selected | — |
-| T2 | Token in logs | refresh token | logging | The token is written to the request log. | Logs are retained. | Exposure needs log access first. | low | low | 40 | medium | excluded | — |
+
+### T01 — Token replay
+Asset: refresh token
+Vector: network
+Description: A captured token is replayed.
+Assumptions: Transport is TLS.
+Justification: Replay is cheap and the token is long-lived.
+Impact: high
+Likelihood: medium
+Risk score: 78
+Criticality: high
+Selection: selected
+Robustness: —
+
+### T02 — Token in logs
+Asset: refresh token
+Vector: logging
+Description: The token is written to the request log.
+Assumptions: Logs are retained.
+Justification: Exposure needs log access first.
+Impact: low
+Likelihood: low
+Risk score: 40
+Criticality: medium
+Selection: excluded
+Robustness: —
 
 ## Risk score
 Score: 62
 Criticality: high
 
 ## Mitigations
-| Tag | Title | Description | Yield | Effort | Threat tags | Rule refs | Selection | Justification | Robustness |
-|-----|-------|-------------|-------|--------|-------------|-----------|-----------|---------------|------------|
-| M1 | Bind the token | Bind the refresh token to the client. | high | medium | T1 | r-auth-01 | selected | — | — |
-| M2 | Audit the refresh | Emit a structured audit record. | medium | low | — | r-log-03 | selected | — | — |
-| M3 | Redact the log | Redact the token from request logs. | low | low | T2 | — | excluded | — | — |
+
+### M01 — Bind the token
+Description: Bind the refresh token to the client.
+Yield: high
+Effort: medium
+Threats: T01
+Rule refs: r-auth-01
+Selection: selected
+Justification: —
+Robustness: —
+
+### M02 — Audit the refresh
+Description: Emit a structured audit record.
+Yield: medium
+Effort: low
+Threats: —
+Rule refs: r-log-03
+Selection: selected
+Justification: —
+Robustness: —
+
+### M03 — Redact the log
+Description: Redact the token from request logs.
+Yield: low
+Effort: low
+Threats: T02
+Rule refs: —
+Selection: excluded
+Justification: —
+Robustness: —
 
 ## Coverage / open items
 - none
@@ -136,6 +183,36 @@ function withoutLine(doc: string, find: string): string {
   return lines.join("\n");
 }
 
+/**
+ * As withLine, but the search starts at the line holding `anchor` — the way to reach a
+ * field of one entry when every entry carries a field of that name.
+ */
+function withLineAfter(doc: string, anchor: string, find: string, replace: string): string {
+  const lines = doc.split("\n");
+  const from = lines.findIndex((line) => line.includes(anchor));
+  assert(from >= 0, `fixture no longer contains "${anchor}" — update the test`);
+  const at = lines.findIndex((line, i) => i >= from && line.includes(find));
+  assert(at >= 0, `fixture no longer contains "${find}" after "${anchor}" — update the test`);
+  lines[at] = lines[at].replace(find, replace);
+  return lines.join("\n");
+}
+
+/**
+ * The valid document with the whole `### <id> — …` entry removed: its heading, its field
+ * lines, and the blank line that separates it from what follows.
+ */
+function withoutEntry(doc: string, id: string): string {
+  const lines = doc.split("\n");
+  const at = lines.findIndex((line) => line.startsWith(`### ${id} `));
+  assert(at >= 0, `fixture no longer contains entry "${id}" — update the test`);
+  let end = at + 1;
+  while (end < lines.length && !lines[end].startsWith("### ") && !lines[end].startsWith("## ")) {
+    end++;
+  }
+  lines.splice(at, end - at);
+  return lines.join("\n");
+}
+
 // --- positive ---------------------------------------------------------------------
 
 Deno.test("valid: a finalized assessment validates clean", async () => {
@@ -147,30 +224,24 @@ Deno.test("valid: a finalized assessment validates clean", async () => {
   assertEquals(stderr, "");
 });
 
-Deno.test("valid: a Threats table with no rows is allowed (a minor triage)", async () => {
-  let doc = validAssessment();
-  doc = withoutLine(doc, "| T1 |");
-  doc = withoutLine(doc, "| T2 |");
-  // The mitigations may then carry no threat tags either.
-  doc = withoutLine(doc, "| M1 |");
-  doc = withoutLine(doc, "| M3 |");
-  doc = withLine(doc, "| M2 |", "| M1 |");
+Deno.test("valid: a Threats section with no entries is allowed (a minor triage)", async () => {
+  let doc = withoutEntry(validAssessment(), "T01");
+  doc = withoutEntry(doc, "T02");
+  // The mitigations may then reference no threat either.
+  doc = withoutEntry(doc, "M01");
+  doc = withoutEntry(doc, "M03");
   const { code, json } = await validate("assessment-x.md", doc);
   assertEquals(code, 0, JSON.stringify(json.errors));
   assertEquals(json.valid, true);
 });
 
-Deno.test("valid: unset verification columns pass at any stage", async () => {
+Deno.test("valid: unset verification fields pass at any stage", async () => {
   // Structure-only checking: the script must not care that a `testing` file still has
   // `—` in Robustness, nor that a `development` file has it filled.
   for (
     const doc of [
       withLine(validAssessment(), "Latest stage: development", "Latest stage: testing"),
-      withLine(
-        validAssessment(),
-        "| high | medium | 78 | high | selected | — |",
-        "| high | medium | 78 | high | selected | strong |",
-      ),
+      withLine(validAssessment(), "Robustness: —", "Robustness: strong"),
     ]
   ) {
     const { code, json } = await validate("assessment-x.md", doc);
@@ -178,18 +249,34 @@ Deno.test("valid: unset verification columns pass at any stage", async () => {
   }
 });
 
-Deno.test("valid: --lenient accepts a mid-loop file with tag gaps and unsorted risk", async () => {
-  let doc = withLine(validAssessment(), "| T2 |", "| T5 |");
-  doc = withLine(doc, "| T5 | Token in logs", "| T5 | Token in logs");
-  doc = withLine(doc, "| low | low | 40 |", "| low | low | 90 |");
-  doc = withLine(doc, "| T2 | — | excluded", "| T5 | — | excluded");
+Deno.test("valid: ids need not be contiguous, and entries need not descend by risk", async () => {
+  // Ids are permanent, so a retired threat leaves a gap and every reference around it keeps
+  // pointing where it did. Priority is derived from Risk score at display time, so document
+  // order carries no meaning — both hold in either mode.
+  let doc = validAssessment();
+  doc = doc.replaceAll("T02", "T05");
+  doc = withLine(doc, "Risk score: 40", "Risk score: 90");
 
-  const strict = await validate("assessment-x.md", doc);
-  assertEquals(strict.code, 1);
+  for (const flags of [[], ["--lenient"]]) {
+    const { code, json } = await validate("assessment-x.md", doc, flags);
+    assertEquals(code, 0, JSON.stringify(json.errors));
+  }
+});
 
-  const lenient = await validate("assessment-x.md", doc, ["--lenient"]);
-  assertEquals(lenient.code, 0, JSON.stringify(lenient.json.errors));
-  assertEquals(lenient.json.lenient, true);
+Deno.test("valid: ids are accepted in either case, and cross-references fold", async () => {
+  // The references prescribe the uppercase form, but an id written lowercase still names
+  // the same threat — so a lowercase heading resolves an uppercase `Threats:` reference
+  // and vice versa.
+  for (
+    const doc of [
+      withLine(validAssessment(), "### T02 — Token in logs", "### t02 — Token in logs"),
+      withLine(validAssessment(), "Threats: T01", "Threats: t01"),
+    ]
+  ) {
+    const { code, json } = await validate("assessment-x.md", doc);
+    assertEquals(code, 0, JSON.stringify(json.errors));
+    assertEquals(json.valid, true);
+  }
 });
 
 /**
@@ -221,19 +308,35 @@ Surfaces:
   );
 });
 
-Deno.test("valid: --lenient accepts a section whose table is not written yet", async () => {
-  // The orchestrator opens the file before the worker that fills the table is dispatched.
+Deno.test("valid: --lenient accepts threats written before the risk scorer runs", async () => {
+  // The shape the threat generator produces at step 1: every scoring field still `—`,
+  // because the risk scorer that owns them does not run until step 3. Every write is
+  // validated, so this state MUST pass leniently — there is no correction that would make
+  // it pass otherwise, and an agent told to fix it has nothing it can do.
   let doc = validAssessment();
-  for (
-    const row of ["| Tag | Title | Asset |", "|-----|-------|-------|--------|", "| T1 |", "| T2 |"]
-  ) {
-    doc = withoutLine(doc, row);
+  for (const field of ["Justification", "Impact", "Likelihood", "Risk score", "Criticality"]) {
+    doc = doc.replaceAll(new RegExp(`^${field}: .+$`, "gm"), `${field}: —`);
   }
-  // Its mitigations may then reference no threat, so drop the tagged rows with it.
-  doc = withLine(doc, "| M1 | Bind the token", "| M1 | Bind the token");
-  doc = withLine(doc, "| T1 | r-auth-01 |", "| — | r-auth-01 |");
-  doc = withLine(doc, "| T2 | — | excluded", "| — | — | excluded");
 
+  const lenient = await validate("assessment-x.md", doc, ["--lenient"]);
+  assertEquals(lenient.code, 0, JSON.stringify(lenient.json.errors));
+  assertEquals(lenient.json.lenient, true);
+
+  // Strict still refuses it: at finalize the file must be scored.
+  const strict = await validate("assessment-x.md", doc);
+  assertEquals(strict.code, 1);
+  assertStringIncludes(
+    strict.json.errors.map((e) => e.message).join("\n"),
+    "Impact: is not filled in",
+  );
+});
+
+Deno.test("valid: --lenient accepts an entry whose fields are not written yet", async () => {
+  // A heading on the page with nothing under it — the worker wrote the id and stopped.
+  const doc = withoutLine(
+    withoutLine(validAssessment(), "Asset: refresh token"),
+    "Vector: network",
+  );
   const lenient = await validate("assessment-x.md", doc, ["--lenient"]);
   assertEquals(lenient.code, 0, JSON.stringify(lenient.json.errors));
 
@@ -241,7 +344,7 @@ Deno.test("valid: --lenient accepts a section whose table is not written yet", a
   assertEquals(strict.code, 1);
   assertStringIncludes(
     strict.json.errors.map((e) => e.message).join("\n"),
-    "section holds no table",
+    'missing required field "Asset:"',
   );
 });
 
@@ -250,8 +353,8 @@ Deno.test("invalid: --lenient is not a blanket pass", async () => {
   // checks that cannot hold until the file is complete.
   const cases: Array<[string, string]> = [
     [withLine(A, "Latest stage: development", "Latest stage: shipped"), "Latest stage:"],
-    [withLine(A, "| high | medium | 78 |", "| severe | medium | 78 |"), "Impact:"],
-    [withLine(A, "| T1 | r-auth-01 |", "| T9 | r-auth-01 |"), "is not a threat in this file"],
+    [withLine(A, "Impact: high", "Impact: severe"), "Impact:"],
+    [withLine(A, "Threats: T01", "Threats: T09"), "is not a threat in this file"],
     [
       A.replace("## Triage", "## PLACEHOLDER").replace("## Task", "## Triage").replace(
         "## PLACEHOLDER",
@@ -330,84 +433,71 @@ const NEGATIVES: ICase[] = [
     expect: "Security relevant:",
   },
   {
-    name: "wrong Threats header",
-    doc: withLine(A, "| Tag | Title | Asset |", "| Tag | Name | Asset |"),
-    expect: "table header column 2",
+    name: "malformed threat id",
+    doc: withLine(A, "### T02 — Token in logs", "### x2 — Token in logs"),
+    expect: 'id: "x2" is not of the form T<n>',
   },
   {
-    name: "Threats section holds no table",
-    doc: withoutLine(
-      withoutLine(
-        withoutLine(withoutLine(A, "| Tag | Title | Asset |"), "|-----|-------|-------|--------|"),
-        "| T1 |",
-      ),
-      "| T2 |",
-    ),
-    expect: "section holds no table",
+    // The retired dashed form, so a file written against the old schema fails loudly
+    // rather than validating under the new one.
+    name: "dashed threat id",
+    doc: withLine(A, "### T02 — Token in logs", "### t-02 — Token in logs"),
+    expect: 'id: "t-02" is not of the form T<n>',
   },
   {
-    name: "header without a separator row",
-    doc: withoutLine(A, "|-----|-------|-------|--------|"),
-    expect: "separator row",
+    name: "duplicate threat id",
+    doc: withLine(A, "### T02 — Token in logs", "### T01 — Token in logs"),
+    expect: 'id: "T01" is a duplicate',
   },
   {
-    name: "row with the wrong cell count",
-    doc: withLine(A, "| T2 | Token in logs |", "| T2 | Token in logs | extra |"),
-    expect: "cells, expected 13",
+    name: "entry heading with no id separator",
+    doc: withLine(A, "### T02 — Token in logs", "### Token in logs"),
+    expect: "is not of the form T<n>",
   },
   {
-    name: "malformed threat tag",
-    doc: withLine(A, "| T2 | Token in logs", "| X2 | Token in logs"),
-    expect: 'Tag: "X2" is not of the form T<n>',
+    name: "missing threat field",
+    doc: withoutLine(A, "Assumptions: Transport is TLS."),
+    expect: 'missing required field "Assumptions:"',
   },
   {
-    name: "threat tag gap",
-    doc: withLine(A, "| T2 | Token in logs", "| T3 | Token in logs"),
-    expect: "breaks the contiguous sequence",
-  },
-  {
-    name: "duplicate threat tag",
-    doc: withLine(A, "| T2 | Token in logs", "| T1 | Token in logs"),
-    expect: "is a duplicate",
+    name: "unfilled threat field at finalize",
+    doc: withLine(A, "Impact: high", "Impact: —"),
+    expect: "Impact: is not filled in",
   },
   {
     name: "risk score out of range",
-    doc: withLine(A, "| high | medium | 78 |", "| high | medium | 178 |"),
+    doc: withLine(A, "Risk score: 78", "Risk score: 178"),
     expect: "Risk score:",
   },
   {
     name: "non-integer risk score",
-    doc: withLine(A, "| high | medium | 78 |", "| high | medium | high |"),
+    doc: withLine(A, "Risk score: 78", "Risk score: high"),
     expect: "Risk score:",
   },
   {
-    name: "rows not ordered by descending risk",
-    doc: withLine(A, "| high | medium | 78 |", "| high | medium | 30 |"),
-    expect: "rows must descend by risk",
-  },
-  {
     name: "bad Impact",
-    doc: withLine(A, "| high | medium | 78 |", "| severe | medium | 78 |"),
+    doc: withLine(A, "Impact: high", "Impact: severe"),
     expect: "Impact:",
   },
   {
     name: "bad Likelihood",
-    doc: withLine(A, "| high | medium | 78 |", "| high | certain | 78 |"),
+    doc: withLine(A, "Likelihood: medium", "Likelihood: certain"),
     expect: "Likelihood:",
   },
   {
     name: "bad threat Criticality",
-    doc: withLine(A, "| 78 | high | selected |", "| 78 | severe | selected |"),
+    // The first `Criticality:` in the document is T01's; the plan-level one follows it.
+    doc: withLine(A, "Criticality: high", "Criticality: severe"),
     expect: "Criticality:",
   },
   {
     name: "bad threat Selection",
-    doc: withLine(A, "| 78 | high | selected |", "| 78 | high | maybe |"),
+    doc: withLine(A, "Selection: selected", "Selection: maybe"),
     expect: "Selection:",
   },
   {
     name: "bad threat Robustness",
-    doc: withLine(A, "| high | selected | — |", "| high | selected | brittle |"),
+    doc: withLine(A, "Robustness: —", "Robustness: brittle"),
     expect: "Robustness:",
   },
   {
@@ -421,58 +511,54 @@ const NEGATIVES: ICase[] = [
     expect: "Score:",
   },
   {
-    name: "wrong Mitigations header",
-    doc: withLine(
-      A,
-      "| Tag | Title | Description | Yield |",
-      "| Tag | Title | Description | Payoff |",
-    ),
-    expect: "table header column 4",
-  },
-  {
-    name: "malformed mitigation tag",
-    doc: withLine(A, "| M2 | Audit the refresh", "| X2 | Audit the refresh"),
+    name: "malformed mitigation id",
+    doc: withLine(A, "### M02 — Audit the refresh", "### x2 — Audit the refresh"),
     expect: "is not of the form M<n>",
   },
   {
-    name: "mitigation tag gap",
-    doc: withLine(A, "| M2 | Audit the refresh", "| M4 | Audit the refresh"),
-    expect: "breaks the contiguous sequence",
+    name: "duplicate mitigation id",
+    doc: withLine(A, "### M02 — Audit the refresh", "### M01 — Audit the refresh"),
+    expect: 'id: "M01" is a duplicate',
+  },
+  {
+    name: "missing mitigation field",
+    doc: withoutLine(A, "Yield: high"),
+    expect: 'missing required field "Yield:"',
   },
   {
     name: "bad Yield",
-    doc: withLine(A, "| high | medium | T1 | r-auth-01 |", "| huge | medium | T1 | r-auth-01 |"),
+    doc: withLine(A, "Yield: high", "Yield: huge"),
     expect: "Yield:",
   },
   {
     name: "bad Effort",
-    doc: withLine(A, "| high | medium | T1 | r-auth-01 |", "| high | enormous | T1 | r-auth-01 |"),
+    doc: withLine(A, "Effort: medium", "Effort: enormous"),
     expect: "Effort:",
   },
   {
-    name: "Threat tags naming an unknown threat",
-    doc: withLine(A, "| T1 | r-auth-01 |", "| T9 | r-auth-01 |"),
-    expect: 'Threat tags: "T9" is not a threat in this file',
+    name: "Threats naming an unknown threat",
+    doc: withLine(A, "Threats: T01", "Threats: T09"),
+    expect: 'Threats: "T09" is not a threat in this file',
   },
   {
-    name: "malformed Threat tags cell",
-    doc: withLine(A, "| T1 | r-auth-01 |", "| threat one | r-auth-01 |"),
+    name: "malformed Threats field",
+    doc: withLine(A, "Threats: T01", "Threats: threat one"),
     expect: "is not of the form T<n>",
   },
   {
-    name: "malformed Rule refs cell",
-    doc: withLine(A, "| T1 | r-auth-01 |", "| T1 | rule auth 01 |"),
+    name: "malformed Rule refs field",
+    doc: withLine(A, "Rule refs: r-auth-01", "Rule refs: rule auth 01"),
     expect: "is not a rule id",
   },
   {
-    name: "bad mitigation Selection",
-    doc: withLine(A, "| r-log-03 | selected |", "| r-log-03 | adopted |"),
-    expect: "Selection:",
+    name: "bad mitigation Robustness",
+    doc: withLineAfter(A, "### M01 ", "Robustness: —", "Robustness: sturdy"),
+    expect: "Robustness:",
   },
   {
-    name: "bad mitigation Robustness",
-    doc: withLine(A, "| r-log-03 | selected | — | — |", "| r-log-03 | selected | — | sturdy |"),
-    expect: "Robustness:",
+    name: "bad mitigation Selection",
+    doc: withLineAfter(A, "### M01 ", "Selection: selected", "Selection: adopted"),
+    expect: "Selection:",
   },
 ];
 
@@ -495,7 +581,7 @@ for (const testCase of NEGATIVES) {
 }
 
 Deno.test("invalid: every reported error carries a plausible line number", async () => {
-  const doc = withLine(A, "| high | medium | 78 |", "| severe | medium | 78 |");
+  const doc = withLine(A, "Impact: high", "Impact: severe");
   const { json } = await validate("assessment-x.md", doc);
   const lineCount = doc.split("\n").length;
   for (const error of json.errors) {

@@ -18,10 +18,10 @@ declined.
 **Announce:** open with "Using ingrain-security to verify the implemented mitigations."
 
 You orchestrate **one read-only worker per selected threat** — as many verifiers as there are
-`selected` rows in `## Threats` — and conclude from what they return yourself:
+`selected` entries in `## Threats` — and conclude from what they return yourself:
 
 - **`ingrain-threat-verifier`** (`references/testing/ingrain-threat-verifier.md`) — one per selected
-  threat, each holding that threat, every `selected` mitigation tagged with it, and those
+  threat, each holding that threat, every `selected` mitigation naming it, and those
   mitigations' org rules (see **How to dispatch a verifier**).
 
 A verifier handed a threat and its mitigations is under quiet pressure to conclude the threat
@@ -60,7 +60,7 @@ so it resolves to the **same file** the plan review wrote for this task
 (`file_exists: true` confirms it).
 
 → `references/formatting/assessment-file.md` owns the name's derivation, the write
-pre-approval, and the file's schema — follow that schema exactly. The columns Testing fills are
+pre-approval, and the file's schema — follow that schema exactly. The fields Testing fills are
 `## Threats` → **Robustness** and `## Mitigations` → **Justification** + **Robustness**, plus
 `## Task` → `Latest stage`.
 
@@ -73,10 +73,12 @@ straight after it, **strictly (no `--lenient`)**:
 
     bash <plugin>/skills/ingrain-security/scripts/validate-assessment <assessment_abs>
 
-Fix exactly what it reports and re-run, at most twice; if violations survive, name them in one
-line of your report so they reach the user with the result.
+Run it exactly as printed — nothing appended — and read the verdict off the `"valid"` field of
+the JSON it prints on stdout. Fix exactly what it reports and re-run, at most twice; if
+violations survive, name them in one line of your report so they reach the user with the
+result.
 → `references/formatting/assessment-file.md` § **Validation — run it after every write** owns
-the modes, the exit codes and that bound. The `rules-<…>.md` sidecar is read-only here, so it
+the modes, how to read the result and that bound. The `rules-<…>.md` sidecar is read-only here, so it
 keeps the validation the plan review already gave it.
 
 ## The diff under review
@@ -143,7 +145,7 @@ the actual code against the actual threat and decide. Two principles bound that 
 
 ## The rules file
 
-Each adopted mitigation carries **Rule ref ids** (the `Rule refs` column of `## Mitigations`),
+Each adopted mitigation carries **Rule ref ids** (the `Rule refs` field of its `## Mitigations` entry),
 which resolve to rule bodies in the sidecar. The plan review persisted those bodies to a **linked sidecar**,
 `.ingrain-security/rules-<branch-slug>-<task-slug>.md` — the twin of the assessment file, keyed
 by the same branch + task slug (schema: `references/formatting/rules-file.md`). To let each verifier judge
@@ -184,16 +186,16 @@ The verifier's contract differs from a Development worker's, so state it inline:
 
 - **Its whole output is what it returns.** Development workers each own a section of the
   assessment file; this one owns the justification and Robustness level it hands back, and you
-  conclude and record from it, so one writer owns the table.
+  conclude and record from it, so one writer owns the file.
 - **Its one shell allowance is read-only git** — `git diff <diff_ref>`, `git status`, `git show` —
   to obtain the branch diff at the `diff_ref` you resolved. Read/Grep/Glob covers the rest; the
   org rules it needs are already on disk in the sidecar.
 - **Fan out.** Each per-threat verifier is independent, so on a host with a subagent primitive
   dispatch them **together**. On the sequential fallback, run them in the same
-  session one at a time, in tag order.
+  session one at a time, in descending risk order.
 
 Dispatch every verifier with the same shape. **Hand off by pointer:** point the verifier at its
-threat row and its covering mitigation rows **and, when the sidecar exists, the rule(s) for those
+threat entry and its covering mitigation entries **and, when the sidecar exists, the rule(s) for those
 mitigations' Rule refs**, leaving the files themselves on disk for it to open:
 
 ```
@@ -204,27 +206,27 @@ the rules sidecar named below. Your whole output is what you return to me: your
 justification and level.
 INPUT:
 - The run's assessment file is at <the minted assessment_abs — the ABSOLUTE path, pasted in full>.
-  Read ONLY its `## Threats` row <T-tag> — the threat you are testing against — and the
-  `## Mitigations` rows <the selected M-tags carrying <T-tag>, or "none — no adopted mitigation
-  covers this threat"> that are meant to close it. Those rows are the whole of the file that
+  Read ONLY its `## Threats` entry <t-id> — the threat you are testing against — and the
+  `## Mitigations` entries <the selected m-ids naming <t-id>, or "none — no adopted mitigation
+  covers this threat"> that are meant to close it. Those entries are the whole of the file that
   concerns you; sibling verifiers own the other threats and mitigations.
 - The org-rules sidecar is at <the minted rules_abs — the ABSOLUTE path — or "none (no rules file for this task)">.
   If it exists, read ONLY the `## Retrieved rules` entries for those mitigations' Rule ref ids
   (found via the `## Per-mitigation mapping`) — the org rule bodies behind them. Treat them as
   SUPPORTING CONTEXT on how the org implements this kind of control. If the sidecar is absent,
-  or those rows' Rule refs are `—`, judge from the threat and the Descriptions alone.
+  or those mitigations' Rule refs are `—`, judge from the threat and the Descriptions alone.
 - The diff under review is `git diff <the resolved diff_ref — the merge-base commit, pasted in full>`,
   the delta since this branch diverged from <base_ref> — committed AND uncommitted. Use that
   ref exactly as given; it is the merge-base, which is what exposes the committed work.
   <When the HEAD fallback is in effect, say so here instead: "no fork point resolved — diff_ref
   is HEAD, so only uncommitted changes are under review.">
-- Evaluate how well those mitigations cover <T-tag> in the code as built: can this threat still
+- Evaluate how well those mitigations cover <t-id> in the code as built: can this threat still
   be realized? Look for a surviving route — an unprotected path, a bypass, a partial
   application. Judge the threat: coverage is only as strong as the routes it actually closes,
   so a mitigation implemented exactly as described that still leaves the threat reachable is
   weak coverage.
 Return ONLY, in this order: JUSTIFICATION (≤256 chars — your reasoning about whether the threat
-is still reachable), then LEVEL (weak | adequate | strong) for <T-tag>, then EVIDENCE (file:line
+is still reachable), then LEVEL (weak | adequate | strong) for <t-id>, then EVIDENCE (file:line
 in the diff), and — when the level is `weak` — the RESIDUAL PATH (the concrete route by which
 the threat can still be realized, and the change that would close it).
 The justification comes FIRST: it is what I weigh, and writing it first is what grounds the level
@@ -235,10 +237,10 @@ Dispatch verifiers for **all** selected threats. **A selected threat with no cov
 mitigation is still dispatched** — the code may close it incidentally, and if it does not, that
 is exactly the `weak` finding the report exists to surface.
 
-**The general-instruction pass.** Adopted mitigations whose `Threat tags` is `—` are general
+**The general-instruction pass.** Adopted mitigations whose `Threats` is `—` are general
 implementation instructions: their scope is the instruction itself, so this pass covers them.
 Check them separately against their Descriptions — followed, or not — and report them in their
-own table. They take a `Robustness` like any other row: `adequate` when the instruction was
+own table. They take a `Robustness` like any other entry: `adequate` when the instruction was
 followed, `strong` when it was followed comprehensively and artefacts back it, and `weak`
 otherwise.
 
@@ -270,15 +272,15 @@ threat, in this order:
    the level the verifier led with, say what moved it.
 
 **Then carry each mitigation's Robustness across.** `## Threats` → **Robustness** is the result
-you concluded; `## Mitigations` → **Robustness** is that same measure on the rows that produced
+you concluded; `## Mitigations` → **Robustness** is that same measure on the entries that produced
 it — the mitigation's contribution to closing the threats it covers, not a second axis. Read it
-off the threats the mitigation appears in:
+off the threats the mitigation names:
 
 - Covers one threat → it takes that threat's Robustness.
 - Covers several whose Robustness differs → **the weakest governs.** A mitigation takes the
-  Robustness of its weakest-covered threat; a control that closes `T1` while leaving `T3`
-  reachable is `weak` on the strength of `T3`.
-- Carries no threat tag → its Robustness came from the general-instruction pass.
+  Robustness of its weakest-covered threat; a control that closes `T01` while leaving `T03`
+  reachable is `weak` on the strength of `T03`.
+- Names no threat → its Robustness came from the general-instruction pass.
 
 ## Testing — the flow
 
@@ -299,8 +301,8 @@ file.
    `delta_empty: true`, state "no changes to verify" and **stop**.
 2. **Collect the scope.** Read the bounded `## Threats` and `## Mitigations` slices of the
    assessment file. The scope is every threat whose **Selection** is `selected`, each paired
-   with the `selected` mitigations carrying its tag — including one no adopted mitigation
-   covers. Set aside the `selected` mitigations whose `Threat tags` is `—` for the
+   with the `selected` mitigations naming its id — including one no adopted mitigation
+   covers. Set aside the `selected` mitigations whose `Threats` is `—` for the
    general-instruction pass. If **no threat is selected and no mitigation is adopted**, state
    "nothing to verify", set `Latest stage: testing`, and **stop**.
 3. **Locate the rules file.** Mint `rules_abs` with the `rules-path` command and the same
@@ -310,10 +312,10 @@ file.
    the threat and the Descriptions alone. This is supporting context only: verification runs to
    completion either way, and an absent sidecar stays out of the findings.
 4. **Dispatch the verifiers.** Dispatch one `ingrain-threat-verifier` per selected threat (see
-   **How to dispatch a verifier**), each pointed at its `T<n>` row, the `selected` mitigations
+   **How to dispatch a verifier**), each pointed at its `T<n>` entry, the `selected` mitigations
    covering it, **and — when the sidecar carries rules (`file_exists: true`) — those
    mitigations' rule(s) in `rules_abs`**.
-   Then run the general-instruction pass over the untagged rows. Collect each one's
+   Then run the general-instruction pass over the mitigations naming no threat. Collect each one's
    justification, then its level (`weak` | `adequate` | `strong`), plus its evidence and — on
    `weak` — the residual path. Hold each level for step 5, which is where it is settled.
 5. **Conclude each Robustness (you decide).** For each selected threat, read the verifier's
@@ -321,10 +323,10 @@ file.
    **Concluding the Robustness**). Then carry each mitigation's Robustness across from the
    threats it covers — weakest governs. Write your own ≤256-char justification for each.
 6. **Finalize the assessment (you write).** Write each threat's concluded Robustness into the
-   **`Robustness`** column of `## Threats`, and each mitigation's concluded justification and
-   Robustness into the **`Justification`** and **`Robustness`** columns of `## Mitigations`
+   **`Robustness`** field of its `## Threats` entry, and each mitigation's concluded justification and
+   Robustness into the **`Justification`** and **`Robustness`** fields of its `## Mitigations` entry
    (per `references/formatting/assessment-file.md`), leaving excluded/undecided
-   rows as `—`; and set `## Task` → `Latest stage: testing`. One write, to the
+   entries as `—`; and set `## Task` → `Latest stage: testing`. One write, to the
    minted `assessment_abs`. On a re-verification (the file was already at `Latest stage: testing`
    and the code changed again), **overwrite** the previous justifications and levels — they
    record the current implementation. The
@@ -333,7 +335,7 @@ file.
    Then **validate the file strictly** — `scripts/validate-assessment <assessment_abs>` with no
    `--lenient` — and fix what it reports before you report to the coding agent (see **The
    assessment file** → Check the write). This is the "mark checked" step — the file now records
-   what was verified, so it is also the last moment a malformed row can be caught before the
+   what was verified, so it is also the last moment a malformed entry can be caught before the
    next session inherits it.
 7. **Report to the coding agent.** Present the findings (see **Reporting format**) and close
    with a one-line verdict. If any threat is `weak`, ask the coding agent to revisit exactly
@@ -345,26 +347,27 @@ Report the concluded results to the coding agent as **visible Markdown output in
 conversation**. Lead with the threats — they are what the phase measured — then the
 mitigations.
 
-**Threat robustness**, one row per selected threat, in tag order (`T1` first):
+**Threat robustness**, one row per selected threat, **sorted by risk score descending** (the ids
+will not be in order, and that is correct):
 
 | Column | Contents |
 |--------|----------|
-| **Threat** | tag + short title (e.g. `T1 — injected CSS escapes the sandbox`) |
+| **Threat** | id + short title (e.g. `T01 — injected CSS escapes the sandbox`) |
 | **Robustness** | `weak` \| `adequate` \| `strong` |
-| **Covering mitigations** | the adopted `M` tags meant to close it, or `none adopted` |
+| **Covering mitigations** | the adopted `M<n>` ids meant to close it, or `none adopted` |
 | **Justification** | the reasoning you concluded — the same one behind the table |
 | **Evidence** | where in the diff the threat is closed (or left open) — `file:line`, or `—` |
 | **Residual path** | for `weak`: **the concrete route by which the threat can still be realized**, and the change that would close it. This is the actionable half of the report — name the concrete route an attacker still takes, e.g. "an unauthenticated caller still reaches `/refresh` via X". `—` otherwise |
 
-**Mitigation contribution**, one row per adopted mitigation, in tag order (`M1` first): tag +
-title, **Robustness**, the threat tags it covers (or `general`), and one line on what
-it does or fails to do. General implementation instructions appear here with `general` in place
-of threat tags.
+**Mitigation contribution**, one row per adopted mitigation, ordered by the highest risk score
+among the threats each covers: id + title, **Robustness**, the threat ids it covers (or
+`general`), and one line on what it does or fails to do. General implementation instructions
+appear here with `general` in place of threat ids.
 
 Then close with a one-line verdict:
 
-- **All at `adequate` or above** — "All N selected threats are closed (T2, T4 at `strong`)."
-- **Gaps found** — "N of M selected threats remain realizable: <T-tags> — please revisit them
+- **All at `adequate` or above** — "All N selected threats are closed (T02, T04 at `strong`)."
+- **Gaps found** — "N of M selected threats remain realizable: <ids> — please revisit them
   before presenting the change," naming exactly the `weak` ones.
 
 This report goes to the **coding agent** as visible Markdown; the selection gates belong to

@@ -96,24 +96,16 @@ vld_is_int_in_range() {
     [ "$1" -ge "$2" ] && [ "$1" -le "$3" ]
 }
 
-# Check one enumerated cell, reporting a violation naming the column and the allowed
-# values. $1 line, $2 column name, $3 value, then the allowed values. An unset cell is
-# accepted only when $4.. includes the unset marker via vld_check_enum_optional.
+# Check one enumerated field, reporting a violation naming the field and the allowed
+# values. $1 line, $2 field name, $3 value, then the allowed values. Unset values never
+# reach here: vld_check_entry_field and its _optional twin decide what an unfilled field
+# means before they call this.
 vld_check_enum() {
     local line="$1" column="$2" value="$3"
     shift 3
     vld_in_list "${value}" "$@" && return 0
     vld_error "${line}" "${column}: \"${value}\" is not one of: $*"
     return 1
-}
-
-# As vld_check_enum, but an unset cell (empty or `—`) also passes — for the columns the
-# schema marks optional until a gate or the verification pass fills them.
-vld_check_enum_optional() {
-    local line="$1" column="$2" value="$3"
-    shift 3
-    vld_is_unset "${value}" && return 0
-    vld_check_enum "${line}" "${column}" "${value}" "$@"
 }
 
 # Enforce the schema's 256-character cap on a justification cell.
@@ -281,133 +273,109 @@ vld_require_field() {
     return 0
 }
 
-# --- table parsing ----------------------------------------------------------------
+# --- entry index ------------------------------------------------------------------
 
-# Split a markdown table row into ROW_CELLS, trimmed, with the leading and trailing
-# pipes dropped. Split by hand rather than with `read -ra`, which silently drops a
-# trailing empty field — exactly the case a cell-count check must catch.
-ROW_CELLS=()
+# Threats and mitigations are stored as one `### <id> — <title>` block each, with one
+# `Name: value` field per line beneath. This index is the entry-level twin of the section
+# index above: same shape, one heading level down, scoped to a section's line range.
+#
+# Blocks rather than table rows because every later stage fills a field the stage before it
+# left unset — the risk scorer, the selection gate, the verification pass — and a field on
+# its own line is an edit of one short line instead of a rewrite of the whole record.
+ENTRY_IDS=()
+ENTRY_STARTS=()
+ENTRY_ENDS=()
 
-vld_split_row() {
-    local raw cell
-    raw="$(vld_trim "$1")"
-    raw="${raw#|}"
-    raw="${raw%|}"
-    ROW_CELLS=()
-    while :; do
-        if [[ "${raw}" == *"|"* ]]; then
-            cell="${raw%%|*}"
-            raw="${raw#*|}"
-            ROW_CELLS+=("$(vld_trim "${cell}")")
+# Index the `### ` blocks inside the line range $1..$2. The id is the heading text up to
+# the first em dash, the title the remainder; a heading with no dash yields the whole text
+# as the id, which then fails the id check and names itself in the message.
+#
+# An entry's body runs to the line before the next `###` or to the end of the range, so a
+# field lookup inside it cannot stray into the neighbouring entry.
+vld_index_entries() {
+    local start="$1" end="$2" i text id
+    ENTRY_IDS=()
+    ENTRY_STARTS=()
+    ENTRY_ENDS=()
+
+    for ((i = start; i <= end && i <= DOC_COUNT; i++)); do
+        case "${DOC[i]}" in
+            '### '*)
+                text="$(vld_trim "${DOC[i]#\#\#\# }")"
+                id="$(vld_trim "${text%%—*}")"
+                ENTRY_IDS+=("${id}")
+                ENTRY_STARTS+=("${i}")
+                ;;
+        esac
+    done
+
+    for ((i = 0; i < ${#ENTRY_STARTS[@]}; i++)); do
+        if [ $((i + 1)) -lt "${#ENTRY_STARTS[@]}" ]; then
+            ENTRY_ENDS+=($((ENTRY_STARTS[i + 1] - 1)))
         else
-            ROW_CELLS+=("$(vld_trim "${raw}")")
-            break
+            ENTRY_ENDS+=("${end}")
         fi
     done
 }
 
-# True when the row is a header separator (`|---|:--:|…`).
-vld_is_separator_row() {
-    local raw
-    raw="$(vld_trim "$1")"
-    [[ "${raw}" =~ ^\|[[:space:]:|-]+\|?$ ]]
-}
-
-# Locate the table in the line range $1..$2 and check its header against the expected
-# columns ($4.. ). Returns 0 when a header was found and leaves the row span in
-# TBL_FIRST_ROW / TBL_LAST_ROW; returns 1 (reporting) when the section
-# holds no table. Results go to globals, not stdout, so the violations this records
-# survive — a `$(…)` capture would run it in a subshell and lose them.
+# Check an entry id: the right prefix ($3 = T|M, either case) followed by digits, and unique
+# within its section. $1 the line it sits on, $2 the value. Ids are permanent, so there is no
+# contiguity rule — a retired threat leaves a gap, and every reference to the ids around it
+# keeps pointing where it did.
 #
-# Data rows are the pipe rows following the separator, stopping at the first line that
-# is not one. TBL_LAST_ROW < TBL_FIRST_ROW means the table has no data rows, which is
-# legitimate: a `minor` triage can leave the Threats table empty.
-TBL_FIRST_ROW=0
-TBL_LAST_ROW=0
+# The uppercase form is the one every template and reference prescribes; lowercase is accepted
+# so an id written `t01` still resolves. Uniqueness therefore compares case-folded — `T01` and
+# `t01` are the same id — while the message quotes the id exactly as it was written.
+VLD_SEEN_IDS=""
 
-vld_table_header() {
-    local start="$1" end="$2" heading_line="$3"
-    shift 3
-    local expected=("$@")
-    local i header_line=0 line first_data last_data
-
-    for ((i = start; i <= end && i <= DOC_COUNT; i++)); do
-        line="$(vld_trim "${DOC[i]}")"
-        case "${line}" in
-            '|'*)
-                header_line="${i}"
-                break
-                ;;
-        esac
-    done
-    if [ "${header_line}" -eq 0 ]; then
-        # Mid-run the heading routinely lands before the rows it will hold: the
-        # orchestrator opens the file, and the worker that fills this table has not been
-        # dispatched yet.
-        [ "${VLD_LENIENT}" = "true" ] || vld_error "${heading_line}" "section holds no table"
+vld_check_id() {
+    local line="$1" value="$2" prefix="$3" lower_prefix folded
+    lower_prefix="$(vld_lower "${prefix}")"
+    if ! [[ "${value}" =~ ^[${prefix}${lower_prefix}][0-9]+$ ]]; then
+        vld_error "${line}" "id: \"${value}\" is not of the form ${prefix}<n>"
         return 1
     fi
-
-    vld_split_row "${DOC[header_line]}"
-    local actual=("${ROW_CELLS[@]}")
-    if [ "${#actual[@]}" -ne "${#expected[@]}" ]; then
-        vld_error "${header_line}" \
-            "table header has ${#actual[@]} columns, expected ${#expected[@]}: ${expected[*]}"
-    else
-        for ((i = 0; i < ${#expected[@]}; i++)); do
-            if ! vld_in_list "${actual[i]}" "${expected[i]}"; then
-                vld_error "${header_line}" \
-                    "table header column $((i + 1)) is \"${actual[i]}\", expected \"${expected[i]}\""
-            fi
-        done
-    fi
-
-    if [ $((header_line + 1)) -gt "${end}" ] || ! vld_is_separator_row "${DOC[header_line + 1]}"; then
-        vld_error "${header_line}" "table header is not followed by a separator row"
-        TBL_FIRST_ROW=$((header_line + 1))
-        TBL_LAST_ROW="${header_line}"
-        return 0
-    fi
-
-    first_data=$((header_line + 2))
-    last_data=$((first_data - 1))
-    for ((i = first_data; i <= end && i <= DOC_COUNT; i++)); do
-        line="$(vld_trim "${DOC[i]}")"
-        case "${line}" in
-            '|'*) last_data="${i}" ;;
-            *) break ;;
-        esac
-    done
-
-    TBL_FIRST_ROW="${first_data}"
-    TBL_LAST_ROW="${last_data}"
-    return 0
-}
-
-# Check a tag column: the right prefix ($3 = T|M), no duplicates, and — unless lenient —
-# contiguous from 1. $1 the ordinal position (0-based), $2 the line, $4 the value.
-# The seen tags accumulate in VLD_SEEN_TAGS (space delimited).
-VLD_SEEN_TAGS=""
-
-vld_check_tag() {
-    local index="$1" line="$2" prefix="$3" value="$4" number
-    if ! [[ "${value}" =~ ^${prefix}[0-9]+$ ]]; then
-        vld_error "${line}" "Tag: \"${value}\" is not of the form ${prefix}<n>"
-        return 1
-    fi
-    case " ${VLD_SEEN_TAGS} " in
-        *" ${value} "*)
-            vld_error "${line}" "Tag: \"${value}\" is a duplicate"
+    folded="$(vld_lower "${value}")"
+    case " ${VLD_SEEN_IDS} " in
+        *" ${folded} "*)
+            vld_error "${line}" "id: \"${value}\" is a duplicate"
             return 1
             ;;
     esac
-    VLD_SEEN_TAGS="${VLD_SEEN_TAGS} ${value}"
-    number="${value#"${prefix}"}"
-    if [ "${VLD_LENIENT}" != "true" ] && [ "${number}" -ne $((index + 1)) ]; then
-        vld_error "${line}" \
-            "Tag: \"${value}\" breaks the contiguous sequence — expected ${prefix}$((index + 1))"
-    fi
+    VLD_SEEN_IDS="${VLD_SEEN_IDS} ${folded}"
     return 0
+}
+
+# Check one `Name: value` field a later stage is required to have filled by finalize.
+# $4.. the allowed values; with none given the field is free text and only its presence is
+# checked.
+#
+# The two ways a field can be unfilled — absent, or present as `—` — are waived under
+# `--lenient` and reported when strict, so the mid-run file is legitimately incomplete while
+# the finished one must be whole. vld_require_field already draws that line for the absent
+# case; the `—` case is the one this adds.
+vld_check_entry_field() {
+    local start="$1" end="$2" name="$3" heading_line="$4"
+    shift 4
+    vld_require_field "${start}" "${end}" "${name}" "${heading_line}" || return 1
+    if vld_is_unset "${VLD_VALUE}"; then
+        [ "${VLD_LENIENT}" = "true" ] || vld_error "${VLD_FIELD_LINE}" "${name}: is not filled in"
+        return 1
+    fi
+    [ "$#" -eq 0 ] && return 0
+    vld_check_enum "${VLD_FIELD_LINE}" "${name}" "${VLD_VALUE}" "$@"
+}
+
+# As vld_check_entry_field, but `—` is a settled answer rather than an unfilled one, in
+# either mode — for the fields the schema leaves permanently optional: a threat outside the
+# selected set never gets a Robustness, a general instruction covers no threat.
+vld_check_entry_field_optional() {
+    local start="$1" end="$2" name="$3" heading_line="$4"
+    shift 4
+    vld_require_field "${start}" "${end}" "${name}" "${heading_line}" || return 1
+    vld_is_unset "${VLD_VALUE}" && return 0
+    [ "$#" -eq 0 ] && return 0
+    vld_check_enum "${VLD_FIELD_LINE}" "${name}" "${VLD_VALUE}" "$@"
 }
 
 # --- assessment schema ------------------------------------------------------------
@@ -478,17 +446,12 @@ vld_check_triage_section() {
     fi
 }
 
-# The threat tags this file declares, space delimited — the set a mitigation's
-# **Threat tags** column must draw from.
+# The threat ids this file declares, space delimited — the set a mitigation's **Threats**
+# field must draw from.
 VLD_THREAT_TAGS=""
 
 vld_check_threats_section() {
-    local idx range start end heading first last i row_index=0
-    local expected=(
-        Tag Title Asset Vector Description Assumptions Justification
-        Impact Likelihood "Risk score" Criticality Selection Robustness
-    )
-    local previous_score=101 score
+    local idx range start end heading i entry_start entry_end entry_head
 
     VLD_THREAT_TAGS=""
     idx="$(vld_section_index "Threats")"
@@ -498,43 +461,48 @@ vld_check_threats_section() {
     end="${range##* }"
     heading="${SEC_STARTS[idx]}"
 
-    vld_table_header "${start}" "${end}" "${heading}" "${expected[@]}" || return 0
-    first="${TBL_FIRST_ROW}"
-    last="${TBL_LAST_ROW}"
+    # No entries is legitimate in either mode: a `minor` triage genuinely has no threats,
+    # and mid-run the heading routinely lands before the worker that fills it is dispatched.
+    # Without a table header there is nothing to tell those two apart, and neither is a
+    # defect worth reporting.
+    vld_index_entries "${start}" "${end}"
+    [ "${#ENTRY_STARTS[@]}" -eq 0 ] && return 0
 
-    VLD_SEEN_TAGS=""
-    for ((i = first; i <= last; i++)); do
-        vld_split_row "${DOC[i]}"
-        if [ "${#ROW_CELLS[@]}" -ne "${#expected[@]}" ]; then
-            vld_error "${i}" \
-                "row has ${#ROW_CELLS[@]} cells, expected ${#expected[@]}"
-            row_index=$((row_index + 1))
-            continue
+    VLD_SEEN_IDS=""
+    for ((i = 0; i < ${#ENTRY_STARTS[@]}; i++)); do
+        entry_head="${ENTRY_STARTS[i]}"
+        entry_start=$((entry_head + 1))
+        entry_end="${ENTRY_ENDS[i]}"
+
+        # Case-folded, because a mitigation's Threats field may spell the id in either case.
+        if vld_check_id "${entry_head}" "${ENTRY_IDS[i]}" T; then
+            VLD_THREAT_TAGS="${VLD_THREAT_TAGS} $(vld_lower "${ENTRY_IDS[i]}")"
         fi
 
-        if vld_check_tag "${row_index}" "${i}" T "${ROW_CELLS[0]}"; then
-            VLD_THREAT_TAGS="${VLD_THREAT_TAGS} ${ROW_CELLS[0]}"
+        vld_check_entry_field "${entry_start}" "${entry_end}" "Asset" "${entry_head}"
+        vld_check_entry_field "${entry_start}" "${entry_end}" "Vector" "${entry_head}"
+        vld_check_entry_field "${entry_start}" "${entry_end}" "Description" "${entry_head}"
+        vld_check_entry_field "${entry_start}" "${entry_end}" "Assumptions" "${entry_head}"
+
+        if vld_check_entry_field "${entry_start}" "${entry_end}" "Justification" "${entry_head}"; then
+            vld_check_justification "${VLD_FIELD_LINE}" "Justification" "${VLD_VALUE}"
         fi
-        vld_check_justification "${i}" "Justification" "${ROW_CELLS[6]}"
-        vld_check_enum "${i}" "Impact" "${ROW_CELLS[7]}" critical high medium low
-        vld_check_enum "${i}" "Likelihood" "${ROW_CELLS[8]}" "very high" high medium low
+        vld_check_entry_field "${entry_start}" "${entry_end}" "Impact" "${entry_head}" \
+            critical high medium low
+        vld_check_entry_field "${entry_start}" "${entry_end}" "Likelihood" "${entry_head}" \
+            "very high" high medium low
 
-        score="${ROW_CELLS[9]}"
-        if vld_is_int_in_range "${score}" 0 100; then
-            if [ "${VLD_LENIENT}" != "true" ] && [ "${score}" -gt "${previous_score}" ]; then
-                vld_error "${i}" \
-                    "Risk score: ${score} is higher than the preceding row's ${previous_score} — rows must descend by risk"
-            fi
-            previous_score="${score}"
-        else
-            vld_error "${i}" "Risk score: \"${score}\" is not an integer in 0–100"
+        if vld_check_entry_field "${entry_start}" "${entry_end}" "Risk score" "${entry_head}"; then
+            vld_is_int_in_range "${VLD_VALUE}" 0 100 \
+                || vld_error "${VLD_FIELD_LINE}" "Risk score: \"${VLD_VALUE}\" is not an integer in 0–100"
         fi
+        vld_check_entry_field "${entry_start}" "${entry_end}" "Criticality" "${entry_head}" \
+            low medium high critical
 
-        vld_check_enum "${i}" "Criticality" "${ROW_CELLS[10]}" low medium high critical
-        vld_check_enum_optional "${i}" "Selection" "${ROW_CELLS[11]}" selected excluded undecided
-        vld_check_enum_optional "${i}" "Robustness" "${ROW_CELLS[12]}" weak adequate strong
-
-        row_index=$((row_index + 1))
+        vld_check_entry_field_optional "${entry_start}" "${entry_end}" "Selection" "${entry_head}" \
+            selected excluded undecided
+        vld_check_entry_field_optional "${entry_start}" "${entry_end}" "Robustness" "${entry_head}" \
+            weak adequate strong
     done
 }
 
@@ -547,19 +515,20 @@ vld_check_risk_score_section() {
     end="${range##* }"
     heading="${SEC_STARTS[idx]}"
 
-    if vld_require_field "${start}" "${end}" "Score" "${heading}"; then
+    # Entry-field checks, not bare vld_require_field: the risk scorer fills this section at
+    # the same step it scores the threats, so `—` here means the same "not yet" it means
+    # there, and must be waived and reported in the same modes.
+    if vld_check_entry_field "${start}" "${end}" "Score" "${heading}"; then
         vld_is_int_in_range "${VLD_VALUE}" 0 100 \
             || vld_error "${VLD_FIELD_LINE}" "Score: \"${VLD_VALUE}\" is not an integer in 0–100"
     fi
-    if vld_require_field "${start}" "${end}" "Criticality" "${heading}"; then
-        vld_check_enum "${VLD_FIELD_LINE}" "Criticality" "${VLD_VALUE}" low medium high critical
-    fi
+    vld_check_entry_field "${start}" "${end}" "Criticality" "${heading}" low medium high critical
 }
 
-# Check a mitigation's **Threat tags** cell: `—` for a general implementation
-# instruction, else a comma-separated list of tags this file's Threats table declares.
+# Check a mitigation's **Threats** field: `—` for a general implementation instruction,
+# else a comma-separated list of ids this file's `## Threats` section declares.
 vld_check_threat_tags() {
-    local line="$1" value="$2" tag rest
+    local line="$1" value="$2" tag folded rest
     vld_is_unset "${value}" && return 0
     rest="${value}"
     while [ -n "${rest}" ]; do
@@ -570,13 +539,15 @@ vld_check_threat_tags() {
             tag="$(vld_trim "${rest}")"
             rest=""
         fi
-        if ! [[ "${tag}" =~ ^T[0-9]+$ ]]; then
-            vld_error "${line}" "Threat tags: \"${tag}\" is not of the form T<n>"
+        if ! [[ "${tag}" =~ ^[Tt][0-9]+$ ]]; then
+            vld_error "${line}" "Threats: \"${tag}\" is not of the form T<n>"
             continue
         fi
+        # VLD_THREAT_TAGS holds case-folded ids, so the tag folds before the lookup.
+        folded="$(vld_lower "${tag}")"
         case " ${VLD_THREAT_TAGS} " in
-            *" ${tag} "*) ;;
-            *) vld_error "${line}" "Threat tags: \"${tag}\" is not a threat in this file" ;;
+            *" ${folded} "*) ;;
+            *) vld_error "${line}" "Threats: \"${tag}\" is not a threat in this file" ;;
         esac
     done
 }
@@ -600,11 +571,7 @@ vld_check_rule_refs() {
 }
 
 vld_check_mitigations_section() {
-    local idx range start end heading first last i row_index=0
-    local expected=(
-        Tag Title Description Yield Effort "Threat tags" "Rule refs"
-        Selection Justification Robustness
-    )
+    local idx range start end heading i entry_start entry_end entry_head
 
     idx="$(vld_section_index "Mitigations")"
     [ "${idx}" -lt 0 ] && return 0
@@ -613,29 +580,38 @@ vld_check_mitigations_section() {
     end="${range##* }"
     heading="${SEC_STARTS[idx]}"
 
-    vld_table_header "${start}" "${end}" "${heading}" "${expected[@]}" || return 0
-    first="${TBL_FIRST_ROW}"
-    last="${TBL_LAST_ROW}"
+    # As in Threats: an empty section is not a defect in either mode.
+    vld_index_entries "${start}" "${end}"
+    [ "${#ENTRY_STARTS[@]}" -eq 0 ] && return 0
 
-    VLD_SEEN_TAGS=""
-    for ((i = first; i <= last; i++)); do
-        vld_split_row "${DOC[i]}"
-        if [ "${#ROW_CELLS[@]}" -ne "${#expected[@]}" ]; then
-            vld_error "${i}" "row has ${#ROW_CELLS[@]} cells, expected ${#expected[@]}"
-            row_index=$((row_index + 1))
-            continue
+    VLD_SEEN_IDS=""
+    for ((i = 0; i < ${#ENTRY_STARTS[@]}; i++)); do
+        entry_head="${ENTRY_STARTS[i]}"
+        entry_start=$((entry_head + 1))
+        entry_end="${ENTRY_ENDS[i]}"
+
+        vld_check_id "${entry_head}" "${ENTRY_IDS[i]}" M
+
+        vld_check_entry_field "${entry_start}" "${entry_end}" "Description" "${entry_head}"
+        vld_check_entry_field "${entry_start}" "${entry_end}" "Yield" "${entry_head}" \
+            high medium low
+        vld_check_entry_field "${entry_start}" "${entry_end}" "Effort" "${entry_head}" \
+            high medium low
+
+        if vld_check_entry_field_optional "${entry_start}" "${entry_end}" "Threats" "${entry_head}"; then
+            vld_check_threat_tags "${VLD_FIELD_LINE}" "${VLD_VALUE}"
+        fi
+        if vld_check_entry_field_optional "${entry_start}" "${entry_end}" "Rule refs" "${entry_head}"; then
+            vld_check_rule_refs "${VLD_FIELD_LINE}" "${VLD_VALUE}"
         fi
 
-        vld_check_tag "${row_index}" "${i}" M "${ROW_CELLS[0]}"
-        vld_check_enum "${i}" "Yield" "${ROW_CELLS[3]}" high medium low
-        vld_check_enum "${i}" "Effort" "${ROW_CELLS[4]}" high medium low
-        vld_check_threat_tags "${i}" "${ROW_CELLS[5]}"
-        vld_check_rule_refs "${i}" "${ROW_CELLS[6]}"
-        vld_check_enum_optional "${i}" "Selection" "${ROW_CELLS[7]}" selected excluded undecided
-        vld_check_justification "${i}" "Justification" "${ROW_CELLS[8]}"
-        vld_check_enum_optional "${i}" "Robustness" "${ROW_CELLS[9]}" weak adequate strong
-
-        row_index=$((row_index + 1))
+        vld_check_entry_field_optional "${entry_start}" "${entry_end}" "Selection" "${entry_head}" \
+            selected excluded undecided
+        if vld_check_entry_field_optional "${entry_start}" "${entry_end}" "Justification" "${entry_head}"; then
+            vld_check_justification "${VLD_FIELD_LINE}" "Justification" "${VLD_VALUE}"
+        fi
+        vld_check_entry_field_optional "${entry_start}" "${entry_end}" "Robustness" "${entry_head}" \
+            weak adequate strong
     done
 }
 

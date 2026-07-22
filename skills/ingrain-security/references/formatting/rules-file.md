@@ -46,7 +46,7 @@ and the selected threats before mitigations exist. Follow this structure exactly
   read it in a later session.
 - **Linked from the assessment.** The assessment file links to this sidecar by its relative
   `rules_path`, and each mitigation's **Rule refs** ids (in the assessment's `## Mitigations`
-  table) are the machine link into this file's rule entries. The rule **titles and bodies**
+  entries) are the machine link into this file's rule entries. The rule **titles and bodies**
   live here, and the assessment reaches them by that link.
 
 ## Sections and fields
@@ -68,8 +68,9 @@ Cite exactly the rules the retrieval pass returned, with the id, title and body 
 
 ### `## Per-mitigation mapping` — which rules each mitigation follows
 
-One line per mitigation that follows ≥1 rule, keyed by its tag:
-`M<n> → <id>[, <id>…]` with a one-line note on how the rule(s) shaped it. A mitigation whose
+One line per mitigation that follows ≥1 rule, keyed by its permanent id:
+`M<n> → <id>[, <id>…]` with a one-line note on how the rule(s) shaped it. Because ids never
+change, a key written here stays valid across revision rounds. A mitigation whose
 **Rule refs** is `—` (a pure threat mitigation with no backing rule) is simply absent here. Every id
 here must appear as an entry in `## Retrieved rules`, and must match that mitigation's
 **Rule refs** in the assessment — the three stay in sync.
@@ -120,8 +121,8 @@ pass fills it. Judge from the mitigation Descriptions in the meantime.
 <full rule body / description, verbatim from the CLI>
 
 ## Per-mitigation mapping
-M1 → r-auth-01 — authenticates the token-refresh endpoint per the org's service-auth rule
-M2 → r-log-03 — emits a structured audit record on the sensitive action
+M01 → r-auth-01 — authenticates the token-refresh endpoint per the org's service-auth rule
+M02 → r-log-03 — emits a structured audit record on the sensitive action
 
 ## Applicable rules
 r-rate-07 — Rate-limit sensitive endpoints

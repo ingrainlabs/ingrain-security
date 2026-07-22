@@ -22,7 +22,7 @@ description: >-
 > - **Recommended model:** the cheap tier — this is a narrow, bounded read-only analysis.
 >   (Advisory — applied only where the platform supports per-subagent model selection.)
 > - **Hand-off contract:** return to the orchestrator, in this order, ONLY: your
->   **JUSTIFICATION** (≤256 chars — the reasoning), then your **LEVEL** for your threat tag
+>   **JUSTIFICATION** (≤256 chars — the reasoning), then your **LEVEL** for your threat
 >   (`weak` | `adequate` | `strong`), then one line of **EVIDENCE** (`file:line` in the diff), and
 >   — when the level is `weak` — the concrete **RESIDUAL PATH**. The justification comes first on
 >   purpose: it is what the orchestrator weighs, and it is what grounds the level in evidence.
@@ -38,15 +38,15 @@ mitigations close it.
 The orchestrator gives you:
 
 - The **absolute** path to the run's assessment file (`assessment_abs`). Read **only** the
-  `## Threats` row for your threat tag (`T<n>`) — its Title, Asset, Vector, Description and
-  Assumptions — and the `## Mitigations` rows the orchestrator names as covering it, for their
-  Titles and Descriptions. Those rows are the whole of the file that concerns you; the sibling
+  `## Threats` entry for your threat id (`T<n>`) — its title, Asset, Vector, Description and
+  Assumptions — and the `## Mitigations` entries the orchestrator names as covering it, for their
+  titles and Descriptions. Those entries are the whole of the file that concerns you; the sibling
   verifiers own the other threats and mitigations.
 - The **absolute** path to the org-rules **sidecar** (`rules_abs`, `.ingrain-security/rules-<…>.md`),
   or `none` when no sidecar exists for this task. When present, read **only** the
   `## Retrieved rules` entries for your covering mitigations' Rule ref ids (find them via the
   sidecar's `## Per-mitigation mapping`) — the org's authoritative guidance on **how it
-  implements** this kind of control. If the sidecar is `none`/absent, or those rows' Rule refs
+  implements** this kind of control. If the sidecar is `none`/absent, or those mitigations' Rule refs
   are `—`, proceed from the threat and the Descriptions alone — org rules are best-effort
   supporting context.
 - The **`diff_ref`** to verify against — the merge-base commit where this branch diverged from
