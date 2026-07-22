@@ -22,7 +22,7 @@ description: >-
 
 <SUBAGENT-STOP>
 If you were dispatched as a worker subagent (ingrain-relevance-triage, ingrain-threat-generator,
-ingrain-threat-critic, ingrain-risk-scorer, ingrain-mitigation-generator, ingrain-rule-expander,
+ingrain-threat-critic, ingrain-risk-scorer, ingrain-mitigation-generator,
 ingrain-mitigation-critic, ingrain-threat-verifier), do the one job you were given
 and return. The orchestration — Development and Testing alike — is run by the session that
 dispatched you; you are one step inside it.
@@ -126,10 +126,10 @@ Announce the phase you picked in your opening line, so a misroute costs the user
 
 **Announce:** open with "Using ingrain-security to assess this plan."
 
-You orchestrate seven worker roles, each defined by a reference file at
+You orchestrate six worker roles, each defined by a reference file at
 `references/development/<name>.md` (`ingrain-relevance-triage`, `ingrain-threat-generator`,
 `ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-mitigation-generator`,
-`ingrain-rule-expander`, `ingrain-mitigation-critic`). You dispatch each as a fresh subagent,
+`ingrain-mitigation-critic`). You dispatch each as a fresh subagent,
 in order, holding the state between steps yourself — all coordination flows through you.
 One step is yours alone: Step 5, where you run the org-rules retrieval **in this session**.
 
@@ -147,7 +147,7 @@ read for itself.
 land in your context, because you are the one writing them into the sidecar. That is
 deliberate and it is the *only* bulk payload you handle directly. Write the rules straight
 through to the sidecar and then work from the sidecar's path, not from what you read — every
-later step (the generator, the expander, the critic, Gate 2) reads that file for itself.
+later step (the generator, the critic, Gate 2) reads that file for itself.
 Carry the sidecar's **path** forward into each dispatch and let its readers open it; your copy
 of the bodies has done its work the moment they are on disk.
 
@@ -295,16 +295,16 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
 
    - **1–N selected** → only those proceed to Step 5. Name the excluded ones in one line
      ("T2, T5 excluded — risk accepted").
-   - **None selected** → skip Steps 5–9. State "no threats selected — review closed", close
+   - **None selected** → skip Steps 5–8. State "no threats selected — review closed", close
      with a one-line verdict naming the threats as accepted risk, then **go to Finalize** — the
      all-`excluded` `## Threats` section is the preserved context. Then continue building the
      plan.
 
 5. **Retrieve org rules** — **you run this yourself, in this session; there is no worker.**
    The org's security rules are ingested knowledge — how *this* team implements auth,
-   validation, secrets, crypto — retrieved by semantic search over the `ingrain` CLI. This
-   first pass is driven by the plan and the selected threats, because no mitigation exists
-   yet; Step 7 runs a second pass once one does.
+   validation, secrets, crypto — retrieved by semantic search over the `ingrain` CLI. This is
+   the review's **one** retrieval pass, driven by the plan and the selected threats — the
+   mitigation steps that follow work from the sidecar it writes.
    1. Mint `rules_abs` with the `rules-path` command from your `INGRAIN-ASSESSMENT-PATHS`
       session context, exactly as you minted `assessment_abs`.
    2. Probe that the CLI is available.
@@ -322,9 +322,8 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
      recoverable:** re-run so the prompt surfaces, and carry on without rules once the user
      **declines** (or where no permission channel exists), noting that access was declined.
    - **Genuine unavailability** — binary absent, CLI unconfigured, or no matches — degrades
-     gracefully: leave the sidecar unwritten, note why in one line, carry on. A
-     `command not found` probe settles Step 7 too — the expander reaches the same CLI, so that
-     step is skipped.
+     gracefully: leave the sidecar unwritten, note why in one line, carry on. The review
+     proceeds without org rules, and the mitigations stand on the workers' own analysis.
 
 6. **Mitigate** — dispatch `ingrain-mitigation-generator` with the **user-selected threats
    only** (excluded threats are out of scope), `assessment_abs`, and `rules_abs` — pointing it
@@ -334,33 +333,16 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    It writes the mitigation rows and the sidecar's `## Per-mitigation mapping`, and works from
    the rules already on disk — it has no CLI of its own.
 
-7. **Expand rules** — dispatch `ingrain-rule-expander` at the `## Mitigations` table and the
-   sidecar, with `rules_abs` as its write target. Step 5 queried from the threats; now that
-   concrete mitigations name concrete mechanisms, it searches on those mechanisms and
-   **appends** what it finds to the sidecar.
-   **This is the one worker that gets the shell/exec tool** — dispatch it with Bash/exec in
-   addition to its file tools, and say so in its dispatch. No other worker gets a shell.
-   **It runs exactly once**, before the Step 8 loop — the critic is what carries its findings
-   into the mitigations. Skip this
-   step entirely if Step 5's probe reported the CLI absent, and say so when you do.
-   → `references/development/ingrain-rule-expander.md` owns the lookup and its failure modes.
-   - `fetch blocked — permission needed` → the lookup was denied by the sandbox and the worker
-     could not surface a prompt itself. Ask the user for access using the same window
-     primitive the gates use, and on grant **re-dispatch with exec access** — this recovery
-     re-run completes the one expansion pass. Only if the user **declines** (or no permission channel
-     exists) do you continue with Step 5's rules alone, noting that access was declined.
-
-8. **Critique mitigations** *(single round)* — dispatch `ingrain-mitigation-critic` at
-   `## Mitigations` **and the expanded `rules-<…>.md` sidecar**, so it can judge the
-   mitigations against the rules they cite *and* against the rules Step 7 added. A rule the
-   expander found that no mitigation applies is exactly the gap this critic reports.
-   - `needs-revision` → re-dispatch `ingrain-mitigation-generator` **once** (the generator
-     alone; the expander has already had its single pass), then **freeze** the mitigations.
-     That single revision closes the loop.
+7. **Critique mitigations** *(single round)* — dispatch `ingrain-mitigation-critic` at
+   `## Mitigations` **and the `rules-<…>.md` sidecar**, so it can judge the mitigations
+   against the rules they cite *and* against the retrieved rules they leave unapplied. A
+   retrieved rule that no mitigation applies is exactly the gap this critic reports.
+   - `needs-revision` → re-dispatch `ingrain-mitigation-generator` **once**, then **freeze**
+     the mitigations. That single revision closes the loop.
    - `approved` → **freeze** the mitigations.
    - Either way, surface anything the critique left unresolved.
 
-9. **Gate 2 — the user selects which mitigations to adopt.** Follow **How to ask the user**.
+8. **Gate 2 — the user selects which mitigations to adopt.** Follow **How to ask the user**.
    In order:
 
    1. **Read** the bounded `## Mitigations` slice, and the `rules-<…>.md` sidecar to resolve
@@ -480,10 +462,10 @@ there; this section is a pointer, and the procedure is in that file.
 | `.ingrain-security/` appears to be missing | Re-run the mint script and use the path it returns — the script created the folder at the repo root, and it self-ignores, so `git status` stays silent about it. A missing folder means the path was resolved somewhere else. |
 | You are deleting the scratch sections at finalize | Delete the two critique sections and keep the `rules-<…>.md` sidecar — it is a **persistent** linked artifact the Testing verification pass reads later. |
 | No org rules came back | Leave the sidecar unwritten. Its absence is the signal, and Gate 2 and verification work from the Descriptions. |
-| The `ingrain` CLI errored or is unconfigured | Carry on without rules at Step 5 and Step 7 alike, note why in one line, and still propose mitigations — genuine unavailability (binary absent, unconfigured, no matches) degrades gracefully. |
-| The `ingrain` fetch was blocked by the sandbox | Recover it: at Step 5 you are in the main session, so re-run and let the host's native prompt reach the user; at Step 7 the worker returns `fetch blocked — permission needed`, so prompt and re-dispatch. Continue without rules once the user declines. |
-| The mitigation-generator is missing a rule | Rely on the two retrieval passes around it — Step 5 retrieves before it runs, Step 7 expands after — and on a revision round it re-reads the completed sidecar. The generator works from disk. |
-| The expander found new rules | Let the critic carry them in: it flags an unapplied rule, the generator revises, and the expander's single pass stands. (A re-run after a permission block is a recovery of that same pass.) |
+| The `ingrain` CLI errored or is unconfigured | Carry on without rules at Step 5, note why in one line, and still propose mitigations — genuine unavailability (binary absent, unconfigured, no matches) degrades gracefully. |
+| The `ingrain` fetch was blocked by the sandbox | Recover it: Step 5 runs in the main session, so re-run and let the host's native prompt reach the user. Continue without rules once the user declines. |
+| The mitigation-generator is missing a rule | Rely on Step 5's retrieval, which runs before it — and on a revision round it re-reads the sidecar. The generator works from disk. |
+| A retrieved rule went unapplied | Let the critic carry it in: it flags the unapplied rule and the generator revises once. |
 | You need a rule to back a mitigation | Cite exactly the rules `ingrain context` returned, by their real ids. |
 | A worker's section looks correct | Run `scripts/validate-assessment` on it anyway (`--lenient` mid-run, strict at finalize) — the schema is what the next reader depends on, and an enum typo stays invisible until it breaks in a later session. |
 | The validator still fails after your fixes | Fix what it names, re-run at most twice, and **say so in one line** naming the remaining violations — the user learns of it in the same turn. |
@@ -507,7 +489,6 @@ gate incorporates exactly the selected subset.
 - [ ] 4. Gate 1 — table displayed in the conversation FIRST, then one window per threat; `Selection` recorded (zero selected ends the review)
 - [ ] 5. Org rules retrieved by YOU via the `ingrain` CLI, from plan + selected threats; sidecar written (or none, if nothing came back)
 - [ ] 6. Mitigations generated for the selected threats ONLY, grounded in the sidecar; generator ran without a shell of its own
-- [ ] 7. Rule expander dispatched ONCE — second pass keyed on the mitigations; appended to the sidecar (skipped only if the CLI is absent)
-- [ ] 8. Single mitigation critique pass done — approved, or one revision applied; only the generator re-dispatched; mitigations frozen
-- [ ] 9. Gate 2 — table displayed FIRST, then one window per mitigation; `Selection` recorded
+- [ ] 7. Single mitigation critique pass done — approved, or one revision applied; mitigations frozen
+- [ ] 8. Gate 2 — table displayed FIRST, then one window per mitigation; `Selection` recorded
 - [ ] Finalize — `Latest stage: development` set, critique sections deleted, sidecar kept, assessment validated strictly, plan file links it + Maintenance

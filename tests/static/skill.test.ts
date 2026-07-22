@@ -37,7 +37,6 @@ const WORKERS = [
   "ingrain-threat-critic",
   "ingrain-risk-scorer",
   "ingrain-mitigation-generator",
-  "ingrain-rule-expander",
   "ingrain-mitigation-critic",
 ];
 
@@ -46,7 +45,7 @@ Deno.test("SKILL.md: frontmatter name is ingrain-security", async () => {
   assertEquals(fm.name, "ingrain-security");
 });
 
-Deno.test("SKILL.md: references all seven workers", async () => {
+Deno.test("SKILL.md: references all six workers", async () => {
   const md = await Deno.readTextFile(SKILL);
   for (const w of WORKERS) assertStringIncludes(md, w);
 });
@@ -293,19 +292,9 @@ Deno.test("ingrain-cli.md: documents the ingrain rule-retrieval CLI", async () =
   assertEquals(md.includes("ingrain context decisions"), false);
 });
 
-Deno.test("ingrain-rule-expander.md: defers the CLI mechanics and degrades gracefully", async () => {
-  const ref = `${ROOT}skills/ingrain-security/references/development/ingrain-rule-expander.md`;
-  const md = await Deno.readTextFile(ref);
-  // The mechanics live in the CLI reference; the worker only handles the outcomes.
-  assertStringIncludes(md, "references/lib/ingrain-cli.md");
-  // Graceful degradation when the CLI is absent/unconfigured.
-  assertStringIncludes(md.toLowerCase(), "graceful degradation");
-  assertStringIncludes(md.toLowerCase(), "proceed without rules");
-});
-
 Deno.test("SKILL.md: the orchestrator's own step retrieves rules", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // Step 5 is the orchestrator's first-pass retrieval, run in session — not a dispatch.
+  // Step 5 is the orchestrator's retrieval pass, run in session — not a dispatch.
   // It points at the CLI reference rather than restating the command.
   assertStringIncludes(md, "references/lib/ingrain-cli.md");
 });

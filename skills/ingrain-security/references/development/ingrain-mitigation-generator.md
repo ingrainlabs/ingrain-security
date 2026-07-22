@@ -94,7 +94,7 @@ You rewrite the whole table every round, so re-derive the numbering each time yo
 only the rule titles it records surface to the user, at Gate 2:
 - One line per mitigation that follows ≥1 rule, keyed by its tag: `M<n> → <id>[, <id>…]` with a one-line note on how the rule informed it. Omit mitigations whose Rule refs is `—`.
 - Every id you write into a mitigation's **Rule refs** must already exist as a `## Retrieved rules` entry in the sidecar, and must appear here too — that entry is what gives the orchestrator a title to render at Gate 2. **Cite ids that are already in the sidecar**, and leave `## Retrieved rules` to whoever retrieved the rule: only the agent that fetched a body can vouch for it.
-- **`## Retrieved rules` and `## Applicable rules` belong to the orchestrator's retrieval pass and to `ingrain-rule-expander`**, which appends to them after you run; leave both exactly as you found them. Where there is no sidecar, every Rule refs stays `—` and the mapping stays empty.
+- **`## Retrieved rules` and `## Applicable rules` belong to the orchestrator's retrieval pass**; leave both exactly as you found them. Where there is no sidecar, every Rule refs stays `—` and the mapping stays empty.
 
 Scope all advice to the task at hand.
 
@@ -102,10 +102,9 @@ Scope all advice to the task at hand.
 
 There is exactly one revision round, and the mitigations are frozen after it — so close every
 gap you accept in this single pass. Address the critic's feedback. If the critic flagged a missing or misapplied rule, **re-read
-the sidecar** — it has grown since your first pass: `ingrain-rule-expander` ran a second
-retrieval keyed on the mitigations you proposed, so the rule the critic wants is very likely
-already sitting in `## Retrieved rules`. That expansion has already run, so the sidecar you
-re-read is the complete rule set for this task. Rewrite the revised
+the sidecar** — the rule the critic wants is very likely already sitting in
+`## Retrieved rules`, unapplied. The sidecar is the complete rule set for this task; no
+further retrieval runs. Rewrite the revised
 mitigations into `## Mitigations` — re-deriving the priority order and the tags, since a
 dropped or added mitigation shifts them — and keep the sidecar's `## Per-mitigation mapping`
 current, then add a short **Changes from last round** so the critic can confirm its points

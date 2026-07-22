@@ -70,14 +70,13 @@ export const streamText = (events: StreamEvent[]): string => {
   return parts.join("\n");
 };
 
-/** The seven worker skills the orchestrator dispatches. */
+/** The six worker skills the orchestrator dispatches. */
 export const WORKERS = [
   "ingrain-relevance-triage",
   "ingrain-threat-generator",
   "ingrain-threat-critic",
   "ingrain-risk-scorer",
   "ingrain-mitigation-generator",
-  "ingrain-rule-expander",
   "ingrain-mitigation-critic",
 ] as const;
 

@@ -27,18 +27,16 @@ the short version:
 - **Triage first.** Only "major" (security-relevant) changes get the full review;
   "minor" changes stop immediately with nothing to fold in.
 - **The review loop:** threats → 0–100 risk score → **Gate 1** (you pick which
-  threats to address, 0–N) → org rules → mitigations → rule expansion → **Gate 2**
+  threats to address, 0–N) → org rules → mitigations → **Gate 2**
   (you pick which mitigations to adopt, 0–N). Threat and mitigation drafts each pass
   through a critic with up to 3 revision rounds.
-- **Org rules in two passes.** Your org's security rules are retrieved twice: once
-  from the selected threats, before any mitigation exists, and once more by
-  `ingrain-rule-expander` afterwards — keyed on the mitigations actually proposed, so
-  the search can ask what those concrete mechanisms imply. Both passes land in a rules
-  sidecar next to the assessment.
-- **Worker roles.** The orchestrator dispatches seven worker roles as fresh
+- **Org rules.** Your org's security rules are retrieved once, from the plan and the
+  selected threats, before any mitigation exists. They land in a rules sidecar next to
+  the assessment, which the mitigation generator and critic both read.
+- **Worker roles.** The orchestrator dispatches six worker roles as fresh
   subagents — `ingrain-relevance-triage`, `ingrain-threat-generator`,
   `ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-mitigation-generator`,
-  `ingrain-rule-expander`, `ingrain-mitigation-critic` (defined under
+  `ingrain-mitigation-critic` (defined under
   [`skills/ingrain-security/references/development/`](skills/ingrain-security/references/development/)).
   Each worker's sole write is its own section of the assessment file.
 - **Two selection gates are yours.** At Gate 1 and Gate 2 you decide, per finding,

@@ -1,6 +1,6 @@
 # Development dispatch reference
 
-Each of the seven Development workers is dispatched as a **fresh worker subagent** told to read
+Each of the six Development workers is dispatched as a **fresh worker subagent** told to read
 its reference file at `references/development/<name>.md` and follow it. That abstraction maps
 differently onto each host. The dispatch *prompt* is always the same; only the *mechanism* below
 changes.
@@ -28,31 +28,17 @@ then move to the next step. This mode shares one context across every worker, so
 
 ## Org-rules retrieval and the CLI
 
-Rule retrieval happens twice in Development, and the two passes run in different places.
+Rule retrieval happens **once** in Development, and it is not a dispatch.
 `references/lib/ingrain-cli.md` owns the CLI itself — the commands, their flags, and the
-failure taxonomy the branches below name. This section owns only **which pass runs where**.
+failure taxonomy. This section owns only **where that pass runs**.
 
-**The first pass is the orchestrator's own**, in the main session, which already has the
+**The retrieval pass is the orchestrator's own**, in the main session, which already has the
 host's shell/exec for the probe and the retrieval command. Running there is the point: a
 sandbox or permission denial surfaces the host's **native approval prompt** ("allow this
-command?") straight to the user.
+command?") straight to the user, so the fetch retries in place.
 
-**The second pass is `ingrain-rule-expander`'s**, the one worker granted the `ingrain` CLI.
-Dispatch it with the host's shell/exec tool available **in addition to** its file tools
-(e.g. Claude Code: allow Bash for `ingrain`; Codex: the exec capability).
-Restate inline that its writes are confined to the rules sidecar and its commands to the two
-`ingrain` invocations. It is dispatched **exactly once** per review.
-
-**Relaying an access denial is a dispatch concern**, because reaching the user is the
-orchestrator's channel. The expander first relies on the host's **native approval prompt**
-(Claude Code's "allow this command?"; Codex's exec-approval) so the fetch retries in place.
-Where the host can surface that prompt only to the main session, the expander returns the
-single-line `fetch blocked — permission needed` signal and hands the decision back; the
-**orchestrator** then asks the user for permission (using the host's selection-window /
-question primitive — see **Selection windows** below) and, on grant, re-dispatches it with
-exec access. That recovery re-run completes the one expansion pass.
-
-A **not installed** result on the first pass skips the expander altogether.
+**No worker carries a shell.** Every Development worker is dispatched with file tools alone
+and works from the rules already on disk; the sidecar's path is what you pass them.
 
 ## Selection windows (Gate 1 and Gate 2)
 

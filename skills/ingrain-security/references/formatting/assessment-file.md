@@ -77,7 +77,7 @@ shape.
 
   The org security rules themselves live in the **linked `rules-<branch-slug>-<task-slug>.md`
   sidecar** (see `references/formatting/rules-file.md`), written by the orchestrator's
-  retrieval step and `ingrain-rule-expander` when rules are retrieved. This file carries
+  retrieval step when rules are retrieved. This file carries
   the compact **Rule refs** ids (in `## Mitigations`) as the link into that sidecar.
 - **Living document.** Rewrite the relevant section at each commit point so the file
   always mirrors the current frozen state — critic-loop revisions and re-selection
@@ -229,8 +229,7 @@ invisible until it breaks there, and by then the run that produced it is over.
 **The orchestrator runs it, including for the workers.** Workers are Read/Grep/Glob only and
 hold no shell, so a worker writes its section and returns; the orchestrator validates that
 write before dispatching the next one, and re-dispatches the worker with the violations quoted
-back if something is wrong. (The `ingrain-rule-expander`, the one worker that carries exec,
-validates its own sidecar append.)
+back if something is wrong.
 
 Run it on the **same absolute path you just wrote to** (`assessment_abs`); the ready-to-run
 command, with the plugin root already substituted, is in your `INGRAIN-ASSESSMENT-PATHS`

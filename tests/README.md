@@ -1,7 +1,7 @@
 # Tests
 
 Test suite for the `ingrain-security` plugin — the `ingrain-security` orchestrator skill and its
-worker roles: seven in Development, plus Testing's `ingrain-threat-verifier`. Built on Deno's test
+worker roles: six in Development, plus Testing's `ingrain-threat-verifier`. Built on Deno's test
 runner; it drives the `claude` CLI in headless mode and can exercise each worker in isolation by
 dispatching it the way the orchestrator does (its
 `skills/ingrain-security/references/development/<name>.md` body as the system prompt, plus the
@@ -14,7 +14,7 @@ from its path:
 
 | Folder                    | Holds                                                                      |
 | ------------------------- | -------------------------------------------------------------------------- |
-| `references/development/` | The seven Development worker roles, `ingrain-<role>.md`, and `dispatch.md` |
+| `references/development/` | The six Development worker roles, `ingrain-<role>.md`, and `dispatch.md` |
 | `references/testing/`     | `verification-pass.md` (the Testing flow) and `ingrain-threat-verifier.md` |
 | `references/lib/`         | `ingrain-cli.md`, `branch-diff.md` — phase-neutral utilities               |
 | `references/formatting/`  | `assessment-file.md`, `rules-file.md` — file schemas, read by both phases  |
@@ -117,7 +117,7 @@ This is always on for the live tiers — Deno streams each test's output live (w
   output's _shape_ (a verdict keyword, a 0–100 score, risk descending by threat tag, required
   fields) over the return and the file together. Assertions are loose because live output varies.
   The table has seven cases over six workers (`ingrain-relevance-triage` runs twice, on a major and
-  a minor plan); `ingrain-rule-expander` has no live case and is covered by `static/` only.
+  a minor plan).
 - **skill/** — a full session (skill + agents + hook). `trigger.test.ts` checks a security-relevant
   plan starts the review and a trivial one stops at triage. `orchestration.test.ts`
   (integration-gated) checks the workers fire in order through risk scoring and the run halts at

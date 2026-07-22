@@ -5,9 +5,8 @@ assessment file. It is the twin of `assessment-file.md`: same folder, same branc
 slug, same minted-path discipline — but where the assessment carries the
 analysis, this file carries the **org security rules** (id, title, and full body/description)
 retrieved for the task, so the verification stage reads the rule descriptions **straight off
-disk**. It is filled in two passes: the orchestrator retrieves from
-the plan and the selected threats before mitigations exist, and `ingrain-rule-expander`
-appends a second pass keyed on the mitigations once they do. Follow this structure exactly.
+disk**. It is filled by the orchestrator's single retrieval pass, which queries from the plan
+and the selected threats before mitigations exist. Follow this structure exactly.
 
 ## Nature
 
@@ -28,9 +27,8 @@ appends a second pass keyed on the mitigations once they do. Follow this structu
   (`## Retrieved rules`, `## Per-mitigation mapping`, both empty), so a retrieval pass fills
   the sections in place rather than building the page; an existing file is always filled as it
   stands.
-  Its **content** is conditional: it carries rules exactly when a retrieval pass got them back
-  from the `ingrain` CLI. The orchestrator's first pass normally fills it; where that pass
-  returns nothing, `ingrain-rule-expander` fills it later should its own pass find something.
+  Its **content** is conditional: it carries rules exactly when the retrieval pass got them
+  back from the `ingrain` CLI, and stays an empty skeleton where nothing came back.
   Because the file is seeded, **the presence of the file says nothing** — read the mint JSON
   instead: **`file_exists: true`** (equivalently `template_only: false`) means org rules back
   this task's mitigations; an untouched skeleton means judge from the mitigation Descriptions
@@ -57,10 +55,8 @@ Every field below is **required** unless marked optional.
 
 ### `## Retrieved rules` — one entry per retrieved org rule
 
-One entry per retrieved rule, keyed by its id — written by the orchestrator's first pass and
-**appended to** by `ingrain-rule-expander`'s second pass. An appender adds new entries after
-the existing ones and leaves those untouched, so the section reads as the accumulated result
-of both passes. Render as a subsection per rule so the full body is readable:
+One entry per retrieved rule, keyed by its id — written by the orchestrator's retrieval pass.
+Render as a subsection per rule so the full body is readable:
 
 - **`### <id> — <title>`** — the rule id (verbatim, machine-facing — matches a **Rule refs**
   entry in the assessment) and the rule title (verbatim).
@@ -68,7 +64,7 @@ of both passes. Render as a subsection per rule so the full body is readable:
   `ingrain context security_rules … --json` (the `body` field), the org's authoritative
   guidance on *how to implement* the control. Keep it verbatim, in full.
 
-Cite exactly the rules a retrieval pass returned, with the id, title and body as they came back.
+Cite exactly the rules the retrieval pass returned, with the id, title and body as they came back.
 
 ### `## Per-mitigation mapping` — which rules each mitigation follows
 
@@ -81,18 +77,17 @@ here must appear as an entry in `## Retrieved rules`, and must match that mitiga
 ### `## Applicable rules` — optional
 
 Retrieved rules that apply to the change as a whole rather than to one mitigation, each
-as `<id> — <title>`, so the critic and reviewer still see them. Omit the section if there are
-none.
+as `<id> — <title>`, written by the orchestrator's retrieval pass so the critic and reviewer
+still see them. Omit the section if there are none.
 
 ## Ownership and lifecycle
 
 | Stage | Actor | Action |
 |-------|-------|--------|
-| Plan · Retrieve rules (step 5) | orchestrator | Creates the file and writes `## Retrieved rules` from the first CLI pass (only if rules came back) |
+| Plan · Retrieve rules (step 5) | orchestrator | Creates the file and writes `## Retrieved rules` / `## Applicable rules` from the CLI pass (only if rules came back) |
 | Plan · Mitigate (step 6) | `ingrain-mitigation-generator` | Reads `## Retrieved rules`; writes **only** `## Per-mitigation mapping`, rewriting it each revision round to stay in sync with `## Mitigations` |
-| Plan · Expand rules (step 7) | `ingrain-rule-expander` | **Appends** second-pass rules to `## Retrieved rules` / `## Applicable rules` — exactly once per review, before the critique loop; creates the file if step 5 found nothing |
-| Plan · Critique (step 8) | `ingrain-mitigation-critic` | Reads it by pointer to judge how faithfully mitigations follow the cited rules, and which appended rules go unapplied |
-| Plan · Gate 2 (step 9) | orchestrator | Reads `## Per-mitigation mapping` + `## Retrieved rules` to resolve each **Rule ref** id → title for the "Follows rules" display |
+| Plan · Critique (step 7) | `ingrain-mitigation-critic` | Reads it by pointer to judge how faithfully mitigations follow the cited rules, and which retrieved rules go unapplied |
+| Plan · Gate 2 (step 8) | orchestrator | Reads `## Per-mitigation mapping` + `## Retrieved rules` to resolve each **Rule ref** id → title for the "Follows rules" display |
 | Plan · finalize | orchestrator | **Leaves it in place** — the file is persistent |
 | Review | `ingrain-threat-verifier` | Reads the rule description(s) behind its threat's covering mitigations as supporting context for verification |
 
