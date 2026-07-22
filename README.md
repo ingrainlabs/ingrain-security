@@ -180,8 +180,14 @@ documented at **[Getting started](https://docs.ingrainlabs.dev/getting-started/)
 
 | Platform | Requirement |
 |----------|-------------|
-| macOS / Linux | System `bash` + coreutils — nothing extra to install. |
+| macOS / Linux | System `bash` + coreutils — already present. |
 | **Windows** | **[Git for Windows](https://git-scm.com/download/win) is required.** |
+
+| Tool | Needed for | If missing |
+|------|-----------|------------|
+| `bash` | every hook and skill script | on Windows, the automatic review won't fire (see below) |
+| [`jq`](https://jqlang.github.io/jq/) | the two permission hooks that read the tool payload | a permission prompt on every assessment write and script run |
+| `git` | resolving the repo root and the branch delta to review | the review still runs, scoped to the working tree instead of the branch |
 
 **Why Git for Windows.** The plugin's hooks are bash scripts run through
 [`hooks/run-hook.cmd`](hooks/run-hook.cmd), a cmd/bash polyglot wrapper. On Windows
