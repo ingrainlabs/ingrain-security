@@ -6,9 +6,9 @@
 #
 # Sourced — never executed. Sets no shell options: every caller runs `set -uo pipefail`
 # WITHOUT `-e` on purpose (git lookups on a non-git or detached-HEAD checkout must degrade
-# to an empty result, not abort), and sourcing must not change that. Requires the sibling
-# project-root.sh to be sourced first (resolve_project_root, resolve_branch, seed_gitignore,
-# escape_for_json).
+# to an empty result, not abort), and sourcing must not change that. Requires two siblings
+# to be sourced first: project-root.sh (resolve_project_root, resolve_branch, seed_gitignore,
+# escape_for_json) and artifact-template.sh (seed_artifact_template).
 #
 # Sourced by:
 #   skills/ingrain-security/scripts/assessment-path   (label: assessment)
@@ -30,14 +30,18 @@ slugify() {
     printf '%s' "${slug}"
 }
 
-# Mint one sidecar path. $1 host (selects project-root resolution only), $2 label
-# (assessment | rules), then the mint flags. Emits ONE JSON object on stdout; diagnostics
-# go to stderr. `<label>_abs` (absolute) is the CANONICAL write target; `<label>_path` is a
-# display-only relative form. Returns 2 on a usage error, 1 on a runtime error, 0 on ok.
+# Mint one sidecar path, seeding the artifact's empty skeleton when the file is absent.
+# $1 host (selects project-root resolution only), $2 label (assessment | rules), then the
+# mint flags. Emits ONE JSON object on stdout; diagnostics go to stderr. `<label>_abs`
+# (absolute) is the CANONICAL write target; `<label>_path` is a display-only relative form.
+# `file_exists` reports whether the artifact already holds WRITTEN CONTENT — an untouched
+# skeleton reads as absent, and `template_seeded` / `template_only` say which of the two
+# empty cases this is. Returns 2 on a usage error, 1 on a runtime error, 0 on ok.
 mint_path() {
     local host="$1" label="$2" host_slug title="" slug_flag="" have_slug="false" project_root
     local branch branch_slug branch_known task_slug name basename
-    local target_dir path_rel path_abs file_exists instruction
+    local target_dir path_rel path_abs seed_state file_exists template_seeded template_only
+    local instruction
     shift 2
 
     while [ $# -gt 0 ]; do
@@ -98,7 +102,18 @@ mint_path() {
     path_rel="${target_dir}/${basename}"
     path_abs="${project_root}/${path_rel}"
 
-    if [ -f "${path_abs}" ]; then file_exists="true"; else file_exists="false"; fi
+    # Seed the empty skeleton so no writer starts from a blank page, and read back what the
+    # file actually holds. `file_exists` reports CONTENT, not the inode: an untouched
+    # skeleton is reported as absent, so every reader of this field — Phase select, the
+    # resume check, the "were org rules retrieved" check — keeps its meaning now that a
+    # mint always leaves a file behind.
+    seed_state="$(seed_artifact_template "${label}" "${title}" "${path_abs}")" \
+        || { printf '%s-path: could not write %s\n' "${label}" "${path_abs}" >&2; return 1; }
+    case "${seed_state}" in
+        seeded)        file_exists="false" template_seeded="true"  template_only="true"  ;;
+        template_only) file_exists="false" template_seeded="false" template_only="true"  ;;
+        *)             file_exists="true"  template_seeded="false" template_only="false" ;;
+    esac
 
     # Carried in the JSON so the absolute path and the rule governing it arrive together,
     # in the same tool result, at the moment the agent is about to write. A static sentence
@@ -106,14 +121,14 @@ mint_path() {
     # and already has the path substituted in.
     case "${label}" in
         rules)
-            instruction="Write the retrieved org rules ONLY to rules_abs (${path_abs}). That folder is this repository's single .ingrain-security/ directory and it already exists — never create an .ingrain-security/ folder anywhere else, and never resolve the path against the file you happen to be editing. Pass rules_abs verbatim to every Write/Edit call; rules_path is a display-only form for prose and links."
+            instruction="Write the retrieved org rules ONLY to rules_abs (${path_abs}). That folder is this repository's single .ingrain-security/ directory and it already exists — never create an .ingrain-security/ folder anywhere else, and never resolve the path against the file you happen to be editing. Pass rules_abs verbatim to every Write/Edit call; rules_path is a display-only form for prose and links. The file already holds the correct empty skeleton — fill its sections in place rather than re-creating the page."
             ;;
         *)
-            instruction="Write the assessment ONLY to assessment_abs (${path_abs}). That folder is this repository's single .ingrain-security/ directory and it already exists — never create an .ingrain-security/ folder anywhere else, and never resolve the path against the file you happen to be editing. Pass assessment_abs verbatim to every worker dispatch and to every Write/Edit call; assessment_path is a display-only form for prose and links."
+            instruction="Write the assessment ONLY to assessment_abs (${path_abs}). That folder is this repository's single .ingrain-security/ directory and it already exists — never create an .ingrain-security/ folder anywhere else, and never resolve the path against the file you happen to be editing. Pass assessment_abs verbatim to every worker dispatch and to every Write/Edit call; assessment_path is a display-only form for prose and links. The file already holds the correct empty skeleton — fill its sections in place rather than re-creating the page or restating its table headers."
             ;;
     esac
 
-    printf '{"host":"%s","project_root":"%s","branch":"%s","branch_slug":"%s","branch_known":%s,"task_slug":"%s","%s_dir":"%s","%s_path":"%s","%s_abs":"%s","basename":"%s","file_exists":%s,"instruction":"%s"}\n' \
+    printf '{"host":"%s","project_root":"%s","branch":"%s","branch_slug":"%s","branch_known":%s,"task_slug":"%s","%s_dir":"%s","%s_path":"%s","%s_abs":"%s","basename":"%s","file_exists":%s,"template_seeded":%s,"template_only":%s,"instruction":"%s"}\n' \
         "$(escape_for_json "${host_slug}")" \
         "$(escape_for_json "${project_root}")" \
         "$(escape_for_json "${branch}")" \
@@ -125,6 +140,8 @@ mint_path() {
         "${label}" "$(escape_for_json "${path_abs}")" \
         "${basename}" \
         "${file_exists}" \
+        "${template_seeded}" \
+        "${template_only}" \
         "$(escape_for_json "${instruction}")"
 }
 

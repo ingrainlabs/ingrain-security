@@ -37,7 +37,6 @@ const WORKERS = [
   "ingrain-threat-critic",
   "ingrain-risk-scorer",
   "ingrain-mitigation-generator",
-  "ingrain-rule-expander",
   "ingrain-mitigation-critic",
 ];
 
@@ -46,7 +45,7 @@ Deno.test("SKILL.md: frontmatter name is ingrain-security", async () => {
   assertEquals(fm.name, "ingrain-security");
 });
 
-Deno.test("SKILL.md: references all seven workers", async () => {
+Deno.test("SKILL.md: references all six workers", async () => {
   const md = await Deno.readTextFile(SKILL);
   for (const w of WORKERS) assertStringIncludes(md, w);
 });
@@ -119,8 +118,12 @@ Deno.test("SKILL.md: documents the read-reference dispatch mechanism", async () 
   assertStringIncludes(md, "Read references/development/<name>.md");
   // Cross-platform mapping lives in the reference doc.
   assertStringIncludes(md, "references/development/dispatch.md");
-  // The read-only constraint is restated for the dispatched subagents.
-  assertStringIncludes(md.toLowerCase(), "read-only");
+  // The per-run write target is restated inline for the dispatched subagents — it is the
+  // one thing a worker cannot learn from its own reference file.
+  assertStringIncludes(
+    md,
+    "Your ONE permitted write is your own section of the stored analysis file",
+  );
 });
 
 // SKILL.md is an orchestration spine: it owns SEQUENCE and ROUTING, the reference files own
@@ -160,7 +163,7 @@ Deno.test("assessment-file.md: defines the strict on-disk format and its allowed
   }
   // Key constraints from the format are stated.
   assertStringIncludes(md, "256"); // justification max length
-  assertStringIncludes(md, "3–6 rows"); // threat count: soft target, not a hard limit
+  assertStringIncludes(md, "3–6"); // threat count: soft target, not a hard limit
   // The path is obtained from the bundled path-minting script.
   assertStringIncludes(md, "scripts/assessment-path");
 });
@@ -200,6 +203,36 @@ Deno.test("ownership: SKILL.md does not restate what assessment-file.md owns", a
   }
 });
 
+/**
+ * The validator wiring. `scripts/validate-assessment` checks a written assessment file
+ * against the schema its reference file specifies, and the rule is that it runs after EVERY
+ * write — so `assessment-file.md` owns the contract (modes, exit codes, the retry bound) and
+ * SKILL.md carries only the when. A skill that stops naming it silently goes back to writing
+ * unchecked files, which is the regression these fence.
+ */
+Deno.test("validation: assessment-file.md owns the after-every-write contract", async () => {
+  const md = await Deno.readTextFile(ASSESSMENT_REF);
+  assertStringIncludes(md, "scripts/validate-assessment");
+  // Both modes, and which one belongs to a finished file.
+  assertStringIncludes(md, "--lenient");
+  assertStringIncludes(md.toLowerCase(), "finalize");
+  // The failure contract: bounded retries, and never a silent hand-off.
+  assertStringIncludes(md.toLowerCase(), "at most twice");
+});
+
+Deno.test("validation: SKILL.md runs it after every write and strictly at finalize", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  assertStringIncludes(md, "scripts/validate-assessment");
+  assertStringIncludes(md, "--lenient");
+  // The spine points at the owner rather than restating the contract.
+  assertStringIncludes(md, "references/formatting/assessment-file.md");
+  // The workers hold no shell, so the orchestrator validates what they wrote on return.
+  assertStringIncludes(md.toLowerCase(), "validate on every return");
+  // Finalize is the strict run, and the checklist tracks it.
+  assertStringIncludes(md, "validate it strictly — no `--lenient`");
+  assertStringIncludes(md, "assessment validated strictly");
+});
+
 Deno.test("ownership: dispatch.md § Selection windows stays mechanism-only", async () => {
   const md = await Deno.readTextFile(DISPATCH_REF);
   // The gate PROCEDURE (display the table first, then ask) is SKILL.md's; this file maps the
@@ -228,8 +261,9 @@ Deno.test("SKILL.md: documents the pointer-based hand-off and context-window dis
   const md = await Deno.readTextFile(SKILL);
   // Workers hand off via pointers, not by pasting full content.
   assertStringIncludes(md.toLowerCase(), "pointer");
-  // The orchestrator does not read the full running analysis into its context.
-  assertStringIncludes(md.toLowerCase(), "running analysis");
+  // The orchestrator's reads of the analysis are bounded to the gates and finalize.
+  assertStringIncludes(md.toLowerCase(), "context-window discipline");
+  assertStringIncludes(md.toLowerCase(), "bounded slice of the assessment file");
 });
 
 Deno.test("SKILL.md: folds the assessment link + maintenance instruction into the plan", async () => {
@@ -258,19 +292,9 @@ Deno.test("ingrain-cli.md: documents the ingrain rule-retrieval CLI", async () =
   assertEquals(md.includes("ingrain context decisions"), false);
 });
 
-Deno.test("ingrain-rule-expander.md: defers the CLI mechanics and degrades gracefully", async () => {
-  const ref = `${ROOT}skills/ingrain-security/references/development/ingrain-rule-expander.md`;
-  const md = await Deno.readTextFile(ref);
-  // The mechanics live in the CLI reference; the worker only handles the outcomes.
-  assertStringIncludes(md, "references/lib/ingrain-cli.md");
-  // Graceful degradation when the CLI is absent/unconfigured.
-  assertStringIncludes(md.toLowerCase(), "graceful degradation");
-  assertStringIncludes(md.toLowerCase(), "proceed without rules");
-});
-
 Deno.test("SKILL.md: the orchestrator's own step retrieves rules", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // Step 5 is the orchestrator's first-pass retrieval, run in session — not a dispatch.
+  // Step 5 is the orchestrator's retrieval pass, run in session — not a dispatch.
   // It points at the CLI reference rather than restating the command.
   assertStringIncludes(md, "references/lib/ingrain-cli.md");
 });
@@ -301,6 +325,16 @@ Deno.test("session-start: injects the branch-diff runner Phase select routes on"
   assertStringIncludes(hook, "${branch_diff_runner_escaped}");
   // The routing signal itself has to reach the agent, not just the command.
   assertStringIncludes(hook, "delta_empty");
+});
+
+Deno.test("session-start: injects the validator runner the after-every-write rule needs", async () => {
+  const hook = await Deno.readTextFile(SESSION_START);
+  assertStringIncludes(hook, "scripts/validate-assessment");
+  assertStringIncludes(hook, "validate_runner_escaped");
+  assertStringIncludes(hook, "${validate_runner_escaped}");
+  // The rule travels with the command: mid-run mode, and who runs it for the workers.
+  assertStringIncludes(hook, "--lenient");
+  assertStringIncludes(hook, "workers hold no shell");
 });
 
 Deno.test("assessment-path: emits an instruction and anchors on the git repo root", async () => {

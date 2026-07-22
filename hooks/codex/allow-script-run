@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# PermissionRequest hook for the ingrain-security plugin (Codex only — the Claude Code twin
+# is hooks/claude/allow-script-run, on the PreToolUse event).
+#
+# Auto-approves a shell call ONLY when it is a bare run of one of this plugin's own
+# read-only scripts, so a review can mint its paths, read the branch delta and re-validate
+# the assessment without an approval prompt on every step.
+#
+# Why PermissionRequest and not PreToolUse: for the reason its allow-assessment-write
+# sibling documents — on Codex, PreToolUse exists to rewrite or deny a call, and
+# PermissionRequest is the event that skips the prompt.
+#
+# Codex runs commands through a shell tool whose `tool_input.command` may be a STRING or an
+# argv ARRAY — commonly the `bash -lc "<command>"` wrapper. Both shapes are handled, and
+# the wrapper's string argument is re-parsed rather than trusted; everything downstream
+# lives in skills/ingrain-security/scripts/lib/script-run.sh, shared with the Claude hook
+# so the two hosts cannot drift apart on the security-critical half.
+#
+# Approving a COMMAND is a wider grant than approving a file write, so the test is
+# correspondingly strict: for a command string, every character must be on an allowlist
+# that excludes chaining, redirection, substitution and expansion; the argv must be
+# `[bash] <script> [args…]` with no interpreter flag left unexamined; and that script must
+# resolve, physically, to an allowlisted name directly inside THIS plugin's scripts/
+# directory. Arguments are deliberately not inspected: all four scripts are read-only, so
+# the worst a hostile argument buys is a file read the agent could already perform.
+#
+# This hook NEVER denies: it can only remove a prompt, never introduce a block. Any doubt —
+# a malformed payload, an unparseable command, a script outside the plugin — falls through
+# to "defer" (empty stdout), which leaves Codex's normal approval prompt in place. Failing
+# closed here means failing to an ordinary prompt, never to a blocked session.
+#
+# Registered in hooks/codex/hook.json, dispatched via hooks/run-hook.cmd. Exits 0 always: a
+# hook error must not break the user's tool call.
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd -P)" || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/lib/assessment-write.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/assessment-write.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/lib/script-run.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/script-run.sh" 2>/dev/null || exit 0
+
+# Print nothing and exit 0 — the universal "no opinion, use the normal approval flow"
+# signal. Every rejection path in this hook routes here.
+defer() {
+    exit 0
+}
+
+main() {
+    local payload tool command cwd scripts_dir
+
+    payload="$(cat)" || defer
+    [ -n "${payload}" ] || defer
+
+    # The hook.json matcher is a convenience filter, not a security boundary — re-check.
+    tool="$(extract_string "${payload}" ".tool_name")" || defer
+    case "${tool}" in
+        shell | local_shell) ;;
+        *) defer ;;
+    esac
+
+    scripts_dir="$(script_run_dir "${PLUGIN_ROOT}")" || defer
+    [ -n "${scripts_dir}" ] || defer
+
+    cwd="$(extract_string "${payload}" ".cwd")" || cwd=""
+
+    # The argv array first: when the command is a string, extraction fails and the string
+    # parser answers instead. Exactly one of the two shapes is present in any payload.
+    if extract_string_array "${payload}" ".tool_input.command"; then
+        is_allowed_script_exec "${scripts_dir}" "${cwd}" "${SCRIPT_RUN_ARGV[@]}" || defer
+    else
+        command="$(extract_string "${payload}" ".tool_input.command")" || defer
+        is_allowed_script_command "${scripts_dir}" "${cwd}" "${command}" || defer
+    fi
+
+    printf '%s\n' \
+        '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
+}
+
+main "$@"
+exit 0
