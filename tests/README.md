@@ -14,7 +14,7 @@ from its path:
 
 | Folder                    | Holds                                                                      |
 | ------------------------- | -------------------------------------------------------------------------- |
-| `references/development/` | The six Development worker roles, `ingrain-<role>.md`, and `dispatch.md` |
+| `references/development/` | The six Development worker roles, `ingrain-<role>.md`, and `dispatch.md`   |
 | `references/testing/`     | `verification-pass.md` (the Testing flow) and `ingrain-threat-verifier.md` |
 | `references/lib/`         | `ingrain-cli.md`, `branch-diff.md` — phase-neutral utilities               |
 | `references/formatting/`  | `assessment-file.md`, `rules-file.md` — file schemas, read by both phases  |

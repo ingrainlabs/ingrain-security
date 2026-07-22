@@ -92,7 +92,14 @@ for (const name of WORKERS) {
     });
 
     await t.step("ROLE header places the worker inside a pipeline the orchestrator drives", () => {
-      assertStringIncludes(prose, "you run one step of a larger pipeline");
+      // The worker does its one job and returns; everything else — the review loop and
+      // every other dispatch — belongs to the orchestrator. Saying so here is what stops
+      // a worker from running the orchestration itself.
+      assertStringIncludes(prose, "orchestrator dispatched you to do one job");
+      assertStringIncludes(
+        prose,
+        "the orchestrator drives the review loop and dispatches every other worker",
+      );
     });
   });
 }
