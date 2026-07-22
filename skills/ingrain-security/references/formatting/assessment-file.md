@@ -55,7 +55,9 @@ shape.
   write there and nowhere else. Any other path you write still prompts the user and stalls
   the run. On Codex the approval is granted per **patch**: a patch that touches the
   assessment *and* any other file prompts as a whole, so keep assessment edits in their own
-  patch.
+  patch. In **plan mode** the write is held for the user's approval all the same: ask them
+  to allow writes to `.ingrain-security/`, naming this file and what the run needs it for,
+  then retry the same write to `assessment_abs`.
 - **Hand-off medium.** Workers write their sections and return to the orchestrator
   only a branch keyword plus a one-line pointer. The orchestrator owns the
   title/banner and the finalize; it moves data between workers by pointer and does
@@ -236,6 +238,11 @@ session context:
 
     bash <plugin>/skills/ingrain-security/scripts/validate-assessment <assessment_abs> [--lenient]
 
+**Pre-approved, like the writes.** An `allow-script-run` hook auto-approves this command on
+both hosts, so expect **no permission prompt** — run it as often as the rule below says. The
+grant covers a *bare* run of the plugin's own read-only scripts and nothing more: append
+anything to the command (a `;`, a pipe, a redirect) and it prompts again.
+
 **Two modes, one rule.** Pass **`--lenient` while the run is in progress** — mid-run this
 file is incomplete by design (at Step 0 it holds only `## Task` and `## Triage`), and
 lenient waives exactly the checks that cannot hold yet: a section not written, a table not
@@ -250,6 +257,9 @@ are named, so the fix is local.
 correcting what you wrote, so the file earns the pass on its content. If it still fails
 after the second attempt, **say so in one line naming the remaining violations** and carry
 on — two attempts is the bound, and saying it out loud is what the check exists to secure.
+**Make every correction with the Edit or Write tool, on `assessment_abs`** — the
+`allow-assessment-write` hook pre-approves those tools for this file on both hosts, so the
+fix lands with no permission prompt.
 
 ## Template
 

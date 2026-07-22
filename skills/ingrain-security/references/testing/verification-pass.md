@@ -64,6 +64,9 @@ pre-approval, and the file's schema — follow that schema exactly. The columns 
 `## Threats` → **Robustness** and `## Mitigations` → **Justification** + **Robustness**, plus
 `## Task` → `Latest stage`.
 
+**Write it with the Edit or Write tool, on `assessment_abs`** — `allow-assessment-write`
+pre-approves those for this file, so the write lands with no permission prompt.
+
 **Check the write.** Testing writes this file exactly once, at step 6, and that write is a
 finished file — so run the bundled **`scripts/validate-assessment`** script on `assessment_abs`
 straight after it, **strictly (no `--lenient`)**:

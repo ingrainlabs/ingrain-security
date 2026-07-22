@@ -488,6 +488,7 @@ there; this section is a pointer, and the procedure is in that file.
 | A worker's section looks correct | Run `scripts/validate-assessment` on it anyway (`--lenient` mid-run, strict at finalize) — the schema is what the next reader depends on, and an enum typo stays invisible until it breaks in a later session. |
 | The validator still fails after your fixes | Fix what it names, re-run at most twice, and **say so in one line** naming the remaining violations — the user learns of it in the same turn. |
 | You are about to present a gate | Display the findings as a table first, then present the single-choice windows. |
+| A write to `.ingrain-security/` is held back in plan mode | Ask the user to allow writes to that folder — name in one line which file the run needs to write and why — then retry the same write to `assessment_abs` / `rules_abs` and carry on. The folder is the run's own artifact store, separate from the plan file. |
 | You are in plan mode or keeping output lean | Print the gate table all the same — it is mandatory visible output in every mode. Read the bounded slice of the assessment file, which is the read the context-window discipline permits, and print the table before any window. |
 
 ## Development — checklist

@@ -202,10 +202,24 @@ findings folded into your plan.
 **Sandboxing & network access.** The review's only outbound network calls are the
 read-only `ingrain context security_rules` lookups of its two rule-retrieval passes —
 one per distinct question it needs org guidance on — which fetch your org's security rules
-(via `INGRAIN_SYNC_URL` + API token). If you run your coding agent under a sandbox
-that restricts network or command execution, **allow those `ingrain context` CLI
-runs** so org-rule retrieval works. Without it the review still
-completes — it just degrades gracefully and proposes mitigations without your org's rules.
+(via `INGRAIN_SYNC_URL` + API token). Grant that one command once and the lookups run
+unprompted for good:
+
+```jsonc
+// Claude Code — /permissions, or .claude/settings.json
+{ "permissions": { "allow": ["Bash(ingrain context:*)"] } }
+```
+
+```python
+# Codex — ~/.codex/rules/default.rules
+prefix_rule(
+    pattern = ["ingrain", "context"],
+    decision = "allow",
+    justification = "read-only org security-rule lookups for ingrain-security",
+)
+```
+
+Allowing permissions, you don't have to accept them every time. 
 
 **The assessment folder is git-ignored.** `.ingrain-security/` is ignored
 by default. To share a snapshot, force-add it: `git add -f <file>`.

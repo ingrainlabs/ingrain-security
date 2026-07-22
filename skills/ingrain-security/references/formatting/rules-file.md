@@ -41,7 +41,11 @@ appends a second pass keyed on the mitigations once they do. Follow this structu
   **git-ignored** (the folder self-ignores), so it stays uncommitted.
 - **Pre-approved for writing.** The `allow-assessment-write` hook auto-approves writes to
   `rules*.md` directly inside `.ingrain-security/` (the same grant that covers `assessment*.md`),
-  so expect **no permission prompt** when writing it. Any other path still prompts.
+  so expect **no permission prompt** when writing it. Any other path still prompts. In
+  **plan mode** the write is held for the user's approval all the same: ask them to allow
+  writes to `.ingrain-security/`, naming this file and what the run needs it for, then retry
+  the same write to `rules_abs`. Keeping it on disk is what lets the Testing pass re-mint and
+  read it in a later session.
 - **Linked from the assessment.** The assessment file links to this sidecar by its relative
   `rules_path`, and each mitigation's **Rule refs** ids (in the assessment's `## Mitigations`
   table) are the machine link into this file's rule entries. The rule **titles and bodies**

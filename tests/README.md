@@ -94,8 +94,12 @@ This is always on for the live tiers — Deno streams each test's output live (w
   target named in `tool_input.file_path`) and `hooks/codex/allow-assessment-write`
   (**PermissionRequest**, targets read out of an `apply_patch` patch): the assessment file must be
   auto-approved, while every other path — and every malformed, multi-file or decoy payload — must
-  fall back to the user's normal permission prompt. Needs `bash` + coreutils (macOS/Linux); the
-  Windows `cd && pwd` normalization can't be exercised on Unix and stays a manual check.
+  fall back to the user's normal permission prompt. The command-side twins get the same treatment in
+  `allow-script-run.test.ts` / `codex-allow-script-run.test.ts` — a bare run of one of the four
+  bundled read-only scripts must be auto-approved, while anything that could carry a second command
+  (chaining, substitution, redirection, an interpreter flag, a script outside the plugin) must fall
+  back to the prompt. Needs `bash` + coreutils (macOS/Linux); the Windows `cd && pwd` normalization
+  can't be exercised on Unix and stays a manual check.
 - **shell/** — runs the real `shellcheck` binary once per shell script tracked by git. Discovery is
   **shebang-based, not a `*.sh` glob**: the hooks are deliberately extensionless (see
   `hooks/run-hook.cmd`), so a glob would silently lint the three release scripts and skip every

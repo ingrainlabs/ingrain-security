@@ -29,8 +29,11 @@ const EXCLUDED = new Set(["hooks/run-hook.cmd"]);
 const EXPECTED = [
   ".github/release.sh",
   "hooks/claude/allow-assessment-write",
+  "hooks/claude/allow-script-run",
+  "hooks/codex/allow-script-run",
   "hooks/start/session-start",
   "skills/ingrain-security/scripts/lib/artifact-template.sh",
+  "skills/ingrain-security/scripts/lib/script-run.sh",
   "skills/ingrain-security/scripts/lib/project-root.sh",
   "skills/ingrain-security/scripts/lib/mint-path.sh",
   "skills/ingrain-security/scripts/lib/validate-md.sh",
