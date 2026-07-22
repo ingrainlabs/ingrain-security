@@ -21,12 +21,15 @@ const indent = (text: string, pad = "    "): string => {
  * The block is printed BEFORE `check` so the response is visible even when an
  * assertion fails; `check` failures are reported and re-thrown so Deno still
  * fails the test.
+ *
+ * `check` may be async — the worker tiers read back the assessment file the run
+ * wrote before asserting on it.
  */
 export const runChecked = async (
   label: string,
   prompt: string,
   opts: RunOptions,
-  check: (r: RunResult) => void,
+  check: (r: RunResult) => void | Promise<void>,
 ): Promise<RunResult> => {
   const started = performance.now();
   const r = await runClaude(prompt, opts);
@@ -45,7 +48,7 @@ export const runChecked = async (
   if (dispatched.length) lines.push(`DISPATCHED: [${dispatched.join(", ")}]`);
 
   try {
-    check(r);
+    await check(r);
     lines.push(`VERDICT: ok  (exit ${r.code}, ${secs}s)`);
     console.log(lines.join("\n"));
     return r;
