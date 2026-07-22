@@ -27,6 +27,16 @@
             "statusMessage": "Checking assessment-file write"
           }
         ]
+      },
+      {
+        "matcher": "shell|local_shell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" codex/allow-script-run",
+            "statusMessage": "Checking bundled-script run"
+          }
+        ]
       }
     ]
   }
