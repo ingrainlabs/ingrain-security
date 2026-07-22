@@ -1,23 +1,13 @@
-# Shared schema validator for the ingrain-security assessment file.
+# Shared schema validator for the ingrain-security assessment file: sections, table headers,
+# tag sequences, enumerated values, numeric ranges, length caps and cross-references, against
+# the shape references/formatting/assessment-file.md specifies. Never which phase filled
+# which column.
 #
-# The dialect is declared here rather than by a shebang, because this file is sourced,
-# not executed — ShellCheck has no other way to know it is bash.
+# Declares its dialect here because it is sourced, not executed.
 # shellcheck shell=bash
 #
-# Sourced — never executed. Sets no shell options: the caller runs `set -uo pipefail`
-# WITHOUT `-e` on purpose (every check must run so one pass reports every violation),
-# and sourcing must not change that. Requires the sibling project-root.sh to be sourced
-# first (escape_for_json).
-#
-# Sourced by:
-#   skills/ingrain-security/scripts/validate-assessment
-#
-# Checks a written assessment file against the shape references/formatting/assessment-file.md
-# specifies.
-#
-# The checking is STRUCTURAL: sections, table headers, tag sequences, enumerated values,
-# numeric ranges, length caps and cross-references. It never reasons about which phase
-# filled which column, so an unset (`—`) verification column is always acceptable.
+# Sourced by skills/ingrain-security/scripts/validate-assessment. Sets no shell options;
+# needs project-root.sh sourced first (escape_for_json).
 #
 # Written for bash 3.2 (the system bash on macOS): no associative arrays, no `mapfile`,
 # no `${var,,}`.
@@ -26,20 +16,15 @@
 # unset cell as the em dash; an empty cell means the same thing.
 VLD_UNSET_DASH='—'
 
-# The file is still being written: waive the checks that can only hold once it is
-# complete — a missing required section, a required field not filled in yet, a section
-# whose table has not been written, non-contiguous tags and rows not yet sorted by risk.
-# That set is what the minter's seeded skeleton consists of: an empty skeleton is
-# lenient-valid and strictly invalid, by design.
-# Everything already on the page is still checked in full, so leniency is never a blanket
-# pass. The caller sets it from `--lenient`; it is initialized here so every check reads a
-# defined value under `set -u`.
+# The file is still being written: waive the checks that can only hold once it is complete
+# — missing sections, unfilled fields, unwritten tables, unsorted rows. Everything already
+# on the page is still checked. Set by the caller from `--lenient`; initialized here so
+# every check reads a defined value under `set -u`.
 VLD_LENIENT="false"
 
 # --- error collection -------------------------------------------------------------
 
-# Errors accumulate in two parallel arrays rather than aborting at the first one: a
-# writer fixing an artifact wants the whole list, not one violation per run.
+# Errors accumulate in two parallel arrays rather than aborting at the first one.
 VLD_ERR_LINES=()
 VLD_ERR_MSGS=()
 
@@ -97,9 +82,8 @@ vld_is_int_in_range() {
 }
 
 # Check one enumerated field, reporting a violation naming the field and the allowed
-# values. $1 line, $2 field name, $3 value, then the allowed values. Unset values never
-# reach here: vld_check_entry_field and its _optional twin decide what an unfilled field
-# means before they call this.
+# values. $1 line, $2 field name, $3 value, then the allowed values. Unset values are
+# resolved by vld_check_entry_field and its _optional twin before they call this.
 vld_check_enum() {
     local line="$1" column="$2" value="$3"
     shift 3
@@ -152,9 +136,8 @@ vld_index_sections() {
     done
 }
 
-# The index of the section whose heading starts with $1 (case-insensitive), or -1.
-# Prefix matching is what lets `## Maintenance (for the implementing agent)` answer to
-# `Maintenance`.
+# The index of the section whose heading starts with $1 (case-insensitive), or -1. Prefix
+# matching lets `## Maintenance (for the implementing agent)` answer to `Maintenance`.
 vld_section_index() {
     local want lower i
     want="$(vld_lower "$1")"
@@ -208,11 +191,8 @@ vld_check_unknown_sections() {
 }
 
 # Require the named sections, in the given order. Missing ones are reported against the
-# file as a whole; a section that appears out of order is reported on its heading line.
-#
-# In-progress files are missing sections by construction — at Step 0 the assessment holds
-# only `## Task` and `## Triage` — so `--lenient` waives the missing-section report while
-# still holding the sections that ARE present to their order and their contents.
+# file as a whole; one out of order is reported on its heading line. `--lenient` waives the
+# missing-section report, holding the sections that ARE present to their order.
 vld_check_required_sections() {
     local name idx previous=-1 previous_name=""
     for name in "$@"; do
@@ -232,9 +212,8 @@ vld_check_required_sections() {
 
 # --- field lookup -----------------------------------------------------------------
 
-# Look up a `Name: value` field within the line range $1..$2, returning 0 when found.
-# The result lands in globals rather than on stdout: a `$(…)` capture would run the
-# lookup in a subshell, and any violation recorded there would die with it.
+# Look up a `Name: value` field within the line range $1..$2, returning 0 when found. The
+# result lands in globals, not stdout: a `$(…)` capture would lose violations to a subshell.
 VLD_FIELD_LINE=0
 VLD_VALUE=""
 
@@ -255,11 +234,9 @@ vld_field() {
     return 1
 }
 
-# Require a `Name: value` field, leaving its value in VLD_VALUE and the line it sits on
-# in VLD_FIELD_LINE. Returns 1 (and reports) when the field is missing or empty — under
-# `--lenient` it still returns 1, so the caller skips the value check, but reports nothing:
-# mid-run a section is routinely on the page with its fields not filled in yet, which is
-# exactly the shape the minter seeds.
+# Require a `Name: value` field, leaving its value in VLD_VALUE and its line in
+# VLD_FIELD_LINE. Returns 1 when the field is missing or empty, reporting unless
+# `--lenient` (where the caller still skips the value check).
 vld_require_field() {
     local start="$1" end="$2" name="$3" heading_line="$4"
     if ! vld_field "${start}" "${end}" "${name}"; then
@@ -276,22 +253,16 @@ vld_require_field() {
 # --- entry index ------------------------------------------------------------------
 
 # Threats and mitigations are stored as one `### <id> — <title>` block each, with one
-# `Name: value` field per line beneath. This index is the entry-level twin of the section
-# index above: same shape, one heading level down, scoped to a section's line range.
-#
-# Blocks rather than table rows because every later stage fills a field the stage before it
-# left unset — the risk scorer, the selection gate, the verification pass — and a field on
-# its own line is an edit of one short line instead of a rewrite of the whole record.
+# `Name: value` field per line beneath. The entry-level twin of the section index above:
+# same shape, one heading level down, scoped to a section's line range.
 ENTRY_IDS=()
 ENTRY_STARTS=()
 ENTRY_ENDS=()
 
 # Index the `### ` blocks inside the line range $1..$2. The id is the heading text up to
 # the first em dash, the title the remainder; a heading with no dash yields the whole text
-# as the id, which then fails the id check and names itself in the message.
-#
-# An entry's body runs to the line before the next `###` or to the end of the range, so a
-# field lookup inside it cannot stray into the neighbouring entry.
+# as the id, which then fails the id check. An entry's body runs to the line before the
+# next `###` or to the end of the range.
 vld_index_entries() {
     local start="$1" end="$2" i text id
     ENTRY_IDS=()
@@ -320,12 +291,8 @@ vld_index_entries() {
 
 # Check an entry id: the right prefix ($3 = T|M, either case) followed by digits, and unique
 # within its section. $1 the line it sits on, $2 the value. Ids are permanent, so there is no
-# contiguity rule — a retired threat leaves a gap, and every reference to the ids around it
-# keeps pointing where it did.
-#
-# The uppercase form is the one every template and reference prescribes; lowercase is accepted
-# so an id written `t01` still resolves. Uniqueness therefore compares case-folded — `T01` and
-# `t01` are the same id — while the message quotes the id exactly as it was written.
+# contiguity rule. Uniqueness compares case-folded, while the message quotes the id as
+# written.
 VLD_SEEN_IDS=""
 
 vld_check_id() {
@@ -346,14 +313,11 @@ vld_check_id() {
     return 0
 }
 
-# Check one `Name: value` field a later stage is required to have filled by finalize.
-# $4.. the allowed values; with none given the field is free text and only its presence is
-# checked.
+# Check one `Name: value` field a later stage must have filled by finalize. $4.. the allowed
+# values; with none given the field is free text and only its presence is checked.
 #
-# The two ways a field can be unfilled — absent, or present as `—` — are waived under
-# `--lenient` and reported when strict, so the mid-run file is legitimately incomplete while
-# the finished one must be whole. vld_require_field already draws that line for the absent
-# case; the `—` case is the one this adds.
+# Both ways a field can be unfilled — absent, or `—` — are waived under `--lenient` and
+# reported when strict. vld_require_field covers the absent case; this adds the `—` case.
 vld_check_entry_field() {
     local start="$1" end="$2" name="$3" heading_line="$4"
     shift 4
@@ -366,9 +330,9 @@ vld_check_entry_field() {
     vld_check_enum "${VLD_FIELD_LINE}" "${name}" "${VLD_VALUE}" "$@"
 }
 
-# As vld_check_entry_field, but `—` is a settled answer rather than an unfilled one, in
-# either mode — for the fields the schema leaves permanently optional: a threat outside the
-# selected set never gets a Robustness, a general instruction covers no threat.
+# As vld_check_entry_field, but `—` is a settled answer in either mode — for the fields the
+# schema leaves permanently optional (Robustness on an unselected threat, Threats on a
+# general instruction).
 vld_check_entry_field_optional() {
     local start="$1" end="$2" name="$3" heading_line="$4"
     shift 4
@@ -461,10 +425,8 @@ vld_check_threats_section() {
     end="${range##* }"
     heading="${SEC_STARTS[idx]}"
 
-    # No entries is legitimate in either mode: a `minor` triage genuinely has no threats,
-    # and mid-run the heading routinely lands before the worker that fills it is dispatched.
-    # Without a table header there is nothing to tell those two apart, and neither is a
-    # defect worth reporting.
+    # No entries is legitimate in either mode: a `minor` triage has no threats, and mid-run
+    # the heading lands before the worker that fills it.
     vld_index_entries "${start}" "${end}"
     [ "${#ENTRY_STARTS[@]}" -eq 0 ] && return 0
 
@@ -515,9 +477,8 @@ vld_check_risk_score_section() {
     end="${range##* }"
     heading="${SEC_STARTS[idx]}"
 
-    # Entry-field checks, not bare vld_require_field: the risk scorer fills this section at
-    # the same step it scores the threats, so `—` here means the same "not yet" it means
-    # there, and must be waived and reported in the same modes.
+    # Entry-field checks, not bare vld_require_field: the risk scorer fills this section as
+    # it scores the threats, so `—` here means the same "not yet".
     if vld_check_entry_field "${start}" "${end}" "Score" "${heading}"; then
         vld_is_int_in_range "${VLD_VALUE}" 0 100 \
             || vld_error "${VLD_FIELD_LINE}" "Score: \"${VLD_VALUE}\" is not an integer in 0–100"

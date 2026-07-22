@@ -1,56 +1,24 @@
-# Shared helpers for the allow-script-run hooks (one per host).
+# Shared helpers for the allow-script-run hooks: is this shell command nothing but a run
+# of one of this plugin's own read-only scripts?
 #
-# The dialect is declared here rather than by a shebang, because this file is sourced,
-# not executed — ShellCheck has no other way to know it is bash.
+# Declares its dialect here because it is sourced, not executed.
 # shellcheck shell=bash
 #
-# Sourced — never executed. Sets no shell options: every caller runs `set -uo pipefail`
-# WITHOUT `-e` on purpose, and sourcing must not change that. Requires the sibling
-# assessment-write.sh to be sourced first (extract_string, absolutize, physical_dir).
-#
-# Sourced by:
-#   hooks/claude/allow-script-run   (PreToolUse,        Claude Code)
-#   hooks/codex/allow-script-run    (PermissionRequest, Codex)
-#
-# Both hooks answer the same question — "is this shell command nothing but a run of one of
-# this plugin's own read-only scripts?" — from different payloads: Claude always hands over
-# a command STRING, Codex may hand over an argv ARRAY instead. Everything downstream of
-# that difference — the character allowlist, tokenization, the containment test — is
-# identical and lives here, so the two hosts cannot drift apart on the security-critical
-# half.
-#
-# Every function returns non-zero on anything it cannot represent exactly. Both hooks read
-# that as "defer": no opinion, leave the user's normal permission prompt in place.
+# Sourced by hooks/claude/allow-script-run (PreToolUse) and hooks/codex/allow-script-run
+# (PermissionRequest). Sets no shell options; needs assessment-write.sh sourced first
+# (extract_string, absolutize, physical_dir). Every function returns non-zero on anything
+# it cannot represent exactly, which both hooks read as "defer".
 
-# The scripts this plugin may run on the user's behalf, by EXACT basename. All four are
-# read-only — they mint paths, read git, and validate markdown — which is why their
-# arguments need no inspection: the worst a hostile argument buys is a file read the agent
-# could already perform with the Read tool. Nothing else in scripts/ is listed, so the
-# sourceable `lib/*.sh` helpers stay outside the grant.
+# The scripts this plugin may run, by EXACT basename. All read-only, arguments uninspected.
 SCRIPT_RUN_ALLOWED='assessment-path rules-path branch-diff validate-assessment'
 
-# Every character a legitimate invocation of those scripts can contain: word characters,
-# path punctuation, quotes, and the space that separates arguments.
-#
-# An ALLOWLIST rather than a metacharacter blocklist, because the failure modes are not
-# symmetric — a metacharacter this file forgot to list would be approved, whereas an
-# ordinary character it forgot merely defers to the usual prompt. It also covers the whole
-# class in one test: command substitution, chaining, redirection, globbing, expansion,
-# comments and embedded newlines all require a character that is not on this list.
-#
-# Windows-native paths (`C:\…`) are deferred by the excluded backslash. That is
-# deliberate: the escape it introduces inside double quotes would make the tokenizer below
-# a second, subtler parser of the same string, and a prompt on Windows is a smaller cost
-# than a parse the shell disagrees with.
+# Every character a legitimate invocation can contain. Substitution, chaining, redirection,
+# globbing, expansion, comments, newlines and `C:\…` paths all need one outside it.
 SCRIPT_RUN_ALLOWED_CHARS="A-Za-z0-9_.,:=+@%/ \t'\"-"
 
-# True when the string holds a character outside SCRIPT_RUN_ALLOWED_CHARS — i.e. when it
-# cannot be a bare run of one of our scripts and must fall through to the normal prompt.
-#
-# The `|` sentinel is what makes a TRAILING disallowed character visible: command
-# substitution strips trailing newlines, so a command ending in `\nid` would otherwise come
-# back with an empty leftover and read as clean. Terminating the stream with a character
-# `tr` cannot delete puts every leftover strictly before it.
+# True when the string holds a character outside SCRIPT_RUN_ALLOWED_CHARS. The `|` sentinel
+# keeps a TRAILING disallowed character visible, which command substitution would otherwise
+# strip along with the newline.
 has_unexpected_char() {
     local rest
     rest="$(printf '%s|' "$1" | tr -d "${SCRIPT_RUN_ALLOWED_CHARS}")"
@@ -58,15 +26,8 @@ has_unexpected_char() {
 }
 
 # Split a command string into words on SCRIPT_RUN_TOKENS, honoring `'` and `"` as plain
-# delimiters.
-#
-# Treating quotes as purely literal is only sound because has_unexpected_char has already
-# rejected `$`, a backtick and a backslash — with those gone, bash performs no expansion
-# and no escaping inside either quote style, so this split and the shell's own agree
-# character for character. Call the two in that order, never this one alone.
-#
-# Returns non-zero on an unterminated quote or an empty command: a string this cannot
-# represent exactly is one to defer on, not to guess at.
+# delimiters. Run has_unexpected_char FIRST, never this alone. Returns non-zero on an
+# unterminated quote or an empty command.
 tokenize_command() {
     local s="$1" len i ch state="plain" token="" started=0
 
@@ -114,23 +75,15 @@ tokenize_command() {
 }
 
 # The plugin's own scripts/ directory, physically resolved from the hook's location ($1 =
-# plugin root). Derived, never hardcoded: the grant then follows the installed copy of the
-# plugin, and a second checkout elsewhere on disk is not covered by it.
+# plugin root). Derived, never hardcoded, so the grant follows the installed copy.
 script_run_dir() {
     physical_dir "$1/skills/ingrain-security/scripts"
 }
 
 # True when the argv ($3…) is a bare run of one allowlisted script, resolved against the
-# scripts dir ($1) and the host's cwd ($2).
-#
-# Accepted shapes are `<script> [args…]` and `bash <script> [args…]` — the form the skill
-# documents. An interpreter flag (`bash -c …`) is refused: its argument is a fresh command
-# string this function never parsed, so approving it would approve whatever it contains.
-#
-# The script's canonical PARENT must EQUAL the scripts dir. Canonicalizing before the test
-# resolves any `..` away rather than letting it slip past a prefix check, and equality (not
-# a prefix) keeps a sibling directory sharing the prefix out. The final symlink test stops
-# an allowlisted NAME inside that directory from standing in for a file outside it.
+# scripts dir ($1) and the host's cwd ($2). Accepted: `<script> [args…]` and
+# `bash <script> [args…]`; an interpreter flag (`bash -c …`) is refused. The script's
+# canonical parent must EQUAL the scripts dir, and the name must not be a symlink.
 is_allowed_script_argv() {
     local scripts_dir="$1" cwd="$2" script base parent
     shift 2
@@ -163,8 +116,8 @@ is_allowed_script_argv() {
     [ -f "${parent}/${base}" ]
 }
 
-# True when the command STRING ($3) is a bare run of one allowlisted script — the form
-# Claude Code always sends, and the one Codex wraps in `bash -lc`.
+# True when the command STRING ($3) is a bare run of one allowlisted script — what Claude
+# Code sends, and what Codex wraps in `bash -lc`.
 is_allowed_script_command() {
     local scripts_dir="$1" cwd="$2" command="$3"
 
@@ -174,17 +127,10 @@ is_allowed_script_command() {
     is_allowed_script_argv "${scripts_dir}" "${cwd}" "${SCRIPT_RUN_TOKENS[@]}"
 }
 
-# True when the argv ($3…) is a bare run of one allowlisted script, in EITHER argv shape a
-# shell tool can present: an already-split `[bash] <script> [args…]`, or the `bash -lc
-# "<command>"` wrapper Codex routinely builds, whose single string argument is handed back
-# to the string parser rather than trusted.
-#
-# The wrapper form is recognized only at exactly three elements — interpreter, one `-…c`
-# flag, one command — so a `bash -lc <cmd> <extra…>` this function cannot account for
-# defers rather than being approved on its prefix.
-#
-# An already-split argv needs no character allowlist: nothing re-parses it, so a `;` in an
-# argument is an ordinary character on its way to a read-only script, not a chain operator.
+# True when the argv ($3…) is a bare run of one allowlisted script, in either shape a shell
+# tool presents: an already-split `[bash] <script> [args…]`, or a `bash -lc "<command>"`
+# wrapper of exactly three elements, whose string goes back through the string parser. An
+# already-split argv needs no character allowlist — nothing re-parses it.
 is_allowed_script_exec() {
     local scripts_dir="$1" cwd="$2"
     shift 2
@@ -205,23 +151,16 @@ is_allowed_script_exec() {
     is_allowed_script_argv "${scripts_dir}" "${cwd}" "$@"
 }
 
-# Read a JSON array of strings out of the payload ($1) at the given jq path ($2) onto
-# SCRIPT_RUN_ARGV.
-#
-# Addressed structurally, for the reason extract_string documents: the payload embeds
-# attacker-influenceable text, and a text scan of it could be fooled into reading a decoy
-# as the command actually being run.
-#
-# Elements are separated on NUL, so an argument containing a newline stays one argument
-# instead of silently splitting into two. Returns non-zero when jq is unavailable, the
-# payload is not valid JSON, or the path holds anything but a non-empty array of strings.
+# Read a JSON array of strings out of the payload ($1) at jq path ($2) onto SCRIPT_RUN_ARGV,
+# separated on NUL so an argument containing a newline stays one argument. Returns non-zero
+# when jq is unavailable, the payload is not valid JSON, or the path holds anything but a
+# non-empty array of strings.
 extract_string_array() {
     local payload="$1" path="$2" program element
     command -v jq >/dev/null 2>&1 || return 1
 
-    # NUL-terminate each element INSIDE jq and read the stream directly: bash drops NUL
-    # bytes from a variable, so routing this through a command substitution would silently
-    # join the arguments into one.
+    # NUL-terminate inside jq and read the stream directly: bash drops NUL bytes from a
+    # variable, so a command substitution here would join the arguments into one.
     program="${path} | if type == \"array\" and length > 0 and (map(type == \"string\") | all)"
     program="${program} then .[] + \"\\u0000\" else empty end"
 
