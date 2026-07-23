@@ -1,11 +1,11 @@
 # Tests
 
 Test suite for the `ingrain-security` plugin — the `ingrain-security` orchestrator skill and its
-read-only worker roles: seven in Development, plus Testing's `ingrain-threat-verifier`. Built on
-Deno's test runner; it drives the `claude` CLI in headless mode and can exercise each worker in
-isolation by dispatching it the way the orchestrator does (its
-`skills/ingrain-security/references/development/<name>.md` body as the system prompt, restricted to
-read-only tools).
+worker roles: six in Development, plus Testing's `ingrain-threat-verifier`. Built on Deno's test
+runner; it drives the `claude` CLI in headless mode and can exercise each worker in isolation by
+dispatching it the way the orchestrator does (its
+`skills/ingrain-security/references/development/<name>.md` body as the system prompt, plus the
+assessment file it writes its section into).
 
 ## Reference layout
 
@@ -14,7 +14,7 @@ from its path:
 
 | Folder                    | Holds                                                                      |
 | ------------------------- | -------------------------------------------------------------------------- |
-| `references/development/` | The seven Development worker roles, `ingrain-<role>.md`, and `dispatch.md` |
+| `references/development/` | The six Development worker roles, `ingrain-<role>.md`, and `dispatch.md`   |
 | `references/testing/`     | `verification-pass.md` (the Testing flow) and `ingrain-threat-verifier.md` |
 | `references/lib/`         | `ingrain-cli.md`, `branch-diff.md` — phase-neutral utilities               |
 | `references/formatting/`  | `assessment-file.md`, `rules-file.md` — file schemas, read by both phases  |
@@ -38,22 +38,10 @@ Run all commands from this `tests/` directory.
 ```
 lib/      claudeRunner.ts (spawn helper) · matchers.ts (assertions) · sampleInputs.ts (canned plans) · reporter.ts (input/output printer)
 static/   offline lint of worker-reference frontmatter + advisory ROLE + skill/hook structure (no model calls)
-<<<<<<< HEAD
-<<<<<<< HEAD
-hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)
+scripts/  validate-assessment.test.ts — runs the schema validator under bash over valid and one-defect-per-case fixtures (no model calls)
+hooks/    assessment-hooks.test.ts · assessment-path.test.ts · rules-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts · assessment-write-lib.test.ts · project-root-lib.test.ts — run the hook/path scripts and their shared libs under bash against a throwaway project (no model calls)
 shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
-<<<<<<< HEAD
-=======
-hooks/    assessment-hooks.test.ts — runs the assessment hook scripts under bash against a throwaway project (no model calls)
->>>>>>> e98327b (Add temp file write (#6))
-=======
-hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)
-shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
->>>>>>> b794e31 (tmp logic fix  (#12))
-agents/   agents.test.ts — table-driven live tests, one case per worker (dispatched via its reference file)
-=======
 agents/   agents.test.ts — table-driven live tests, one case per worker scenario (dispatched via its reference file)
->>>>>>> eb54a90 (Test skill  (#14))
 skill/    trigger.test.ts (review starts / minor stops) · orchestration.test.ts (gated)
 ```
 
@@ -79,9 +67,11 @@ This is always on for the live tiers — Deno streams each test's output live (w
 ## How the tests work
 
 - **static/** — pure file reads. Asserts each worker reference file's frontmatter (name,
-  anti-trigger description) and the advisory **read-only** ROLE header (`Read, Grep, Glob` only, no
-  edits, recommended model), plus the orchestrator's step ordering, announce/stop phrases, the
-  read-reference dispatch mechanism, and a valid SessionStart hook.
+  anti-trigger description) and its advisory ROLE header — the named **write target** and the
+  recommended model, plus the inverse guard that no worker calls itself read-only (workers write the
+  assessment file; a read-only clause there contradicts their hand-off contract). Also the
+  orchestrator's step ordering, announce/stop phrases, the read-reference dispatch mechanism, and a
+  valid SessionStart hook.
 - **hooks/** — offline, no model calls, but unlike `static/` it **executes** the
   `hooks/start/ensure-assessment-dir` SessionStart hook under `bash` against a `Deno.makeTempDir()`
   project, asserting the durable folder/README/`.gitignore` are seeded and the `CLAUDE_PROJECT_DIR`
@@ -91,8 +81,12 @@ This is always on for the live tiers — Deno streams each test's output live (w
   target named in `tool_input.file_path`) and `hooks/codex/allow-assessment-write`
   (**PermissionRequest**, targets read out of an `apply_patch` patch): the assessment file must be
   auto-approved, while every other path — and every malformed, multi-file or decoy payload — must
-  fall back to the user's normal permission prompt. Needs `bash` + coreutils (macOS/Linux); the
-  Windows `cd && pwd` normalization can't be exercised on Unix and stays a manual check.
+  fall back to the user's normal permission prompt. The command-side twins get the same treatment in
+  `allow-script-run.test.ts` / `codex-allow-script-run.test.ts` — a bare run of one of the four
+  bundled read-only scripts must be auto-approved, while anything that could carry a second command
+  (chaining, substitution, redirection, an interpreter flag, a script outside the plugin) must fall
+  back to the prompt. Needs `bash` + coreutils (macOS/Linux); the Windows `cd && pwd` normalization
+  can't be exercised on Unix and stays a manual check.
 - **shell/** — runs the real `shellcheck` binary once per shell script tracked by git. Discovery is
   **shebang-based, not a `*.sh` glob**: the hooks are deliberately extensionless (see
   `hooks/run-hook.cmd`), so a glob would silently lint the three release scripts and skip every
@@ -104,11 +98,13 @@ This is always on for the live tiers — Deno streams each test's output live (w
   scripts from its own workflow step rather than through this tier — see **CI** below.
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
   `skills/ingrain-security/references/development/<name>.md` body as the system prompt with
-  `--allowed-tools Read,Grep,Glob`. The test asserts the output's _shape_ (a verdict keyword, a
-  0–100 score, risk descending by threat tag, required fields). Assertions are loose because live
-  output varies. The table has seven cases over six workers (`ingrain-relevance-triage` runs twice,
-  on a major and a minor plan); `ingrain-rule-expander` has no live case and is covered by `static/`
-  only.
+  `--allowed-tools Read,Grep,Glob,Write,Edit`. Each case mints a real assessment file in a throwaway
+  project dir (via the bundled `scripts/assessment-path`) and hands the worker that absolute path as
+  its write target, then asserts the worker actually modified the seeded file and checks the
+  output's _shape_ (a verdict keyword, a 0–100 score, risk descending by threat tag, required
+  fields) over the return and the file together. Assertions are loose because live output varies.
+  The table has seven cases over six workers (`ingrain-relevance-triage` runs twice, on a major and
+  a minor plan).
 - **skill/** — a full session (skill + agents + hook). `trigger.test.ts` checks a security-relevant
   plan starts the review and a trivial one stops at triage. `orchestration.test.ts`
   (integration-gated) checks the workers fire in order through risk scoring and the run halts at
