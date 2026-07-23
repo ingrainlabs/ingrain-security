@@ -70,14 +70,13 @@ export const streamText = (events: StreamEvent[]): string => {
   return parts.join("\n");
 };
 
-/** The seven worker skills the orchestrator dispatches. */
+/** The six worker skills the orchestrator dispatches. */
 export const WORKERS = [
   "ingrain-relevance-triage",
   "ingrain-threat-generator",
   "ingrain-threat-critic",
   "ingrain-risk-scorer",
   "ingrain-mitigation-generator",
-  "ingrain-rule-expander",
   "ingrain-mitigation-critic",
 ] as const;
 
@@ -114,22 +113,72 @@ export const dispatchedWorkers = (events: StreamEvent[]): string[] => {
  * sends: the worker's own reference-file body (frontmatter stripped) as the
  * system prompt, then the INPUT. Lets a live test exercise one worker in
  * isolation without a platform-native agent definition.
+ *
+ * `assessmentAbs` supplies the per-run write target the orchestrator pastes into
+ * every dispatch (SKILL.md § How to dispatch a worker). It is the one thing a worker
+ * cannot learn from its own reference file, so without it the worker has nowhere to
+ * write and answers inline instead.
  */
-export const workerDispatchPrompt = async (name: string, input: string): Promise<string> => {
+export const workerDispatchPrompt = async (
+  name: string,
+  input: string,
+  assessmentAbs?: string,
+): Promise<string> => {
   const md = await Deno.readTextFile(
     `${PLUGIN_DIR}/skills/ingrain-security/references/development/${name}.md`,
   );
   const body = md.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
+  const writeTarget = assessmentAbs
+    ? [
+      "",
+      `Your ONE permitted write is your own section of the stored analysis file for`,
+      `this run at ${assessmentAbs}, written to the schema in`,
+      `references/formatting/assessment-file.md — use exactly its fields and enum values.`,
+      `Write to that exact absolute path, character for character as pasted above.`,
+    ]
+    : [];
   return [
     `You have been dispatched as the \`${name}\` worker of the ingrain-security`,
     `review. Follow the instructions below as your system prompt, act on the`,
     `INPUT, and return only what the Output section specifies.`,
+    ...writeTarget,
     "",
     body,
     "",
     "INPUT:",
     input,
   ].join("\n");
+};
+
+/** Path to the bundled assessment-path minter, the single source of truth for the file's name. */
+const MINT_SCRIPT = `${PLUGIN_DIR}/skills/ingrain-security/scripts/assessment-path`;
+
+/**
+ * Mint a real assessment file in a throwaway project dir and return both paths.
+ *
+ * Drives the bundled minter rather than hand-building a path or a skeleton, so a live
+ * worker fills the same seeded structure it would fill in a real run.
+ */
+export const mintAssessment = async (
+  projectDir: string,
+  title: string,
+): Promise<{ assessmentAbs: string }> => {
+  const out = await new Deno.Command("bash", {
+    args: [MINT_SCRIPT, "claude", "mint", "--title", title],
+    clearEnv: true,
+    env: {
+      PATH: Deno.env.get("PATH") ?? "",
+      HOME: Deno.env.get("HOME") ?? "",
+      CLAUDE_PROJECT_DIR: projectDir,
+    },
+    stdout: "piped",
+    stderr: "piped",
+  }).output();
+  if (out.code !== 0) {
+    throw new Error(`assessment mint failed: ${new TextDecoder().decode(out.stderr)}`);
+  }
+  const minted = JSON.parse(new TextDecoder().decode(out.stdout)) as { assessment_abs: string };
+  return { assessmentAbs: minted.assessment_abs };
 };
 
 /** Names of all tools the model invoked, in order. */
