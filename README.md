@@ -131,7 +131,7 @@ If a task has no assessment (or no adopted mitigations), there is nothing to ver
 
 - A single **assessment file** written into the `.ingrain-security/` folder at your
   project root — `.ingrain-security/assessment-<branch>-<task>.md` (branch- and
-  task-keyed, minted by the `scripts/mint-assessment-path` script). It is the workers'
+  task-keyed, minted by the `scripts/run/mint-assessment-path` script). It is the workers'
   shared hand-off medium *and* its own persisted record — written in place, no temp
   copy — and is git-ignored by default (share one with `git add -f <file>`).
 - The selected findings, **folded into your plan**.

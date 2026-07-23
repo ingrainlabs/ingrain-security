@@ -1,5 +1,5 @@
 /**
- * Behavioral tests for the `skills/ingrain-security/scripts/mint-rules-path` script — the
+ * Behavioral tests for the `skills/ingrain-security/scripts/run/mint-rules-path` script — the
  * twin of `mint-assessment-path` that mints the org-rules sidecar path. It shares all minting
  * logic via `lib/mint-path.sh`, so these mirror `mint-assessment-path.test.ts` but assert the
  * `rules_*` field names and the `rules-<branch>-<task>.md` filenames. Like the sibling
@@ -11,7 +11,7 @@ import { exists } from "@std/fs";
 import { fromFileUrl } from "@std/path";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
-const SCRIPT = `${ROOT}skills/ingrain-security/scripts/mint-rules-path`;
+const SCRIPT = `${ROOT}skills/ingrain-security/scripts/run/mint-rules-path`;
 
 interface IResult {
   code: number;
@@ -176,7 +176,7 @@ Deno.test("rules mint: shares the assessment's branch + task slug (twin sidecars
     });
     const assess = await new Deno.Command("bash", {
       args: [
-        `${ROOT}skills/ingrain-security/scripts/mint-assessment-path`,
+        `${ROOT}skills/ingrain-security/scripts/run/mint-assessment-path`,
         "claude",
         "mint",
         "--title",

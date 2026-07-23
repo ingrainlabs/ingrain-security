@@ -1,6 +1,6 @@
 /**
- * Behavioral tests for the `hooks/codex/auto-approve-assessment-write` PermissionRequest hook —
- * the Codex twin of `auto-approve-assessment-write.test.ts`. Like its siblings these EXECUTE the
+ * Behavioral tests for the `hooks/codex/allow-write-assessment` PermissionRequest hook —
+ * the Codex twin of `allow-write-assessment.test.ts`. Like its siblings these EXECUTE the
  * script under bash against a throwaway project dir, so they need the `test:hooks`
  * run+write permissions.
  *
@@ -23,9 +23,9 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
-const HOOK = `${ROOT}hooks/codex/auto-approve-assessment-write`;
-const MINT = `${ROOT}skills/ingrain-security/scripts/mint-assessment-path`;
-const MINT_RULES = `${ROOT}skills/ingrain-security/scripts/mint-rules-path`;
+const HOOK = `${ROOT}hooks/codex/allow-write-assessment`;
+const MINT = `${ROOT}skills/ingrain-security/scripts/run/mint-assessment-path`;
+const MINT_RULES = `${ROOT}skills/ingrain-security/scripts/run/mint-rules-path`;
 
 interface IHookResult {
   code: number;

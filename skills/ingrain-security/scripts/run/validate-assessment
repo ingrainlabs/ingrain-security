@@ -61,8 +61,8 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # escape_for_json comes from project-root.sh, every parsing and checking routine from
 # validate-md.sh. This script is argument handling and the exit-code contract.
-# shellcheck source=lib/project-root.sh
-if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
+# shellcheck source=../lib/project-root.sh
+if ! . "${SCRIPT_DIR}/../lib/project-root.sh" 2>/dev/null; then
     printf 'validate-assessment: cannot load lib/project-root.sh\n' >&2
     exit 1
 fi

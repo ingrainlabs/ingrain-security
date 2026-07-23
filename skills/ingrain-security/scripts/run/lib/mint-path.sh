@@ -1,4 +1,5 @@
-# Shared path-minter for the ingrain-security plugin.
+# The path-minter shared by the two minters in `run/`. Lives in `run/lib/` because it belongs
+# to the RUN entity alone — the plugin-wide `../../lib/` is reserved for what both entities use.
 #
 # The dialect is declared here rather than by a shebang, because this file is sourced,
 # not executed — ShellCheck has no other way to know it is bash.
@@ -11,8 +12,8 @@
 # escape_for_json) and artifact-template.sh (seed_artifact_template).
 #
 # Sourced by:
-#   skills/ingrain-security/scripts/mint-assessment-path   (label: assessment)
-#   skills/ingrain-security/scripts/mint-rules-path        (label: rules)
+#   skills/ingrain-security/scripts/run/mint-assessment-path   (label: assessment)
+#   skills/ingrain-security/scripts/run/mint-rules-path        (label: rules)
 #
 # The two minters differ ONLY in their `label` (assessment | rules), which drives the
 # filename lead, the JSON field prefix, the diagnostic program token, and the `instruction`

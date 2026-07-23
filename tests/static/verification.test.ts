@@ -79,7 +79,7 @@ Deno.test("SKILL.md: routes to a phase from repo state, then points at the refer
   // The three Testing conditions, and the signals they are read from. The third is the BRANCH
   // DELTA, not the working tree: a fully-committed implementation must still route to Testing.
   assertStringIncludes(md, "file_exists");
-  assertStringIncludes(md, "scripts/resolve-branch-delta");
+  assertStringIncludes(md, "scripts/run/resolve-branch-delta");
   assertStringIncludes(md, "delta_empty");
   assertStringIncludes(md, "this section is a pointer, and the procedure is in that file");
 });
@@ -126,7 +126,7 @@ Deno.test("verification-pass.md: writes to the absolute assessment_abs, minted n
   // The verifier dispatch template must hand out the absolute path, never a relative one.
   assertStringIncludes(md, "<the minted assessment_abs — the ABSOLUTE path, pasted in full>");
   // The path is minted by the plugin script, and the relative form is display-only.
-  assertStringIncludes(md, "scripts/mint-assessment-path");
+  assertStringIncludes(md, "scripts/run/mint-assessment-path");
   assertStringIncludes(md, "mint");
   assertStringIncludes(md, "assessment_path");
   // Same deterministic branch+task file the plan review wrote.
@@ -158,7 +158,7 @@ Deno.test("verification-pass.md: verifies the branch diff since the fork point a
   const md = await Deno.readTextFile(VERIFY);
   // The diff basis is the fork point — committed work included, not just the dirty tree — and it
   // is resolved by the plugin script, so the gate and the review cannot drift apart.
-  assertStringIncludes(md, "scripts/resolve-branch-delta");
+  assertStringIncludes(md, "scripts/run/resolve-branch-delta");
   assertStringIncludes(md, "diff_ref");
   assertStringIncludes(md, "git diff <diff_ref>");
   assertStringIncludes(md, "git status");

@@ -1,21 +1,39 @@
-# The check behind the auto-approve-ingrain-scripts hooks: is this shell command nothing but
-# a bare run of one of the ingrain scripts? Holds the names of those scripts, the parser that
-# safely splits an untrusted command into words, and the predicates that answer the question
-# for each shape a host can present.
+# The RUN grant. Answers one question — "is this shell command nothing but a bare run of one of
+# the scripts in this folder?" — and nothing else. Holds the allowlist, the parser that safely
+# splits an untrusted command into words, and the predicates that answer for each shape a host
+# can present.
 #
-# Declares its dialect here because it is sourced, not executed.
+# Its sibling is the WRITE grant in `write/allow-write-check.sh`, which approves the model
+# *writing* the assessment file. Different tool, different payload, different guard: a Write
+# payload never reaches this file, and a Bash payload never reaches that one.
+#
+# Declares its dialect here because it is sourced, not executed. It lives in `run/` beside the
+# scripts it guards, but it is NOT one of them: `.sh` means sourced, and it is absent from
+# RUNNABLE_SCRIPTS, so `bash run/allow-run-check.sh` defers like any other non-runnable path.
 # shellcheck shell=bash
 #
-# Sourced by hooks/claude/auto-approve-ingrain-scripts (PreToolUse) and its Codex twin
-# hooks/codex/auto-approve-ingrain-scripts (PermissionRequest). Sets no shell options;
-# needs assessment-write-check.sh sourced first (extract_string, absolutize, physical_dir).
+# Sourced by hooks/claude/allow-run-script (PreToolUse) and its Codex twin
+# hooks/codex/allow-run-script (PermissionRequest). Sets no shell options. Needs, sourced first:
+#   ../lib/hook-input.sh   extract_string_array  (the Codex hook reads an argv array with it)
+#   ../lib/path.sh    physical_dir, absolutize
+#
 # Every function returns non-zero on anything it cannot represent exactly, which both hooks
 # read as "defer".
 
-# The ingrain scripts, by EXACT basename; arguments uninspected. None of them
-# touches the user's code — the two minters write only `.ingrain-security/` and its
-# `.gitignore`, the other two read and report.
-INGRAIN_SCRIPTS='mint-assessment-path mint-rules-path resolve-branch-delta validate-assessment'
+# The scripts this grant covers, by EXACT basename; arguments uninspected. All four are run by
+# the ORCHESTRATOR only — subagent workers hold no shell — and all four are injected into every
+# session as ready-to-run commands by hooks/start/session-start:
+#
+#   mint-assessment-path   mints assessment_abs, the review's one write target · writes .ingrain-security/ only
+#   mint-rules-path        mints rules_abs, the org-rules sidecar              · writes .ingrain-security/ only
+#   resolve-branch-delta   resolves the diff basis: base_ref/diff_ref/delta_empty · READ-ONLY
+#   validate-assessment    schema-checks the assessment file after every write    · READ-ONLY
+#
+# That last column is the grant's security argument. Approving a command approves everything it
+# does, unreviewed by any path check — so the set is fixed, resolved against this folder, and
+# holds only scripts that either report or write inside `.ingrain-security/`. None of them
+# touches the user's code.
+RUNNABLE_SCRIPTS='mint-assessment-path mint-rules-path resolve-branch-delta validate-assessment'
 
 # Every character a legitimate invocation can contain. Substitution, chaining, redirection,
 # globbing, expansion, comments, newlines and `C:\…` paths all need one outside it.
@@ -79,18 +97,19 @@ tokenize_command() {
     [ "${#COMMAND_TOKENS[@]}" -gt 0 ]
 }
 
-# The plugin's own scripts/ directory, physically resolved from the hook's location ($1 =
-# plugin root). Derived, never hardcoded, so the grant follows the installed copy.
-ingrain_scripts_dir() {
-    physical_dir "$1/skills/ingrain-security/scripts"
+# This folder — the plugin's `scripts/run/` — physically resolved from the hook's location
+# ($1 = plugin root). Derived, never hardcoded, so the grant follows the installed copy.
+# The folder IS the boundary: a script qualifies only when its canonical parent is this dir.
+runnable_scripts_dir() {
+    physical_dir "$1/skills/ingrain-security/scripts/run"
 }
 
-# True when the argv ($3…) is a bare run of one of the ingrain scripts, resolved against the
-# scripts dir ($1) and the host's cwd ($2). Accepted: `<script> [args…]` and
+# True when the argv ($3…) is a bare run of one of the runnable scripts, resolved against the
+# run dir ($1) and the host's cwd ($2). Accepted: `<script> [args…]` and
 # `bash <script> [args…]`; an interpreter flag (`bash -c …`) is refused. The script's
-# canonical parent must EQUAL the scripts dir, and the name must not be a symlink.
-is_ingrain_script_argv() {
-    local scripts_dir="$1" cwd="$2" script base parent
+# canonical parent must EQUAL the run dir, and the name must not be a symlink.
+is_allowed_run_argv() {
+    local run_dir="$1" cwd="$2" script base parent
     shift 2
 
     [ "$#" -ge 1 ] || return 1
@@ -107,7 +126,7 @@ is_ingrain_script_argv() {
     esac
 
     base="$(basename "${script}")"
-    case " ${INGRAIN_SCRIPTS} " in
+    case " ${RUNNABLE_SCRIPTS} " in
         *" ${base} "*) ;;
         *) return 1 ;;
     esac
@@ -115,29 +134,29 @@ is_ingrain_script_argv() {
     script="$(absolutize "${script}" "${cwd}")"
     parent="$(physical_dir "$(dirname "${script}")")" || return 1
     [ -n "${parent}" ] || return 1
-    [ "${parent}" = "${scripts_dir}" ] || return 1
+    [ "${parent}" = "${run_dir}" ] || return 1
 
     [ -L "${parent}/${base}" ] && return 1
     [ -f "${parent}/${base}" ]
 }
 
-# True when the command STRING ($3) is a bare run of one of the ingrain scripts — what Claude
+# True when the command STRING ($3) is a bare run of one of the runnable scripts — what Claude
 # Code sends, and what Codex wraps in `bash -lc`.
-is_ingrain_script_command() {
-    local scripts_dir="$1" cwd="$2" command="$3"
+is_allowed_run_command() {
+    local run_dir="$1" cwd="$2" command="$3"
 
     [ -n "${command}" ] || return 1
     has_unexpected_char "${command}" && return 1
     tokenize_command "${command}" || return 1
-    is_ingrain_script_argv "${scripts_dir}" "${cwd}" "${COMMAND_TOKENS[@]}"
+    is_allowed_run_argv "${run_dir}" "${cwd}" "${COMMAND_TOKENS[@]}"
 }
 
-# True when the argv ($3…) is a bare run of one of the ingrain scripts, in either shape a
+# True when the argv ($3…) is a bare run of one of the runnable scripts, in either shape a
 # shell tool presents: an already-split `[bash] <script> [args…]`, or a `bash -lc "<command>"`
 # wrapper of exactly three elements, whose string goes back through the string parser. An
 # already-split argv needs no SAFE_COMMAND_CHARS check — nothing re-parses it.
-is_ingrain_script_exec() {
-    local scripts_dir="$1" cwd="$2"
+is_allowed_run_exec() {
+    local run_dir="$1" cwd="$2"
     shift 2
 
     if [ "$#" -eq 3 ]; then
@@ -145,7 +164,7 @@ is_ingrain_script_exec() {
             bash | sh | bash.exe | sh.exe)
                 case "$2" in
                     -*c)
-                        is_ingrain_script_command "${scripts_dir}" "${cwd}" "$3"
+                        is_allowed_run_command "${run_dir}" "${cwd}" "$3"
                         return
                         ;;
                 esac
@@ -153,27 +172,5 @@ is_ingrain_script_exec() {
         esac
     fi
 
-    is_ingrain_script_argv "${scripts_dir}" "${cwd}" "$@"
+    is_allowed_run_argv "${run_dir}" "${cwd}" "$@"
 }
-
-# Read a JSON array of strings out of the payload ($1) at jq path ($2) onto PAYLOAD_ARGV,
-# separated on NUL so an argument containing a newline stays one argument. Returns non-zero
-# when jq is unavailable, the payload is not valid JSON, or the path holds anything but a
-# non-empty array of strings.
-extract_string_array() {
-    local payload="$1" path="$2" program element
-    command -v jq >/dev/null 2>&1 || return 1
-
-    # NUL-terminate inside jq and read the stream directly: bash drops NUL bytes from a
-    # variable, so a command substitution here would join the arguments into one.
-    program="${path} | if type == \"array\" and length > 0 and (map(type == \"string\") | all)"
-    program="${program} then .[] + \"\\u0000\" else empty end"
-
-    PAYLOAD_ARGV=()
-    while IFS= read -r -d '' element; do
-        PAYLOAD_ARGV+=("${element}")
-    done < <(printf '%s' "${payload}" | jq -j -e "${program}" 2>/dev/null)
-
-    [ "${#PAYLOAD_ARGV[@]}" -gt 0 ]
-}
-

@@ -88,8 +88,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # resolve_project_root, seed_gitignore and escape_for_json live in project-root.sh (shared
 # with the hooks); resolve_branch, slugify, mint_path and mint_dispatch live in mint-path.sh
 # (shared with the mint-rules-path minter). This script is now just the assessment label + usage.
-# shellcheck source=lib/project-root.sh
-if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
+# shellcheck source=../lib/project-root.sh
+if ! . "${SCRIPT_DIR}/../lib/project-root.sh" 2>/dev/null; then
     printf 'mint-assessment-path: cannot load lib/project-root.sh\n' >&2
     exit 1
 fi

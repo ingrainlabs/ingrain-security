@@ -99,8 +99,8 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # resolve_project_root, resolve_branch and escape_for_json live in project-root.sh. The
 # minters' lib is deliberately NOT sourced: this script mints nothing and creates nothing.
-# shellcheck source=lib/project-root.sh
-if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
+# shellcheck source=../lib/project-root.sh
+if ! . "${SCRIPT_DIR}/../lib/project-root.sh" 2>/dev/null; then
     printf 'resolve-branch-delta: cannot load lib/project-root.sh\n' >&2
     exit 1
 fi

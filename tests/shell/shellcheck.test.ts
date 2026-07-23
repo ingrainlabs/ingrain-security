@@ -28,17 +28,21 @@ const EXCLUDED = new Set(["hooks/run-hook.cmd"]);
  */
 const EXPECTED = [
   ".github/release.sh",
-  "hooks/claude/auto-approve-assessment-write",
-  "hooks/claude/auto-approve-ingrain-scripts",
-  "hooks/codex/auto-approve-ingrain-scripts",
+  "hooks/claude/allow-write-assessment",
+  "hooks/claude/allow-run-script",
+  "hooks/codex/allow-run-script",
+  "hooks/codex/allow-write-assessment",
   "hooks/start/session-start",
-  "skills/ingrain-security/scripts/lib/ingrain-script-run-check.sh",
+  "skills/ingrain-security/scripts/run/allow-run-check.sh",
+  "skills/ingrain-security/scripts/write/allow-write-check.sh",
+  "skills/ingrain-security/scripts/lib/hook-input.sh",
+  "skills/ingrain-security/scripts/lib/path.sh",
   "skills/ingrain-security/scripts/lib/project-root.sh",
-  "skills/ingrain-security/scripts/lib/mint-path.sh",
-  "skills/ingrain-security/scripts/lib/validate-md.sh",
-  "skills/ingrain-security/scripts/mint-rules-path",
-  "skills/ingrain-security/scripts/resolve-branch-delta",
-  "skills/ingrain-security/scripts/validate-assessment",
+  "skills/ingrain-security/scripts/run/lib/mint-path.sh",
+  "skills/ingrain-security/scripts/run/lib/validate-md.sh",
+  "skills/ingrain-security/scripts/run/mint-rules-path",
+  "skills/ingrain-security/scripts/run/resolve-branch-delta",
+  "skills/ingrain-security/scripts/run/validate-assessment",
 ];
 
 /**

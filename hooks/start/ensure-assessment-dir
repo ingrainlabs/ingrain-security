@@ -19,7 +19,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Project-root resolution and the .gitignore seed are shared with the PreToolUse hook
-# and with scripts/mint-assessment-path, alongside which the lib lives. A missing lib is a
+# and with scripts/run/mint-assessment-path, alongside which the lib lives. A missing lib is a
 # silent no-op: this hook must never abort the user's session.
 # shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
 . "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null || exit 0

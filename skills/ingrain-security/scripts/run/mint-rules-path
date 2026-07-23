@@ -78,8 +78,8 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # All minting logic is shared: project-root.sh (resolve_project_root, seed_gitignore,
 # escape_for_json) and mint-path.sh (resolve_branch, slugify, mint_path, mint_dispatch).
-# shellcheck source=lib/project-root.sh
-if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
+# shellcheck source=../lib/project-root.sh
+if ! . "${SCRIPT_DIR}/../lib/project-root.sh" 2>/dev/null; then
     printf 'mint-rules-path: cannot load lib/project-root.sh\n' >&2
     exit 1
 fi

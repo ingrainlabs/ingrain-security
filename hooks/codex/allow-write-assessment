@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# PermissionRequest hook for the ingrain-security plugin (Codex only — the Claude Code twin
-# is hooks/claude/auto-approve-assessment-write, on the PreToolUse event).
+# The WRITE grant on Codex — PermissionRequest (the Claude Code twin is
+# hooks/claude/allow-write-assessment, on the PreToolUse event).
 #
 # Auto-approves an apply_patch ONLY when every file it touches is the assessment file this
 # plugin mints, so a review can write its analysis without an approval prompt on every
@@ -25,8 +25,11 @@
 #   - the command is a PURE patch: nothing outside the `*** Begin Patch` / `*** End Patch`
 #     envelope but an apply_patch/heredoc wrapper, so no `; curl evil` can ride along,
 #   - it only ADDS or UPDATES files — a Delete/Move is outside what the skill ever does,
-#   - every path it touches passes `is_assessment_target` (direct child of the project's
+#   - every path it touches passes `is_allowed_write_target` (direct child of the project's
 #     `.ingrain-security/` folder, named `assessment*.md`, no symlink in the way).
+#
+# Its sibling grant is hooks/codex/allow-run-script, which approves a RUN of one of the
+# scripts in scripts/run/ — different tool, different guard.
 #
 # This hook NEVER denies: it can only remove a prompt, never introduce a block. Any doubt —
 # a malformed payload, an unrecognized envelope line, a missing folder — falls through to
@@ -39,10 +42,15 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPTS="${SCRIPT_DIR}/../../skills/ingrain-security/scripts"
 # shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
-. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null || exit 0
-# shellcheck source=../../skills/ingrain-security/scripts/lib/assessment-write-check.sh
-. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/assessment-write-check.sh" 2>/dev/null || exit 0
+. "${SCRIPTS}/lib/project-root.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/lib/hook-input.sh
+. "${SCRIPTS}/lib/hook-input.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/lib/path.sh
+. "${SCRIPTS}/lib/path.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/write/allow-write-check.sh
+. "${SCRIPTS}/write/allow-write-check.sh" 2>/dev/null || exit 0
 
 # Print nothing and exit 0 — the universal "no opinion, use the normal approval flow"
 # signal. Every rejection path in this hook routes here.
@@ -155,7 +163,7 @@ main() {
     cwd="$(extract_string "${payload}" ".cwd")" || cwd=""
     while IFS= read -r path; do
         [ -n "${path}" ] || defer
-        is_assessment_target "${canon_dir}" "$(absolutize "${path}" "${cwd}")" || defer
+        is_allowed_write_target "${canon_dir}" "$(absolutize "${path}" "${cwd}")" || defer
     done < <(printf '%s\n' "${paths}")
 
     printf '%s\n' \

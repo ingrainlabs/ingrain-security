@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# The RUN grant on Claude Code — PreToolUse (Codex twin: hooks/codex/allow-run-script).
+#
+# Auto-approves a Bash call when it is a bare run of one of the scripts in
+# skills/ingrain-security/scripts/run/. The qualifying test lives beside them in
+# run/allow-run-check.sh. Never emits "deny": anything that does not qualify defers to the
+# normal prompt.
+#
+# Its sibling grant is hooks/claude/allow-write-assessment, which approves a WRITE to the
+# assessment file — different tool, different guard.
+#
+# Registered in hooks/claude/hook.json, dispatched via hooks/run-hook.cmd. Always exits 0.
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd -P)" || exit 0
+SCRIPTS="${SCRIPT_DIR}/../../skills/ingrain-security/scripts"
+# shellcheck source=../../skills/ingrain-security/scripts/lib/hook-input.sh
+. "${SCRIPTS}/lib/hook-input.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/lib/path.sh
+. "${SCRIPTS}/lib/path.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/run/allow-run-check.sh
+. "${SCRIPTS}/run/allow-run-check.sh" 2>/dev/null || exit 0
+
+# Print nothing and exit 0: no opinion, use the normal permission flow.
+defer() {
+    exit 0
+}
+
+main() {
+    local payload tool command cwd run_dir
+
+    payload="$(cat)" || defer
+    [ -n "${payload}" ] || defer
+
+    # The hook.json matcher is a convenience filter, not a security boundary.
+    tool="$(extract_string "${payload}" ".tool_name")" || defer
+    [ "${tool}" = "Bash" ] || defer
+
+    command="$(extract_string "${payload}" ".tool_input.command")" || defer
+    [ -n "${command}" ] || defer
+
+    run_dir="$(runnable_scripts_dir "${PLUGIN_ROOT}")" || defer
+    [ -n "${run_dir}" ] || defer
+
+    cwd="$(extract_string "${payload}" ".cwd")" || cwd=""
+    is_allowed_run_command "${run_dir}" "${cwd}" "${command}" || defer
+
+    printf '%s\n' \
+        '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"ingrain-security runnable script"}}'
+}
+
+main "$@"
+exit 0

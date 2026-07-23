@@ -63,7 +63,7 @@ the same as it always did. The second resolves the **branch delta**.
 everywhere — the script is what resolves it. Your SessionStart context carries the concrete,
 ready-to-run command (plugin root and host already substituted); it takes the form:
 
-    bash <plugin>/skills/ingrain-security/scripts/mint-assessment-path <host> mint --title "<task title>"
+    bash <plugin>/skills/ingrain-security/scripts/run/mint-assessment-path <host> mint --title "<task title>"
 
 Use its **`assessment_abs`** — the **absolute** path — verbatim as the write target for
 every worker dispatch, every Write/Edit, and at finalize, and obey the `instruction` field

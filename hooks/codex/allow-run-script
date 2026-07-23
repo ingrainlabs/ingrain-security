@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# The RUN grant on Codex — PermissionRequest (Claude Code twin: hooks/claude/allow-run-script).
+#
+# Auto-approves a shell call when it is a bare run of one of the scripts in
+# skills/ingrain-security/scripts/run/. Codex passes `tool_input.command` as either a string or
+# an argv array (commonly the `bash -lc "<command>"` wrapper); both shapes are handled, and the
+# wrapper's string argument is re-parsed rather than trusted. The qualifying test lives beside
+# the scripts in run/allow-run-check.sh, shared with the Claude hook.
+# Never denies: anything that does not qualify defers to the normal approval prompt.
+#
+# Its sibling grant is hooks/codex/allow-write-assessment, which approves a WRITE to the
+# assessment file — different tool, different guard.
+#
+# Registered in hooks/codex/hook.json, dispatched via hooks/run-hook.cmd. Always exits 0.
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd -P)" || exit 0
+SCRIPTS="${SCRIPT_DIR}/../../skills/ingrain-security/scripts"
+# shellcheck source=../../skills/ingrain-security/scripts/lib/hook-input.sh
+. "${SCRIPTS}/lib/hook-input.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/lib/path.sh
+. "${SCRIPTS}/lib/path.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/run/allow-run-check.sh
+. "${SCRIPTS}/run/allow-run-check.sh" 2>/dev/null || exit 0
+
+# Print nothing and exit 0: no opinion, use the normal approval flow.
+defer() {
+    exit 0
+}
+
+main() {
+    local payload tool command cwd run_dir
+
+    payload="$(cat)" || defer
+    [ -n "${payload}" ] || defer
+
+    # The hook.json matcher is a convenience filter, not a security boundary.
+    tool="$(extract_string "${payload}" ".tool_name")" || defer
+    case "${tool}" in
+        shell | local_shell) ;;
+        *) defer ;;
+    esac
+
+    run_dir="$(runnable_scripts_dir "${PLUGIN_ROOT}")" || defer
+    [ -n "${run_dir}" ] || defer
+
+    cwd="$(extract_string "${payload}" ".cwd")" || cwd=""
+
+    # Argv array first; when the command is a string, extraction fails and the string
+    # parser answers instead.
+    if extract_string_array "${payload}" ".tool_input.command"; then
+        is_allowed_run_exec "${run_dir}" "${cwd}" "${PAYLOAD_ARGV[@]}" || defer
+    else
+        command="$(extract_string "${payload}" ".tool_input.command")" || defer
+        is_allowed_run_command "${run_dir}" "${cwd}" "${command}" || defer
+    fi
+
+    printf '%s\n' \
+        '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
+}
+
+main "$@"
+exit 0

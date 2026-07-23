@@ -9,11 +9,16 @@
 # detached-HEAD checkout must degrade to an empty result, not abort), and
 # sourcing must not change that.
 #
+# One of the three libs in this folder, which holds only what BOTH entities use — here, the
+# WRITE grant's hooks and the RUN entity's scripts.
+#
 # Sourced by:
-#   hooks/start/ensure-assessment-dir            (SessionStart, both hosts)
-#   hooks/claude/auto-approve-assessment-write          (PreToolUse, Claude only)
-#   skills/ingrain-security/scripts/mint-assessment-path   (the sibling minter)
-#   skills/ingrain-security/scripts/resolve-branch-delta       (the fork-point resolver)
+#   hooks/start/ensure-assessment-dir              (SessionStart, both hosts)
+#   hooks/claude/allow-write-assessment            (PreToolUse,        WRITE grant)
+#   hooks/codex/allow-write-assessment             (PermissionRequest, WRITE grant)
+#   skills/ingrain-security/scripts/run/mint-assessment-path   (and its twin mint-rules-path)
+#   skills/ingrain-security/scripts/run/resolve-branch-delta   (the fork-point resolver)
+#   skills/ingrain-security/scripts/run/validate-assessment    (for escape_for_json)
 #
 # Every function echoes empty and returns non-zero on failure, so callers can
 # fall through to the next candidate rather than risk acting on a bad path.

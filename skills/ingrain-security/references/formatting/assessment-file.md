@@ -10,7 +10,7 @@ shape.
 - **Path.** A single file written directly into `.ingrain-security/` at the project
   root — it is **both** the living working copy the workers write during the run **and**
   its persisted record, so finalizing it in place is the whole of persisting it. The
-  orchestrator mints it: it runs the `scripts/mint-assessment-path` script
+  orchestrator mints it: it runs the `scripts/run/mint-assessment-path` script
   (`mint` subcommand) once at review start and reuses its **`assessment_abs`** — the
   absolute path — as the write target throughout; the relative `assessment_path` is a
   display form for prose and links only. **Every write goes to the absolute path** — a

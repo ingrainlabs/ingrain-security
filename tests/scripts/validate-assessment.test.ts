@@ -1,5 +1,5 @@
 /**
- * Behavioral tests for the `skills/ingrain-security/scripts/validate-assessment` script
+ * Behavioral tests for the `skills/ingrain-security/scripts/run/validate-assessment` script
  * — the schema check over the assessment file the review persists into
  * `.ingrain-security/`. Like the `tests/hooks/` tier these EXECUTE the script under bash,
  * here against fixtures written to a throwaway temp dir, so they need the `test:scripts`
@@ -15,7 +15,7 @@ import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
-const SCRIPT = `${ROOT}skills/ingrain-security/scripts/validate-assessment`;
+const SCRIPT = `${ROOT}skills/ingrain-security/scripts/run/validate-assessment`;
 
 /** One reported violation: the line it sits on (0 for the file as a whole). */
 interface IValidationError {
