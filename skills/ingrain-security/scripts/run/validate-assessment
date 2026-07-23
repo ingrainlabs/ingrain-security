@@ -52,16 +52,38 @@ EOF
 # --- helpers ----------------------------------------------------------------------
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# escape_for_json comes from project-root.sh, every parsing and checking routine from
-# validate-md.sh. This script is argument handling and the exit-code contract.
+# escape_for_json comes from project-root.sh; the validator itself is four sourced libs, each
+# a layer over the one before it — primitives, the markdown document, its fields and entries,
+# then the assessment schema written against them, and the report emitters last. Hence the
+# source order below. This script is argument handling and the exit-code contract.
 # shellcheck source=../lib/project-root.sh
 if ! . "${SCRIPT_DIR}/../lib/project-root.sh" 2>/dev/null; then
     printf 'validate-assessment: cannot load lib/project-root.sh\n' >&2
     exit 1
 fi
-# shellcheck source=lib/validate-md.sh
-if ! . "${SCRIPT_DIR}/lib/validate-md.sh" 2>/dev/null; then
-    printf 'validate-assessment: cannot load lib/validate-md.sh\n' >&2
+# shellcheck source=lib/md-primitives.sh
+if ! . "${SCRIPT_DIR}/lib/md-primitives.sh" 2>/dev/null; then
+    printf 'validate-assessment: cannot load lib/md-primitives.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/md-document.sh
+if ! . "${SCRIPT_DIR}/lib/md-document.sh" 2>/dev/null; then
+    printf 'validate-assessment: cannot load lib/md-document.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/md-fields.sh
+if ! . "${SCRIPT_DIR}/lib/md-fields.sh" 2>/dev/null; then
+    printf 'validate-assessment: cannot load lib/md-fields.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/assessment-schema.sh
+if ! . "${SCRIPT_DIR}/lib/assessment-schema.sh" 2>/dev/null; then
+    printf 'validate-assessment: cannot load lib/assessment-schema.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/md-report.sh
+if ! . "${SCRIPT_DIR}/lib/md-report.sh" 2>/dev/null; then
+    printf 'validate-assessment: cannot load lib/md-report.sh\n' >&2
     exit 1
 fi
 

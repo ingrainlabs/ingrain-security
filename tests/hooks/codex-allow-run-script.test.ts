@@ -146,7 +146,7 @@ Deno.test("defer: an interpreter flag in an already-split argv", async () => {
 // ---------------------------------------------------------------------------
 
 Deno.test("defer: a script outside the plugin, or not one of its own", async () => {
-  await assertDeferred([`${SCRIPTS}/run/lib/validate-md.sh`]);
+  await assertDeferred([`${SCRIPTS}/run/lib/md-primitives.sh`]);
   await assertDeferred(["bash", "/tmp/validate-assessment", "/tmp/a.md"]);
   await assertDeferred(["bash", `${SCRIPTS}/../../../hooks/codex/allow-run-script`]);
 });

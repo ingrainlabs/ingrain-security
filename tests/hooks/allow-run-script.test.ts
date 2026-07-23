@@ -195,7 +195,7 @@ Deno.test("defer: an unterminated quote", async () => {
 // ---------------------------------------------------------------------------
 
 Deno.test("defer: a sourceable lib, which is not an ingrain script", async () => {
-  await assertDeferred(`bash ${SCRIPTS}/run/lib/validate-md.sh`);
+  await assertDeferred(`bash ${SCRIPTS}/run/lib/md-primitives.sh`);
   await assertDeferred(`bash ${SCRIPTS}/lib/project-root.sh`);
 });
 
