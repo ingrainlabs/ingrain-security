@@ -37,7 +37,7 @@ at the start of the run, with the bundled **`scripts/assessment-path`**
 script. Your SessionStart context carries the ready-to-run command (plugin root and host
 already substituted); it takes the form:
 
-    bash <plugin>/skills/ingrain-security/scripts/assessment-path <host> mint --title "<task title>"
+    bash <plugin>/skills/ingrain-security/scripts/mint-assessment-path <host> mint --title "<task title>"
 
 **The `--title` must be the task's title as Development recorded it — reuse the assessment's
 `## Task` → **Title** verbatim.** Copy it from the file rather than from the conversation:
@@ -84,8 +84,8 @@ keeps the validation the plan review already gave it.
 ## The diff under review
 
 Verify against the **branch delta** — everything this branch added since it diverged from the
-branch it was cut from, committed **and** uncommitted alike. Resolve it with the bundled
-**`scripts/branch-diff`** script and take **`base_ref`** (the parent branch, for the report),
+branch it was cut from, committed **and** uncommitted alike. Resolve it with the plugin's
+**`scripts/resolve-branch-delta`** script and take **`base_ref`** (the parent branch, for the report),
 **`diff_ref`** (what you actually diff against), `fallback` and `delta_empty` from its JSON.
 → `references/lib/branch-diff.md` owns the script, the refs it returns, and the discipline
 around them — notably that `diff_ref` is the run's **fixed basis**: resolve it once and pass
@@ -152,10 +152,10 @@ by the same branch + task slug (schema: `references/formatting/rules-file.md`). 
 robustness against *how the org implements* the control, locate that sidecar and hand each
 verifier the rule descriptions for the mitigations covering its threat.
 
-Mint its path with the bundled **`scripts/rules-path`** script, the twin of `assessment-path`;
+Mint its path with the plugin's **`scripts/mint-rules-path`** script, the twin of `mint-assessment-path`;
 your SessionStart context carries the ready-to-run command:
 
-    bash <plugin>/skills/ingrain-security/scripts/rules-path <host> mint --title "<task title>"
+    bash <plugin>/skills/ingrain-security/scripts/mint-rules-path <host> mint --title "<task title>"
 
 Use its **`rules_abs`** (absolute) as the read path, and the **same verbatim title** you minted
 the assessment with. Because it is keyed by the same branch + task slug, it resolves to the
@@ -305,7 +305,7 @@ file.
    covers. Set aside the `selected` mitigations whose `Threats` is `—` for the
    general-instruction pass. If **no threat is selected and no mitigation is adopted**, state
    "nothing to verify", set `Latest stage: testing`, and **stop**.
-3. **Locate the rules file.** Mint `rules_abs` with the `rules-path` command and the same
+3. **Locate the rules file.** Mint `rules_abs` with the `mint-rules-path` command and the same
    verbatim title (see **The rules file**). If `file_exists: true`, it carries this task's org
    rules — you will hand each verifier the rule(s) behind its threat's covering mitigations by
    pointer. If `file_exists: false`, no rules were retrieved at planning; verifiers judge from
@@ -385,7 +385,7 @@ off by pointer: a dispatch carries paths into the assessment, the sidecar and th
 each verifier opens them itself. Report the empty cases out loud.
 
 - [ ] 0. Assessment located — title minted verbatim; no assessment for this task → stop
-- [ ] 1. Fork point resolved with `scripts/branch-diff` (`base_ref` + `diff_ref` + `fallback`) and branch diff captured once — `HEAD` only as a reported fallback; `delta_empty: true` → stop
+- [ ] 1. Fork point resolved with `scripts/resolve-branch-delta` (`base_ref` + `diff_ref` + `fallback`) and branch diff captured once — `HEAD` only as a reported fallback; `delta_empty: true` → stop
 - [ ] 2. Scope collected — `selected` threats paired with their covering `selected` mitigations (an uncovered threat is still in scope), untagged rows set aside; nothing selected → set `Latest stage: testing` and stop
 - [ ] 3. Rules sidecar located (`rules_abs`) — an absent sidecar is an expected state; verification proceeds either way
 - [ ] 4. One verifier dispatched per selected threat, plus the general-instruction pass — justification FIRST, then `weak`/`adequate`/`strong`

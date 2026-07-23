@@ -10,7 +10,7 @@ shape.
 - **Path.** A single file written directly into `.ingrain-security/` at the project
   root — it is **both** the living working copy the workers write during the run **and**
   its persisted record, so finalizing it in place is the whole of persisting it. The
-  orchestrator mints it: it runs the `scripts/assessment-path` script
+  orchestrator mints it: it runs the `scripts/mint-assessment-path` script
   (`mint` subcommand) once at review start and reuses its **`assessment_abs`** — the
   absolute path — as the write target throughout; the relative `assessment_path` is a
   display form for prose and links only. **Every write goes to the absolute path** — a
@@ -246,7 +246,7 @@ produced it, so a mitigation's Robustness always tracks the threats it covers.
 ### `## Maintenance (for the implementing agent)`
 - Instruction to keep the file in sync as the implementation evolves.
 - **How that agent locates this file.** It runs in a later session and has no minted path
-  in context, so it must **re-run** the `assessment-path` mint command from its
+  in context, so it must **re-run** the `mint-assessment-path` mint command from its
   `INGRAIN-ASSESSMENT-PATHS` session context and write to the `assessment_abs` it
   returns. Re-minting is deterministic in branch + title, so it resolves to this same
   file — and the mint is what resolves the path and ensures the folder, so `assessment_abs`
@@ -384,12 +384,12 @@ altered. Keep the Selection fields and coverage honest against the code you writ
 and keep every enumerated field within its allowed values. Ids are permanent: add a new
 threat with the next free `T<n>` and never renumber the existing ones.
 
-To locate this file, re-run the `assessment-path` mint command from your
+To locate this file, re-run the `mint-assessment-path` mint command from your
 INGRAIN-ASSESSMENT-PATHS session context and write to the absolute `assessment_abs`
 it returns — it resolves back to this same file, and the mint is what resolves the
 path and ensures the folder.
 
 Org rules for this task (if any were retrieved) live in the linked sidecar
-.ingrain-security/rules-<branch-slug>-<task-slug>.md — re-mint it with the `rules-path`
+.ingrain-security/rules-<branch-slug>-<task-slug>.md — re-mint it with the `mint-rules-path`
 command; it is persistent and maintained there.
 ```

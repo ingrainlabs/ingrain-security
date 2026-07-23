@@ -15,8 +15,8 @@
 # reports, and writes nothing — no file, no folder, no git state.
 #
 # Usage:
-#   branch-diff <host> [resolve]
-#   branch-diff --help
+#   resolve-branch-delta <host> [resolve]
+#   resolve-branch-delta --help
 #
 #   <host>  the host's config dotfolder base name — "claude" (Claude Code), "codex"
 #           (Codex), or any future coding agent's token. It selects project-root
@@ -27,7 +27,7 @@
 #
 #   The subcommand defaults to `resolve` when omitted, unlike the minters' required
 #   `mint`. There is only one thing this script can do, and an exit-2 on the bare
-#   `branch-diff <host>` form would be a failure mode with nothing behind it.
+#   `resolve-branch-delta <host>` form would be a failure mode with nothing behind it.
 #
 # THE FORK POINT. The parent branch is never assumed to be `main` — branches are routinely
 # cut from other feature, release or integration branches. We take every other local and
@@ -56,7 +56,7 @@
 # Every DEGRADED case still exits 0 with a complete JSON object — a non-git directory, an
 # empty repo, a detached HEAD. Callers route on `fallback`/`reason`, never on a status code.
 #
-# Bundled with the skill and run directly by the orchestrator (which already has a bash
+# Ships with the plugin and is run directly by the orchestrator (which already has a bash
 # shell — the ready-to-run command, with plugin root + host substituted, is injected by the
 # session-start hook). Uses `set -uo pipefail` WITHOUT `-e`: merge-base, show, rev-list and
 # rev-parse all fail routinely on precisely the checkouts this script exists to survive.
@@ -68,8 +68,8 @@ usage() {
 Resolve the ingrain-security branch delta and diff basis. Prints one JSON object to stdout.
 
 Usage:
-  branch-diff <host> [resolve]
-  branch-diff --help
+  resolve-branch-delta <host> [resolve]
+  resolve-branch-delta --help
 
 Arguments:
   <host>              config dotfolder base name: claude | codex | <future token>
@@ -101,7 +101,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # minters' lib is deliberately NOT sourced: this script mints nothing and creates nothing.
 # shellcheck source=lib/project-root.sh
 if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
-    printf 'branch-diff: cannot load lib/project-root.sh\n' >&2
+    printf 'resolve-branch-delta: cannot load lib/project-root.sh\n' >&2
     exit 1
 fi
 
@@ -145,7 +145,7 @@ resolve_delta() {
     local diff_command status_command instruction
 
     project_root="$(resolve_project_root "${host}")"
-    [ -n "${project_root}" ] || { printf 'branch-diff: could not resolve project root\n' >&2; return 1; }
+    [ -n "${project_root}" ] || { printf 'resolve-branch-delta: could not resolve project root\n' >&2; return 1; }
 
     branch="$(resolve_branch "${project_root}")"
 
@@ -231,7 +231,7 @@ case "${1:-}" in
         exit 0
         ;;
     "")
-        printf 'branch-diff: missing <host>. Try --help.\n' >&2
+        printf 'resolve-branch-delta: missing <host>. Try --help.\n' >&2
         exit 2
         ;;
 esac
@@ -240,13 +240,13 @@ host="$1"
 case "${2:-resolve}" in
     resolve) ;;
     *)
-        printf 'branch-diff: unknown subcommand "%s" (resolve). Try --help.\n' "$2" >&2
+        printf 'resolve-branch-delta: unknown subcommand "%s" (resolve). Try --help.\n' "$2" >&2
         exit 2
         ;;
 esac
 
 # The minters validate the host token via slugify; here it is only ever a JSON field and a
 # selector for resolve_project_root, so an empty token is the one thing worth rejecting.
-[ -n "${host}" ] || { printf 'branch-diff: empty <host>. Try --help.\n' >&2; exit 2; }
+[ -n "${host}" ] || { printf 'resolve-branch-delta: empty <host>. Try --help.\n' >&2; exit 2; }
 
 resolve_delta "${host}"

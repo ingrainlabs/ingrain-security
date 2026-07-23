@@ -1,6 +1,6 @@
 /**
  * Runs ShellCheck over every shell script committed to the repo — the hooks, the
- * assessment-path minter and the release scripts. Offline, no model calls.
+ * mint-assessment-path minter and the release scripts. Offline, no model calls.
  *
  * Discovery is shebang-based rather than extension-based on purpose: the hook scripts
  * are deliberately extensionless (see `hooks/run-hook.cmd` for why), so a `*.sh` glob
@@ -28,16 +28,16 @@ const EXCLUDED = new Set(["hooks/run-hook.cmd"]);
  */
 const EXPECTED = [
   ".github/release.sh",
-  "hooks/claude/allow-assessment-write",
-  "hooks/claude/allow-script-run",
-  "hooks/codex/allow-script-run",
+  "hooks/claude/auto-approve-assessment-write",
+  "hooks/claude/auto-approve-ingrain-scripts",
+  "hooks/codex/auto-approve-ingrain-scripts",
   "hooks/start/session-start",
-  "skills/ingrain-security/scripts/lib/script-run.sh",
+  "skills/ingrain-security/scripts/lib/ingrain-script-run-check.sh",
   "skills/ingrain-security/scripts/lib/project-root.sh",
   "skills/ingrain-security/scripts/lib/mint-path.sh",
   "skills/ingrain-security/scripts/lib/validate-md.sh",
-  "skills/ingrain-security/scripts/rules-path",
-  "skills/ingrain-security/scripts/branch-diff",
+  "skills/ingrain-security/scripts/mint-rules-path",
+  "skills/ingrain-security/scripts/resolve-branch-delta",
   "skills/ingrain-security/scripts/validate-assessment",
 ];
 

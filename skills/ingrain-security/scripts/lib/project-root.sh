@@ -11,9 +11,9 @@
 #
 # Sourced by:
 #   hooks/start/ensure-assessment-dir            (SessionStart, both hosts)
-#   hooks/claude/allow-assessment-write          (PreToolUse, Claude only)
-#   skills/ingrain-security/scripts/assessment-path   (the sibling minter)
-#   skills/ingrain-security/scripts/branch-diff       (the fork-point resolver)
+#   hooks/claude/auto-approve-assessment-write          (PreToolUse, Claude only)
+#   skills/ingrain-security/scripts/mint-assessment-path   (the sibling minter)
+#   skills/ingrain-security/scripts/resolve-branch-delta       (the fork-point resolver)
 #
 # Every function echoes empty and returns non-zero on failure, so callers can
 # fall through to the next candidate rather than risk acting on a bad path.

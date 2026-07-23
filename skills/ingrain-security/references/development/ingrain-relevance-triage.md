@@ -40,7 +40,7 @@ the pipeline builds on prior work. Locate it with Glob, Grep, and Read:
 
 1. **Glob the assessment folder** for this branch, using the **absolute** folder path the
    orchestrator passed you (`<project_root>/.ingrain-security/`, from the
-   `scripts/assessment-path` script):
+   `scripts/mint-assessment-path` script):
    `<project_root>/.ingrain-security/assessment-<branch-slug>-*.md`, where `<branch-slug>` is
    the `branch_slug` the orchestrator resolved via the same script (so this glob and the
    file names always agree). If the branch is `unknown`, Glob all

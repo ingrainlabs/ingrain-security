@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" codex/allow-assessment-write",
+            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" codex/auto-approve-assessment-write",
             "statusMessage": "Checking assessment-file write"
           }
         ]
@@ -33,8 +33,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" codex/allow-script-run",
-            "statusMessage": "Checking bundled-script run"
+            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" codex/auto-approve-ingrain-scripts",
+            "statusMessage": "Checking ingrain-script run"
           }
         ]
       }

@@ -1,7 +1,7 @@
 /**
- * Behavioral tests for the `skills/ingrain-security/scripts/rules-path` script — the
- * twin of `assessment-path` that mints the org-rules sidecar path. It shares all minting
- * logic via `lib/mint-path.sh`, so these mirror `assessment-path.test.ts` but assert the
+ * Behavioral tests for the `skills/ingrain-security/scripts/mint-rules-path` script — the
+ * twin of `mint-assessment-path` that mints the org-rules sidecar path. It shares all minting
+ * logic via `lib/mint-path.sh`, so these mirror `mint-assessment-path.test.ts` but assert the
  * `rules_*` field names and the `rules-<branch>-<task>.md` filenames. Like the sibling
  * suite these EXECUTE the script under bash against a throwaway project dir.
  */
@@ -11,7 +11,7 @@ import { exists } from "@std/fs";
 import { fromFileUrl } from "@std/path";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
-const SCRIPT = `${ROOT}skills/ingrain-security/scripts/rules-path`;
+const SCRIPT = `${ROOT}skills/ingrain-security/scripts/mint-rules-path`;
 
 interface IResult {
   code: number;
@@ -28,7 +28,7 @@ function baseEnv(projectDir?: string): Record<string, string> {
   };
 }
 
-/** Run the rules-path script with the given argv. */
+/** Run the mint-rules-path script with the given argv. */
 async function run(
   args: string[],
   opts: { cwd?: string; projectDir?: string } = {},
@@ -48,7 +48,7 @@ async function run(
   };
 }
 
-/** The fields the mint subcommand emits — twin of assessment-path with rules_* names. */
+/** The fields the mint subcommand emits — twin of mint-assessment-path with rules_* names. */
 interface IPathJson {
   host: string;
   project_root: string;
@@ -176,7 +176,7 @@ Deno.test("rules mint: shares the assessment's branch + task slug (twin sidecars
     });
     const assess = await new Deno.Command("bash", {
       args: [
-        `${ROOT}skills/ingrain-security/scripts/assessment-path`,
+        `${ROOT}skills/ingrain-security/scripts/mint-assessment-path`,
         "claude",
         "mint",
         "--title",
@@ -305,17 +305,17 @@ Deno.test("rules --help: exits 0, prints usage, creates nothing", async () => {
   });
 });
 
-Deno.test("rules usage errors exit 2, tagged with the rules-path program token", async () => {
+Deno.test("rules usage errors exit 2, tagged with the mint-rules-path program token", async () => {
   await withProject(async (dir) => {
     assertEquals((await run(["claude", "bogus"], { projectDir: dir })).code, 2);
     assertEquals((await run([], { projectDir: dir })).code, 2);
 
     const noTitle = await run(["claude", "mint", "--title"], { projectDir: dir });
     assertEquals(noTitle.code, 2);
-    assertStringIncludes(noTitle.stderr, "rules-path: --title needs a value");
+    assertStringIncludes(noTitle.stderr, "mint-rules-path: --title needs a value");
 
     const badHost = await run(["---", "mint", "--title", "T"], { projectDir: dir });
     assertEquals(badHost.code, 2);
-    assertStringIncludes(badHost.stderr, "rules-path: invalid host token");
+    assertStringIncludes(badHost.stderr, "mint-rules-path: invalid host token");
   });
 });

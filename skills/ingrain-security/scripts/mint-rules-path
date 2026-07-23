@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rules-path minter for the ingrain-security plugin — twin of assessment-path.
+# Rules-path minter for the ingrain-security plugin — twin of mint-assessment-path.
 #
 # Single source of truth for the review's org-rules sidecar path, so no agent hand-builds
 # it. The file is written directly into `.ingrain-security/` at the project root, a sibling
@@ -12,8 +12,8 @@
 # relative form for prose and links. The emitted `instruction` field restates this.
 #
 # Usage:
-#   rules-path <host> mint --title "<task title>" [--branch-slug <slug>]
-#   rules-path --help
+#   mint-rules-path <host> mint --title "<task title>" [--branch-slug <slug>]
+#   mint-rules-path --help
 #
 #   <host>  the host's config dotfolder base name — "claude" (Claude Code), "codex"
 #           (Codex), or any future coding agent's token. It selects project-root
@@ -42,8 +42,8 @@ usage() {
 Mint the ingrain-security org-rules sidecar path. Prints one JSON object to stdout.
 
 Usage:
-  rules-path <host> mint --title "<task title>" [--branch-slug <slug>]
-  rules-path --help
+  mint-rules-path <host> mint --title "<task title>" [--branch-slug <slug>]
+  mint-rules-path --help
 
 Arguments:
   <host>              config dotfolder base name: claude | codex | <future token>
@@ -80,7 +80,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # escape_for_json) and mint-path.sh (resolve_branch, slugify, mint_path, mint_dispatch).
 # shellcheck source=lib/project-root.sh
 if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
-    printf 'rules-path: cannot load lib/project-root.sh\n' >&2
+    printf 'mint-rules-path: cannot load lib/project-root.sh\n' >&2
     exit 1
 fi
 # shellcheck source=lib/artifact-template.sh
@@ -90,7 +90,7 @@ if ! . "${SCRIPT_DIR}/lib/artifact-template.sh" 2>/dev/null; then
 fi
 # shellcheck source=lib/mint-path.sh
 if ! . "${SCRIPT_DIR}/lib/mint-path.sh" 2>/dev/null; then
-    printf 'rules-path: cannot load lib/mint-path.sh\n' >&2
+    printf 'mint-rules-path: cannot load lib/mint-path.sh\n' >&2
     exit 1
 fi
 

@@ -11,8 +11,8 @@
 # escape_for_json) and artifact-template.sh (seed_artifact_template).
 #
 # Sourced by:
-#   skills/ingrain-security/scripts/assessment-path   (label: assessment)
-#   skills/ingrain-security/scripts/rules-path        (label: rules)
+#   skills/ingrain-security/scripts/mint-assessment-path   (label: assessment)
+#   skills/ingrain-security/scripts/mint-rules-path        (label: rules)
 #
 # The two minters differ ONLY in their `label` (assessment | rules), which drives the
 # filename lead, the JSON field prefix, the diagnostic program token, and the `instruction`
@@ -45,18 +45,18 @@ mint_path() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --title)
-                [ $# -ge 2 ] || { printf '%s-path: --title needs a value\n' "${label}" >&2; return 2; }
+                [ $# -ge 2 ] || { printf 'mint-%s-path: --title needs a value\n' "${label}" >&2; return 2; }
                 title="$2"
                 shift 2
                 ;;
             --branch-slug)
-                [ $# -ge 2 ] || { printf '%s-path: --branch-slug needs a value\n' "${label}" >&2; return 2; }
+                [ $# -ge 2 ] || { printf 'mint-%s-path: --branch-slug needs a value\n' "${label}" >&2; return 2; }
                 slug_flag="$2"
                 have_slug="true"
                 shift 2
                 ;;
             *)
-                printf '%s-path: unknown mint flag "%s"\n' "${label}" "$1" >&2
+                printf 'mint-%s-path: unknown mint flag "%s"\n' "${label}" "$1" >&2
                 return 2
                 ;;
         esac
@@ -64,11 +64,11 @@ mint_path() {
 
     local project_root
     project_root="$(resolve_project_root "${host}")"
-    [ -n "${project_root}" ] || { printf '%s-path: could not resolve project root\n' "${label}" >&2; return 1; }
+    [ -n "${project_root}" ] || { printf 'mint-%s-path: could not resolve project root\n' "${label}" >&2; return 1; }
 
     local host_slug
     host_slug="$(slugify "${host}")"
-    [ -n "${host_slug}" ] || { printf '%s-path: invalid host token "%s"\n' "${label}" "${host}" >&2; return 2; }
+    [ -n "${host_slug}" ] || { printf 'mint-%s-path: invalid host token "%s"\n' "${label}" "${host}" >&2; return 2; }
 
     # Reuse the caller's already-resolved slug when given; otherwise resolve from git.
     local branch branch_slug
@@ -91,11 +91,11 @@ mint_path() {
     # the tree (same guard as ensure-assessment-dir). Then ensure the folder and its
     # self-ignoring .gitignore exist before the agent writes the file.
     if [ -L "${project_root}/${target_dir}" ]; then
-        printf '%s-path: %s is a symlink; refusing\n' "${label}" "${target_dir}" >&2
+        printf 'mint-%s-path: %s is a symlink; refusing\n' "${label}" "${target_dir}" >&2
         return 1
     fi
     mkdir -p "${project_root}/${target_dir}" 2>/dev/null \
-        || { printf '%s-path: could not create %s\n' "${label}" "${target_dir}" >&2; return 1; }
+        || { printf 'mint-%s-path: could not create %s\n' "${label}" "${target_dir}" >&2; return 1; }
     seed_gitignore "${project_root}/${target_dir}"
 
     local name="${label}"
@@ -165,7 +165,7 @@ mint_dispatch() {
             return 0
             ;;
         "")
-            printf '%s-path: missing <host>. Try --help.\n' "${label}" >&2
+            printf 'mint-%s-path: missing <host>. Try --help.\n' "${label}" >&2
             return 2
             ;;
     esac
@@ -174,11 +174,11 @@ mint_dispatch() {
     case "${subcommand}" in
         mint) shift 2; mint_path "${host}" "${label}" "$@" ;;
         "")
-            printf '%s-path: missing subcommand (mint). Try --help.\n' "${label}" >&2
+            printf 'mint-%s-path: missing subcommand (mint). Try --help.\n' "${label}" >&2
             return 2
             ;;
         *)
-            printf '%s-path: unknown subcommand "%s" (mint). Try --help.\n' "${label}" "${subcommand}" >&2
+            printf 'mint-%s-path: unknown subcommand "%s" (mint). Try --help.\n' "${label}" "${subcommand}" >&2
             return 2
             ;;
     esac

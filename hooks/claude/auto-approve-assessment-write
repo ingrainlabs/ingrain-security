@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PreToolUse hook for the ingrain-security plugin (Claude Code only — the Codex twin is
-# hooks/codex/allow-assessment-write, on the PermissionRequest event).
+# hooks/codex/auto-approve-assessment-write, on the PermissionRequest event).
 #
 # Auto-approves the file-editing tools ONLY when their target is the assessment file this
 # plugin mints, so a review can write its analysis without a permission prompt on every
@@ -16,8 +16,9 @@
 # The grant is deliberately narrow. A write is approved only when the tool is one of
 # Write / Edit / MultiEdit / NotebookEdit and its target passes `is_assessment_target`
 # (direct child of the project's `.ingrain-security/` folder, named `assessment*.md`, no
-# symlink anywhere in the way) — see skills/ingrain-security/scripts/lib/assessment-write.sh,
-# which holds that test and the payload parsing shared with the Codex hook.
+# symlink anywhere in the way) — see
+# skills/ingrain-security/scripts/lib/assessment-write-check.sh, which holds that test and
+# the payload parsing shared with the Codex hook.
 #
 # This hook NEVER emits "deny": it can only remove a prompt, never introduce a block. Any
 # doubt — a malformed payload, an ambiguous path, a missing folder — falls through to
@@ -32,8 +33,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
 . "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null || exit 0
-# shellcheck source=../../skills/ingrain-security/scripts/lib/assessment-write.sh
-. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/assessment-write.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/lib/assessment-write-check.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/assessment-write-check.sh" 2>/dev/null || exit 0
 
 # Print nothing and exit 0 — the universal "no opinion, use the normal permission flow"
 # signal. Every rejection path in this hook routes here.

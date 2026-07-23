@@ -38,7 +38,7 @@ Flags:
                       only hold once it is finished — a required section not written yet,
                       and a required field either absent or still reading `—` because the
                       stage that owns it has not run. That is exactly the shape the
-                      `assessment-path` minter seeds and the shape the threat generator
+                      `mint-assessment-path` minter seeds and the shape the threat generator
                       leaves behind, so both pass lenient and fail strict.
                       Everything already filled in is still checked in full. Drop the flag at
                       finalize, where the file must be complete (see

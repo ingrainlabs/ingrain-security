@@ -1,6 +1,6 @@
 /**
- * Behavioral tests for the `hooks/codex/allow-script-run` PermissionRequest hook — the
- * Codex twin of `allow-script-run.test.ts`. Like its siblings these EXECUTE the script
+ * Behavioral tests for the `hooks/codex/auto-approve-ingrain-scripts` PermissionRequest hook — the
+ * Codex twin of `auto-approve-ingrain-scripts.test.ts`. Like its siblings these EXECUTE the script
  * under bash, so they need the `test:hooks` run permissions.
  *
  * Codex differs from Claude Code in the one way that shapes every case below: a shell call
@@ -17,7 +17,7 @@
  * always exit 0 — a hook error must not break the user's tool call. Those two invariants
  * are asserted on every case via `runHook`.
  *
- * The character allowlist, tokenizer and containment test live in the shared lib and are
+ * The safe-character set, tokenizer and containment test live in the shared lib and are
  * exercised in depth by the Claude twin; what is proved HERE is that both argv shapes reach
  * that same test, and that the wrapper cannot smuggle a command past it.
  */
@@ -26,7 +26,7 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
-const HOOK = `${ROOT}hooks/codex/allow-script-run`;
+const HOOK = `${ROOT}hooks/codex/auto-approve-ingrain-scripts`;
 const SCRIPTS = `${ROOT}skills/ingrain-security/scripts`;
 const VALIDATE = `${SCRIPTS}/validate-assessment`;
 
@@ -104,7 +104,7 @@ Deno.test("allow: the bash -lc wrapper Codex builds", async () => {
 Deno.test("allow: an already-split argv", async () => {
   await assertAllowed(["bash", VALIDATE, "/tmp/a.md", "--lenient"]);
   await assertAllowed([VALIDATE, "/tmp/a.md"], "(no interpreter)");
-  await assertAllowed([`${SCRIPTS}/branch-diff`, "codex"]);
+  await assertAllowed([`${SCRIPTS}/resolve-branch-delta`, "codex"]);
 });
 
 Deno.test("allow: a plain command string", async () => {
@@ -145,10 +145,10 @@ Deno.test("defer: an interpreter flag in an already-split argv", async () => {
 // DEFER — anything that is not one of the four scripts, or not this hook's business
 // ---------------------------------------------------------------------------
 
-Deno.test("defer: a script outside the plugin, or not on the allowlist", async () => {
+Deno.test("defer: a script outside the plugin, or not one of its own", async () => {
   await assertDeferred([`${SCRIPTS}/lib/validate-md.sh`]);
   await assertDeferred(["bash", "/tmp/validate-assessment", "/tmp/a.md"]);
-  await assertDeferred(["bash", `${SCRIPTS}/../../../hooks/codex/allow-script-run`]);
+  await assertDeferred(["bash", `${SCRIPTS}/../../../hooks/codex/auto-approve-ingrain-scripts`]);
 });
 
 Deno.test("defer: any tool that is not a shell tool", async () => {

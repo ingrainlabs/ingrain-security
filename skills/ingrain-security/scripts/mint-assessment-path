@@ -13,8 +13,8 @@
 # path interpolated.
 #
 # Usage:
-#   assessment-path <host> mint --title "<task title>" [--branch-slug <slug>]
-#   assessment-path --help
+#   mint-assessment-path <host> mint --title "<task title>" [--branch-slug <slug>]
+#   mint-assessment-path --help
 #
 #   <host>  the host's config dotfolder base name — "claude" (Claude Code), "codex"
 #           (Codex), or any future coding agent's token. It no longer appears in the
@@ -38,7 +38,7 @@
 #
 # Exit codes: 0 ok · 2 usage error (bad host/subcommand/flag) · 1 runtime error.
 #
-# Bundled with the skill and run directly by the orchestrator (which already has a
+# Ships with the plugin and is run directly by the orchestrator (which already has a
 # bash shell — the ready-to-run command, with plugin root + host substituted, is
 # injected by the session-start hook). Uses `set -uo pipefail` WITHOUT `-e`: git
 # lookups on a non-git or detached-HEAD checkout must degrade to an "unknown branch"
@@ -51,8 +51,8 @@ usage() {
 Mint the ingrain-security assessment-file path. Prints one JSON object to stdout.
 
 Usage:
-  assessment-path <host> mint --title "<task title>" [--branch-slug <slug>]
-  assessment-path --help
+  mint-assessment-path <host> mint --title "<task title>" [--branch-slug <slug>]
+  mint-assessment-path --help
 
 Arguments:
   <host>              config dotfolder base name: claude | codex | <future token>
@@ -87,10 +87,10 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # resolve_project_root, seed_gitignore and escape_for_json live in project-root.sh (shared
 # with the hooks); resolve_branch, slugify, mint_path and mint_dispatch live in mint-path.sh
-# (shared with the rules-path minter). This script is now just the assessment label + usage.
+# (shared with the mint-rules-path minter). This script is now just the assessment label + usage.
 # shellcheck source=lib/project-root.sh
 if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
-    printf 'assessment-path: cannot load lib/project-root.sh\n' >&2
+    printf 'mint-assessment-path: cannot load lib/project-root.sh\n' >&2
     exit 1
 fi
 # shellcheck source=lib/artifact-template.sh
@@ -100,7 +100,7 @@ if ! . "${SCRIPT_DIR}/lib/artifact-template.sh" 2>/dev/null; then
 fi
 # shellcheck source=lib/mint-path.sh
 if ! . "${SCRIPT_DIR}/lib/mint-path.sh" 2>/dev/null; then
-    printf 'assessment-path: cannot load lib/mint-path.sh\n' >&2
+    printf 'mint-assessment-path: cannot load lib/mint-path.sh\n' >&2
     exit 1
 fi
 

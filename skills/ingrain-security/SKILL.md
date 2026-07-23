@@ -63,7 +63,7 @@ the same as it always did. The second resolves the **branch delta**.
 everywhere — the script is what resolves it. Your SessionStart context carries the concrete,
 ready-to-run command (plugin root and host already substituted); it takes the form:
 
-    bash <plugin>/skills/ingrain-security/scripts/assessment-path <host> mint --title "<task title>"
+    bash <plugin>/skills/ingrain-security/scripts/mint-assessment-path <host> mint --title "<task title>"
 
 Use its **`assessment_abs`** — the **absolute** path — verbatim as the write target for
 every worker dispatch, every Write/Edit, and at finalize, and obey the `instruction` field
@@ -93,7 +93,7 @@ The third signal is the **branch delta**. Resolve it with the bundled `scripts/b
 script and read **`delta_empty`** off its JSON: `true` means the branch delta is empty; `false`
 means this branch has commits since the fork point, an uncommitted change, or both. **Keep its
 `base_ref`, `diff_ref` and `fallback`** — Testing diffs against exactly that `diff_ref`.
-→ `references/lib/branch-diff.md` owns the script, the refs it returns, and why `delta_empty` —
+→ `references/lib/resolve-branch-delta.md` owns the script, the refs it returns, and why `delta_empty` —
 rather than `git status` — is the routing signal; read it before routing on the delta.
 
 If `file_exists: true`, read the bounded `## Mitigations` slice of that file (the bounded

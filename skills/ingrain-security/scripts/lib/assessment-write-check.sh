@@ -1,4 +1,5 @@
-# Shared helpers for the allow-assessment-write hooks (one per host).
+# The test that answers whether a path is a write target this plugin may approve on the
+# user's behalf, shared by the auto-approve-assessment-write hooks (one per host).
 #
 # The dialect is declared here rather than by a shebang, because this file is sourced,
 # not executed — ShellCheck has no other way to know it is bash.
@@ -10,8 +11,8 @@
 # payload — without jq every decision degrades to "defer".
 #
 # Sourced by:
-#   hooks/claude/allow-assessment-write   (PreToolUse,        Claude Code)
-#   hooks/codex/allow-assessment-write    (PermissionRequest, Codex)
+#   hooks/claude/auto-approve-assessment-write   (PreToolUse,        Claude Code)
+#   hooks/codex/auto-approve-assessment-write    (PermissionRequest, Codex)
 #
 # Both hooks answer the same question — "is this write aimed at the assessment file this
 # plugin mints, and nothing else?" — from different payloads: Claude names the target in
@@ -89,7 +90,7 @@ absolutize() {
 
 # The project's canonical `.ingrain-security/` folder for the given host ($1: claude|codex),
 # or non-zero when it is missing or is itself a symlink — either could redirect the write
-# outside the tree, the same guard ensure-assessment-dir and assessment-path apply.
+# outside the tree, the same guard ensure-assessment-dir and mint-assessment-path apply.
 canonical_assessment_dir() {
     local dir
     dir="$(resolve_project_root "$1")/.ingrain-security"
@@ -108,8 +109,8 @@ canonical_assessment_dir() {
 #     assessment file and its org-rules sidecar are the only two files this plugin mints),
 #   - the target is not a symlink, which would follow the link out of the folder.
 #
-# A legitimate target's parent already exists — ensure-assessment-dir, assessment-path and
-# rules-path all create the folder — so a parent that cannot be entered is grounds to refuse.
+# A legitimate target's parent already exists — ensure-assessment-dir, mint-assessment-path and
+# mint-rules-path all create the folder — so a parent that cannot be entered is grounds to refuse.
 is_assessment_target() {
     local canon_dir="$1" path="$2" parent base canon_parent
 

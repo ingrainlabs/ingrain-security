@@ -1,5 +1,5 @@
 /**
- * Behavioral tests for the `hooks/claude/allow-script-run` PreToolUse hook — the grant
+ * Behavioral tests for the `hooks/claude/auto-approve-ingrain-scripts` PreToolUse hook — the grant
  * that keeps a review from stopping at a permission prompt every time it re-validates the
  * assessment. Like its siblings these EXECUTE the script under bash, so they need the
  * `test:hooks` run+write permissions.
@@ -22,11 +22,16 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
-const HOOK = `${ROOT}hooks/claude/allow-script-run`;
+const HOOK = `${ROOT}hooks/claude/auto-approve-ingrain-scripts`;
 const SCRIPTS = `${ROOT}skills/ingrain-security/scripts`;
 
 /** The four read-only scripts the grant covers. */
-const ALLOWED = ["assessment-path", "rules-path", "branch-diff", "validate-assessment"];
+const ALLOWED = [
+  "mint-assessment-path",
+  "mint-rules-path",
+  "resolve-branch-delta",
+  "validate-assessment",
+];
 
 interface IHookResult {
   code: number;
@@ -111,10 +116,10 @@ Deno.test("allow: the exact command the skill tells the agent to run", async () 
   );
   assertEquals(res.allowed, true);
   assertStringIncludes(res.stdout, '"hookEventName":"PreToolUse"');
-  assertStringIncludes(res.stdout, "ingrain-security bundled script");
+  assertStringIncludes(res.stdout, "ingrain-security script");
 });
 
-Deno.test("allow: every script on the allowlist, with and without the bash prefix", async () => {
+Deno.test("allow: every ingrain script, with and without the bash prefix", async () => {
   for (const name of ALLOWED) {
     await assertAllowed(`bash ${SCRIPTS}/${name} claude`);
     await assertAllowed(`${SCRIPTS}/${name} claude`, "(bare exec)");
@@ -125,7 +130,7 @@ Deno.test("allow: quoting and spacing variants of the same call", async () => {
   await assertAllowed(`bash '${SCRIPTS}/validate-assessment' /tmp/a.md`, "(single quotes)");
   await assertAllowed(`bash  "${SCRIPTS}/validate-assessment"   /tmp/a.md `, "(extra spaces)");
   await assertAllowed(
-    `bash "${SCRIPTS}/assessment-path" claude mint --title "Add authn"`,
+    `bash "${SCRIPTS}/mint-assessment-path" claude mint --title "Add authn"`,
     "(quoted argument with a space)",
   );
 });
@@ -187,24 +192,27 @@ Deno.test("defer: an unterminated quote", async () => {
 // DEFER — anything that is not one of the four scripts
 // ---------------------------------------------------------------------------
 
-Deno.test("defer: a sourceable lib, which is not on the allowlist", async () => {
+Deno.test("defer: a sourceable lib, which is not an ingrain script", async () => {
   await assertDeferred(`bash ${SCRIPTS}/lib/validate-md.sh`);
   await assertDeferred(`bash ${SCRIPTS}/lib/project-root.sh`);
 });
 
-Deno.test("defer: an allowlisted NAME living outside the plugin", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "ingrain-script-run-" });
+Deno.test("defer: an ingrain-script NAME living outside the plugin", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "ingrain-script-" });
   try {
     await Deno.writeTextFile(`${dir}/validate-assessment`, "#!/usr/bin/env bash\nid\n");
     await assertDeferred(`bash ${dir}/validate-assessment /tmp/a.md`, "(impostor)");
-    await assertDeferred(`bash ${SCRIPTS}/../../../hooks/claude/allow-script-run`, "(escape)");
+    await assertDeferred(
+      `bash ${SCRIPTS}/../../../hooks/claude/auto-approve-ingrain-scripts`,
+      "(escape)",
+    );
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
 });
 
 Deno.test("defer: a symlink in the scripts dir standing in for a file outside it", async () => {
-  // Runs against a THROWAWAY COPY of the plugin: the case only exists if an allowlisted
+  // Runs against a THROWAWAY COPY of the plugin: the case only exists if an ingrain-script
   // name is a symlink, and the repo's own copy must not be mutated to produce one.
   const plugin = await Deno.makeTempDir({ prefix: "ingrain-plugin-" });
   try {
@@ -223,9 +231,9 @@ Deno.test("defer: a symlink in the scripts dir standing in for a file outside it
 
     const res = await runHook(
       payload(`bash ${copiedScripts}/validate-assessment /tmp/a.md`),
-      `${plugin}/hooks/claude/allow-script-run`,
+      `${plugin}/hooks/claude/auto-approve-ingrain-scripts`,
     );
-    assertEquals(res.stdout, "", "an allowlisted name that is a symlink must defer");
+    assertEquals(res.stdout, "", "an ingrain-script name that is a symlink must defer");
   } finally {
     await Deno.remove(plugin, { recursive: true });
   }

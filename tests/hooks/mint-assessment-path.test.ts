@@ -1,5 +1,5 @@
 /**
- * Behavioral tests for the `skills/ingrain-security/scripts/assessment-path` script
+ * Behavioral tests for the `skills/ingrain-security/scripts/mint-assessment-path` script
  * — the single source of truth for the review's assessment-file path. Like the
  * sibling `assessment-hooks.test.ts` these EXECUTE the script under bash against a
  * throwaway project dir, so they need the `test:hooks` run+write permissions.
@@ -15,7 +15,7 @@ import { exists } from "@std/fs";
 import { fromFileUrl } from "@std/path";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
-const SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
+const SCRIPT = `${ROOT}skills/ingrain-security/scripts/mint-assessment-path`;
 
 interface IResult {
   code: number;
@@ -32,7 +32,7 @@ function baseEnv(projectDir?: string): Record<string, string> {
   };
 }
 
-/** Run the assessment-path script with the given argv. */
+/** Run the mint-assessment-path script with the given argv. */
 async function run(
   args: string[],
   opts: { cwd?: string; projectDir?: string } = {},

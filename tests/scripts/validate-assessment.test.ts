@@ -595,12 +595,12 @@ Deno.test("invalid: every reported error carries a plausible line number", async
 // --- the minter's seeded skeleton -------------------------------------------------
 
 /**
- * The page `assessment-path` seeds when it mints a file that does not exist yet, as a
+ * The page `mint-assessment-path` seeds when it mints a file that does not exist yet, as a
  * fixture — copied from `render_artifact_template` in
  * `skills/ingrain-security/scripts/lib/artifact-template.sh`.
  *
  * The real minter's output is pinned on the other side of this contract by
- * `tests/hooks/assessment-path.test.ts` → "mint: seeds the empty skeleton, structure only",
+ * `tests/hooks/mint-assessment-path.test.ts` → "mint: seeds the empty skeleton, structure only",
  * which asserts the same section list against a genuinely minted file. Drift between the
  * template and this fixture belongs there; what this tier owns is the validator's verdict
  * on that shape.
@@ -610,7 +610,7 @@ const SEEDED_SKELETON = `# Security assessment — Token refresh endpoint
 > Local working artifact produced by ingrain-security — keep in sync as the
 > implementation evolves (see Maintenance below). Git-ignored.
 >
-> Skeleton seeded by the \`assessment-path\` minter — fill the sections below; do not
+> Skeleton seeded by the \`mint-assessment-path\` minter — fill the sections below; do not
 > re-create the page. Each is empty until the stage that owns it writes it.
 
 ## Task
@@ -639,7 +639,7 @@ altered. Keep the Selection fields and coverage honest against the code you writ
 and keep every enumerated field within its allowed values. Ids are permanent: add a
 new threat with the next free \`T<n>\` and never renumber the existing ones.
 
-To locate this file, re-run the \`assessment-path\` mint command from your
+To locate this file, re-run the \`mint-assessment-path\` mint command from your
 INGRAIN-ASSESSMENT-PATHS session context and write to the absolute \`assessment_abs\`
 it returns — it resolves back to this same file. Do not resolve a relative path
 against the file you are editing, and do not create an \`.ingrain-security/\` folder.
