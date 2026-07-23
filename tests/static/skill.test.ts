@@ -327,6 +327,16 @@ Deno.test("session-start: injects the branch-diff runner Phase select routes on"
   assertStringIncludes(hook, "delta_empty");
 });
 
+Deno.test("session-start: injects the validator runner the after-every-write rule needs", async () => {
+  const hook = await Deno.readTextFile(SESSION_START);
+  assertStringIncludes(hook, "scripts/validate-assessment");
+  assertStringIncludes(hook, "validate_runner_escaped");
+  assertStringIncludes(hook, "${validate_runner_escaped}");
+  // The rule travels with the command: mid-run mode, and who runs it for the workers.
+  assertStringIncludes(hook, "--lenient");
+  assertStringIncludes(hook, "workers hold no shell");
+});
+
 Deno.test("assessment-path: emits an instruction and anchors on the git repo root", async () => {
   const script = await Deno.readTextFile(PATH_SCRIPT);
   // The minting logic (JSON emission included) now lives in the shared mint-path.sh, which
