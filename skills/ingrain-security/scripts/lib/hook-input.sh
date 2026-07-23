@@ -1,33 +1,23 @@
-# Reading the hook input — the JSON document the host pipes to a hook on stdin, describing the
-# tool call it is about to run. SHARED by both grants: `write/allow-write-check.sh` and
-# `run/allow-run-check.sh` both start here, then hand what they read to their own test.
-# Holds accessors only; nothing here decides anything.
+# Accessors for the hook input — the JSON the host pipes to a hook on stdin. Shared by both
+# grants; decides nothing itself.
 #
-# Pairs with `path.sh`, which canonicalizes the paths these accessors return.
-#
-# The dialect is declared here rather than by a shebang, because this file is sourced,
-# not executed — ShellCheck has no other way to know it is bash.
+# Declares its dialect here because it is sourced, not executed.
 # shellcheck shell=bash
 #
-# Sourced by all four allow hooks (two grants × two hosts). Sets no shell options: every
-# caller runs `set -uo pipefail` WITHOUT `-e` on purpose, and sourcing must not change that.
-#
-# Needs jq. Without it every accessor fails, and each hook reads that as "defer": the plugin
-# still works, the user just keeps their usual permission prompt.
+# Sourced by all four allow hooks. Sets no shell options. Needs jq — without it every accessor
+# fails, which each hook reads as "defer".
 
 # Pull a JSON string out of the payload at the given jq path ($2, e.g. `.tool_input.cwd`).
 #
-# The path is addressed structurally rather than by scanning the raw text for a key, and
-# that is the security-critical part. The payload embeds attacker-influenceable text (a
-# Write's `content`, an apply_patch body, a shell command), so a text scan could be fooled:
-# content carrying a decoy `"file_path":"…/.ingrain-security/assessment.md"` could win the
-# match while the tool actually writes somewhere else, turning these hooks into an
-# auto-approve-anything primitive. A decoy at any other position in the tree — inside
-# `content`, or nested one level down — simply is not the value at this path, so it cannot
-# be read as one.
+# Addressed structurally by jq path, never by scanning the raw text for a key — the
+# security-critical part. The payload embeds attacker-influenceable text (a Write's `content`,
+# an apply_patch body), so a text scan could be won by a decoy
+# `"file_path":"…/.ingrain-security/assessment.md"` while the tool writes elsewhere, turning
+# these hooks into an auto-approve-anything primitive. A decoy at any other position simply is
+# not the value at this path.
 #
-# `strings` makes the type explicit: a non-string at the path (an object, a number, null)
-# yields no output and a non-zero exit, rather than a stringified approximation of itself.
+# `strings` makes the type explicit: a non-string at the path yields no output and a non-zero
+# exit, not a stringified approximation.
 #
 # Echoes the decoded value; returns non-zero when jq is unavailable, the payload is not
 # valid JSON, or the path holds no string.

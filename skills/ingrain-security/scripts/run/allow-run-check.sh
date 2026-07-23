@@ -1,21 +1,16 @@
-# The RUN grant. Answers one question — "is this shell command nothing but a bare run of one of
-# the scripts in this folder?" — and nothing else. Holds the allowlist, the parser that safely
-# splits an untrusted command into words, and the predicates that answer for each shape a host
-# can present.
+# The RUN grant: is this shell command nothing but a bare run of one of the scripts in this
+# folder? Holds the allowlist, the parser that splits an untrusted command into words, and the
+# predicates that answer for each shape a host can present.
 #
-# Its sibling is the WRITE grant in `write/allow-write-check.sh`, which approves the model
-# *writing* the assessment file. Different tool, different payload, different guard: a Write
-# payload never reaches this file, and a Bash payload never reaches that one.
-#
-# Declares its dialect here because it is sourced, not executed. It lives in `run/` beside the
-# scripts it guards, but it is NOT one of them: `.sh` means sourced, and it is absent from
-# RUNNABLE_SCRIPTS, so `bash run/allow-run-check.sh` defers like any other non-runnable path.
+# Declares its dialect here because it is sourced, not executed. It sits in `run/` beside the
+# scripts it guards but is NOT one of them: absent from RUNNABLE_SCRIPTS, so
+# `bash run/allow-run-check.sh` defers like any other non-runnable path.
 # shellcheck shell=bash
 #
-# Sourced by hooks/claude/allow-run-script (PreToolUse) and its Codex twin
-# hooks/codex/allow-run-script (PermissionRequest). Sets no shell options. Needs, sourced first:
-#   ../lib/hook-input.sh   extract_string_array  (the Codex hook reads an argv array with it)
-#   ../lib/path.sh    physical_dir, absolutize
+# Sourced by hooks/claude/allow-run-script (PreToolUse) and hooks/codex/allow-run-script
+# (PermissionRequest). Sets no shell options. Needs, sourced first:
+#   ../lib/hook-input.sh   extract_string_array
+#   ../lib/path.sh         physical_dir, absolutize
 #
 # Every function returns non-zero on anything it cannot represent exactly, which both hooks
 # read as "defer".

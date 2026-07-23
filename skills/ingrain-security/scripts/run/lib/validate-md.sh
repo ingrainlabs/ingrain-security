@@ -6,10 +6,8 @@
 # Declares its dialect here because it is sourced, not executed.
 # shellcheck shell=bash
 #
-# Sourced by skills/ingrain-security/scripts/run/validate-assessment, and by nothing else —
-# which is why it lives in `run/lib/` rather than the plugin-wide `../../lib/`, reserved for
-# what both entities use. Sets no shell options; needs ../../lib/project-root.sh sourced
-# first (escape_for_json).
+# Sourced by run/validate-assessment and nothing else. Sets no shell options; needs
+# ../../lib/project-root.sh sourced first (escape_for_json).
 #
 # Written for bash 3.2 (the system bash on macOS): no associative arrays, no `mapfile`,
 # no `${var,,}`.

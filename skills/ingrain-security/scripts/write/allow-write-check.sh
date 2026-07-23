@@ -1,36 +1,18 @@
-# The WRITE grant. Answers one question — "is this path a write target this plugin may approve
-# on the user's behalf?" — and nothing else.
+# The WRITE grant: is this path a write target this plugin may approve on the user's behalf?
 #
-# Its sibling is the RUN grant in `run/allow-run-check.sh`, which approves the model *executing*
-# one of the scripts in `run/`. Different tool, different payload, different guard: a Bash
-# payload never reaches this file, and a Write payload never reaches that one. The two meet at
-# exactly one point — `run/mint-assessment-path` computes the path this grant later approves
-# writes to — and even that is a naming-convention link, not a provenance check: nothing here
-# asks whether a minter produced the file.
-#
-# The dialect is declared here rather than by a shebang, because this file is sourced,
-# not executed — ShellCheck has no other way to know it is bash.
+# Declares its dialect here because it is sourced, not executed.
 # shellcheck shell=bash
 #
-# Sourced — never executed. Sets no shell options: every caller runs `set -uo pipefail`
-# WITHOUT `-e` on purpose, and sourcing must not change that. Needs, sourced first:
+# Sourced by hooks/claude/allow-write-assessment (PreToolUse) and hooks/codex/allow-write-assessment
+# (PermissionRequest) — Claude names the target in `tool_input.file_path`, Codex in an
+# apply_patch envelope; everything downstream of that difference lives here so the two hosts
+# cannot drift. Sets no shell options. Needs, sourced first:
 #   ../lib/project-root.sh   resolve_project_root
-#   ../lib/hook-input.sh     extract_string  (the hooks read the target with it)
-#   ../lib/path.sh      physical_dir, absolutize
+#   ../lib/hook-input.sh     extract_string
+#   ../lib/path.sh           physical_dir, absolutize
 #
-# Sourced by:
-#   hooks/claude/allow-write-assessment   (PreToolUse,        Claude Code)
-#   hooks/codex/allow-write-assessment    (PermissionRequest, Codex)
-#
-# Both hooks answer the same question from different payloads: Claude names the target in
-# `tool_input.file_path`, Codex hands over an apply_patch patch whose envelope names it.
-# Everything downstream of that difference is identical and lives here, so the two hosts
-# cannot drift apart on the security-critical half.
-#
-# Every function returns non-zero on anything it cannot represent exactly. Both hooks read
-# that as "defer": no opinion, leave the user's normal permission prompt in place. That is
-# also what happens when jq is missing (see extract_string): the plugin still works, the
-# user just keeps their usual permission prompt on every assessment write.
+# Every function returns non-zero on anything it cannot represent exactly, which both hooks
+# read as "defer" — including when jq is missing.
 
 # The project's canonical `.ingrain-security/` folder for the given host ($1: claude|codex),
 # or non-zero when it is missing or is itself a symlink — either could redirect the write

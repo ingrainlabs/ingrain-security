@@ -1,39 +1,22 @@
-# Shared project-root helpers for the ingrain-security plugin.
+# Project-root helpers: resolve_project_root, seed_gitignore, escape_for_json.
 #
-# The dialect is declared here rather than by a shebang, because this file is sourced,
-# not executed — ShellCheck has no other way to know it is bash.
+# Declares its dialect here because it is sourced, not executed.
 # shellcheck shell=bash
 #
-# Sourced — never executed. Sets no shell options: every caller runs
-# `set -uo pipefail` WITHOUT `-e` on purpose (git lookups on a non-git or
-# detached-HEAD checkout must degrade to an empty result, not abort), and
-# sourcing must not change that.
+# Sourced by both write hooks, hooks/start/*, and all four scripts in run/ — the one lib here
+# used by both entities. Sets no shell options: every caller runs `set -uo pipefail` WITHOUT
+# `-e` on purpose (git lookups on a non-git or detached-HEAD checkout must degrade to an empty
+# result, not abort).
 #
-# One of the three libs in this folder, which holds only what BOTH entities use — here, the
-# WRITE grant's hooks and the RUN entity's scripts.
-#
-# Sourced by:
-#   hooks/start/ensure-assessment-dir              (SessionStart, both hosts)
-#   hooks/claude/allow-write-assessment            (PreToolUse,        WRITE grant)
-#   hooks/codex/allow-write-assessment             (PermissionRequest, WRITE grant)
-#   skills/ingrain-security/scripts/run/mint-assessment-path   (and its twin mint-rules-path)
-#   skills/ingrain-security/scripts/run/resolve-branch-delta   (the fork-point resolver)
-#   skills/ingrain-security/scripts/run/validate-assessment    (for escape_for_json)
-#
-# Every function echoes empty and returns non-zero on failure, so callers can
-# fall through to the next candidate rather than risk acting on a bad path.
+# Every function echoes empty and returns non-zero on failure, so callers can fall through to
+# the next candidate rather than act on a bad path.
 
-# Normalize a directory to an absolute, canonical forward-slash path. An empty argument
-# or an unreachable directory yields empty output and a non-zero status, so callers fall
-# through to the next candidate.
+# Normalize a directory to an absolute, canonical forward-slash path. An empty argument or an
+# unreachable directory yields empty output and a non-zero status.
 #
-# The `cd && pwd` idiom normalizes the value so mkdir, symlink tests and the printf
-# writes work under Git Bash on Windows, where CLAUDE_PROJECT_DIR is a native backslash
-# path that MSYS does not convert for env vars.
-#
-# The subshell is deliberate: a function body runs in the caller's shell, so a bare `cd`
-# would move the $PWD of every hook that sources this file. The parens confine it while
-# leaving stdout and the exit status untouched.
+# The `cd && pwd` idiom normalizes the value for Git Bash on Windows, where CLAUDE_PROJECT_DIR
+# is a native backslash path that MSYS does not convert for env vars. The subshell keeps a bare
+# call from moving the $PWD of every hook that sources this file.
 normalize_dir() {
     [ -n "${1:-}" ] || return 1
     (cd "$1" 2>/dev/null && pwd)

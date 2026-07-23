@@ -1,24 +1,13 @@
-# The path-minter shared by the two minters in `run/`. Lives in `run/lib/` because it belongs
-# to the RUN entity alone — the plugin-wide `../../lib/` is reserved for what both entities use.
+# The path-minting shared by run/mint-assessment-path (label: assessment) and
+# run/mint-rules-path (label: rules). They differ ONLY in that label, which drives the filename
+# lead, the JSON field prefix, the diagnostic token and the `instruction` string — so the logic
+# lives here and cannot drift.
 #
-# The dialect is declared here rather than by a shebang, because this file is sourced,
-# not executed — ShellCheck has no other way to know it is bash.
+# Declares its dialect here because it is sourced, not executed.
 # shellcheck shell=bash
 #
-# Sourced — never executed. Sets no shell options: every caller runs `set -uo pipefail`
-# WITHOUT `-e` on purpose (git lookups on a non-git or detached-HEAD checkout must degrade
-# to an empty result, not abort), and sourcing must not change that. Requires two siblings
-# to be sourced first: project-root.sh (resolve_project_root, resolve_branch, seed_gitignore,
-# escape_for_json) and artifact-template.sh (seed_artifact_template).
-#
-# Sourced by:
-#   skills/ingrain-security/scripts/run/mint-assessment-path   (label: assessment)
-#   skills/ingrain-security/scripts/run/mint-rules-path        (label: rules)
-#
-# The two minters differ ONLY in their `label` (assessment | rules), which drives the
-# filename lead, the JSON field prefix, the diagnostic program token, and the `instruction`
-# string. Both write a deterministic `.ingrain-security/<label>-<branch-slug>-<task-slug>.md`
-# path — twin sidecars in one folder — so the logic lives here and cannot drift.
+# Sets no shell options; needs ../../lib/project-root.sh sourced first (resolve_project_root,
+# resolve_branch, seed_gitignore, escape_for_json).
 
 # Slugify: lowercase, reduce every disallowed char to `-`, collapse `-` runs, trim.
 # So `feature/foo` -> `feature-foo`, `Feature/Foo Bar` -> `feature-foo-bar`.

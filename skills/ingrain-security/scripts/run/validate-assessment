@@ -1,22 +1,15 @@
 #!/usr/bin/env bash
-# Schema validator for the ingrain-security assessment file, whose shape is specified in
-# references/formatting/assessment-file.md.
+# Schema validator for the assessment file, against the shape
+# references/formatting/assessment-file.md specifies. STRUCTURE only: sections, entry ids,
+# required fields, enumerated values, numeric ranges, the 256-character justification cap and
+# the threat/mitigation cross-references. `--lenient` waives what can only hold once the file
+# is finished; strict is for finalize.
 #
-# Checks STRUCTURE only: sections, entry ids, required fields, enumerated values, numeric
-# ranges, the 256-character justification cap, and the threat/mitigation cross-references.
-# `--lenient` waives what can only hold once the file is finished; strict is for finalize.
+# Emits ONE JSON object on stdout (`valid` + `error_count` are the verdict) and each violation
+# to stderr as `<path>:<line>: <message>`. Usage and exit codes: --help.
 #
-# Emits ONE JSON object on stdout whose `valid` and `error_count` fields are the verdict,
-# and each violation to stderr as `<path>:<line>: <message>`.
-#
-# Usage:
-#   validate-assessment <file> [--lenient]
-#   validate-assessment --help
-#
-# Exit codes mirror the JSON: 0 valid · 1 schema violations · 2 usage error / unreadable.
-#
-# `set -uo pipefail` WITHOUT `-e`: every check runs, so one invocation reports every
-# violation rather than the first.
+# `set -uo pipefail` WITHOUT `-e`: every check runs, so one invocation reports every violation
+# rather than the first.
 
 set -uo pipefail
 

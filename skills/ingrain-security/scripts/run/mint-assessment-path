@@ -1,48 +1,18 @@
 #!/usr/bin/env bash
-# Assessment-path minter for the ingrain-security plugin.
+# Assessment-path minter: the review's one write target, so the orchestrator never
+# hand-builds it. Emits ONE JSON object on stdout; diagnostics to stderr.
+# Usage, output and exit codes: --help.
 #
-# Single source of truth for the review's assessment-file path, so the orchestrator
-# never hand-builds it. The file is written directly into `.ingrain-security/` at the
-# project root and is BOTH the living working copy (workers write it during the run)
-# and its persisted record — there is no separate temp file and no finalize copy.
-# Emits ONE JSON object on stdout; diagnostics go to stderr.
+# `assessment_abs` (absolute) is CANONICAL — every worker dispatch and every Write/Edit
+# uses it; `assessment_path` is display-only.
 #
-# `assessment_abs` (absolute) is the CANONICAL write target: it is what every worker
-# dispatch and every Write/Edit must use. `assessment_path` is a display-only relative
-# form for prose and links. The emitted `instruction` field restates this, with the
-# path interpolated.
+# The path is deterministic in branch + task, so it doubles as the task identity: the same
+# task on the same branch resolves to the same file and the run resumes it in place
+# (`file_exists` reports this). No timestamp, no random token. The project root comes from
+# the git repo root, so any subdirectory anchors the same folder.
 #
-# Usage:
-#   mint-assessment-path <host> mint --title "<task title>" [--branch-slug <slug>]
-#   mint-assessment-path --help
-#
-#   <host>  the host's config dotfolder base name — "claude" (Claude Code), "codex"
-#           (Codex), or any future coding agent's token. It no longer appears in the
-#           assessment path (that always lives at `.ingrain-security/…`); it only
-#           selects project-root resolution, exactly like `ensure-assessment-dir`.
-#
-# The project root is resolved from the git repo root, so running this from any
-# subdirectory still anchors the folder at the top of the repo.
-#
-# The path is deterministic in the branch + task, so it doubles as the task identity:
-#   .ingrain-security/assessment-<branch-slug>-<task-slug>.md
-# Re-reviewing the SAME task on the SAME branch resolves to the SAME file (the run
-# resumes/updates it in place — `file_exists` reports this); a different task or branch
-# resolves to a different file. No timestamp, no random token.
-#
-# Minting also SEEDS the file with its empty skeleton (lib/artifact-template.sh) when it is
-# absent, so the first writer fills a correctly shaped page instead of reproducing the schema
-# from prose. An existing file is never rewritten, and `file_exists` reports written CONTENT
-# rather than the inode — an untouched skeleton reads as `false`, which keeps Phase select and
-# the resume check working now that a mint always leaves a file behind.
-#
-# Exit codes: 0 ok · 2 usage error (bad host/subcommand/flag) · 1 runtime error.
-#
-# Ships with the plugin and is run directly by the orchestrator (which already has a
-# bash shell — the ready-to-run command, with plugin root + host substituted, is
-# injected by the session-start hook). Uses `set -uo pipefail` WITHOUT `-e`: git
-# lookups on a non-git or detached-HEAD checkout must degrade to an "unknown branch"
-# result, not abort the script.
+# `set -uo pipefail` WITHOUT `-e`: git lookups on a non-git or detached-HEAD checkout must
+# degrade to an "unknown branch" result, not abort the script.
 
 set -uo pipefail
 
