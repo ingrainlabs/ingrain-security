@@ -1,34 +1,24 @@
-# Shared project-root helpers for the ingrain-security plugin.
+# Project-root helpers: resolve_project_root, seed_gitignore, escape_for_json.
 #
-# The dialect is declared here rather than by a shebang, because this file is sourced,
-# not executed — ShellCheck has no other way to know it is bash.
+# Declares its dialect here because it is sourced, not executed.
 # shellcheck shell=bash
 #
-# Sourced — never executed. Sets no shell options: every caller runs
-# `set -uo pipefail` WITHOUT `-e` on purpose (git lookups on a non-git or
-# detached-HEAD checkout must degrade to an empty result, not abort), and
-# sourcing must not change that.
+# Sourced by both write hooks, hooks/start/*, and all four scripts in run/ — the one lib here
+# used by both entities. Sets no shell options, and is written to be ERREXIT-SAFE so both kinds
+# of caller can source it: the hooks run `set -e` and read any abort as "defer", while the run/
+# scripts run `set -uo pipefail` without `-e`. So no function may leave a failing command in
+# statement position on a path it expects to survive — a git lookup on a non-git or
+# detached-HEAD checkout must degrade to an empty result, not abort the caller.
 #
-# Sourced by:
-#   hooks/start/ensure-assessment-dir            (SessionStart, both hosts)
-#   hooks/claude/allow-assessment-write          (PreToolUse, Claude only)
-#   skills/ingrain-security/scripts/assessment-path   (the sibling minter)
-#   skills/ingrain-security/scripts/branch-diff       (the fork-point resolver)
-#
-# Every function echoes empty and returns non-zero on failure, so callers can
-# fall through to the next candidate rather than risk acting on a bad path.
+# Every function echoes empty and returns non-zero on failure, so callers can fall through to
+# the next candidate rather than act on a bad path.
 
-# Normalize a directory to an absolute, canonical forward-slash path. An empty argument
-# or an unreachable directory yields empty output and a non-zero status, so callers fall
-# through to the next candidate.
+# Normalize a directory to an absolute, canonical forward-slash path. An empty argument or an
+# unreachable directory yields empty output and a non-zero status.
 #
-# The `cd && pwd` idiom normalizes the value so mkdir, symlink tests and the printf
-# writes work under Git Bash on Windows, where CLAUDE_PROJECT_DIR is a native backslash
-# path that MSYS does not convert for env vars.
-#
-# The subshell is deliberate: a function body runs in the caller's shell, so a bare `cd`
-# would move the $PWD of every hook that sources this file. The parens confine it while
-# leaving stdout and the exit status untouched.
+# The `cd && pwd` idiom normalizes the value for Git Bash on Windows, where CLAUDE_PROJECT_DIR
+# is a native backslash path that MSYS does not convert for env vars. The subshell keeps a bare
+# call from moving the $PWD of every hook that sources this file.
 normalize_dir() {
     [ -n "${1:-}" ] || return 1
     (cd "$1" 2>/dev/null && pwd)
@@ -50,7 +40,9 @@ resolve_branch() {
     local root="$1" branch
     branch="$(git -C "${root}" branch --show-current 2>/dev/null)"
     [ -n "${branch}" ] || branch="$(git -C "${root}" rev-parse --abbrev-ref HEAD 2>/dev/null)"
-    [ "${branch}" = "HEAD" ] && branch=""
+    if [ "${branch}" = "HEAD" ]; then
+        branch=""
+    fi
     printf '%s' "${branch}"
 }
 
@@ -65,19 +57,23 @@ resolve_branch() {
 #     back it up.
 #
 # Echoes empty on total failure — callers no-op rather than risk writing to the
-# filesystem root (there is no `set -e` to abort them).
+# filesystem root.
+#
+# Each candidate is an `if`, not an `&&` chain: a chain that falls through leaves a failing
+# command in statement position, which an errexit caller would read as "abort" instead of
+# "try the next candidate".
 resolve_project_root() {
     local root
     if [ "${1:-}" != "codex" ]; then
-        root="$(normalize_dir "${CLAUDE_PROJECT_DIR:-}")" && [ -n "${root}" ] && {
+        if root="$(normalize_dir "${CLAUDE_PROJECT_DIR:-}")" && [ -n "${root}" ]; then
             printf '%s' "${root}"
             return 0
-        }
+        fi
     fi
-    root="$(normalize_dir "$(resolve_git_root)")" && [ -n "${root}" ] && {
+    if root="$(normalize_dir "$(resolve_git_root)")" && [ -n "${root}" ]; then
         printf '%s' "${root}"
         return 0
-    }
+    fi
     normalize_dir "$PWD"
 }
 
@@ -90,7 +86,9 @@ resolve_project_root() {
 # printf (not a heredoc) — documented bash 5.3 heredoc hang.
 seed_gitignore() {
     local ignore="$1/.gitignore"
-    [ -f "${ignore}" ] && return 0
+    if [ -f "${ignore}" ]; then
+        return 0
+    fi
     printf '%s\n' \
         '# Assessments here can contain analysis of a private codebase, so they' \
         '# are ignored by default. Share one explicitly with: git add -f <file>' \

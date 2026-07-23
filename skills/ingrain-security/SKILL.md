@@ -59,11 +59,11 @@ phase. **The seeded skeleton does not count as an assessment**: `file_exists` re
 content, so it stays `false` until a stage actually fills a section, and the table below reads
 the same as it always did. The second resolves the **branch delta**.
 
-**Mint the path with the bundled `scripts/assessment-path` script** and reuse its output
+**Mint the path with the bundled `scripts/run/mint-assessment-path` script** and reuse its output
 everywhere — the script is what resolves it. Your SessionStart context carries the concrete,
 ready-to-run command (plugin root and host already substituted); it takes the form:
 
-    bash <plugin>/skills/ingrain-security/scripts/assessment-path <host> mint --title "<task title>"
+    bash <plugin>/skills/ingrain-security/scripts/run/mint-assessment-path <host> mint --title "<task title>"
 
 Use its **`assessment_abs`** — the **absolute** path — verbatim as the write target for
 every worker dispatch, every Write/Edit, and at finalize, and obey the `instruction` field
@@ -71,7 +71,7 @@ it carries. The relative `assessment_path` is a **display form** only: put it in
 tables and plan-file links; every write target takes the absolute form.
 
 **Change that file with the Edit or Write tool, always** — yours and every worker's alike.
-`allow-assessment-write` pre-approves both for this path, so the change lands with no
+`allow-write-assessment` pre-approves both for this path, so the change lands with no
 permission prompt and the user sees the before/after. Your shell has a different job: it runs
 this plugin's four read-only scripts and the `ingrain` CLI, and it never edits the assessment
 file. Every field is its own line, so almost every change is a one-line Edit; where one is
@@ -80,7 +80,7 @@ long, it is still an Edit — the cost of pasting it is what buys a reviewable c
 the file's schema — read it before your first write.
 
 **Every write to `assessment_abs` is followed by a validation run** — yours and every worker's
-alike. Run the bundled `scripts/validate-assessment` script on the path you just wrote, with
+alike. Run the bundled `scripts/run/validate-assessment` script on the path you just wrote, with
 `--lenient` while the run is in progress and **without it at finalize**, and fix what it
 reports before the next step. The ready-to-run command is in your
 `INGRAIN-ASSESSMENT-PATHS` session context — **run it exactly as given, nothing appended**: the
@@ -89,11 +89,11 @@ a pipe, a redirect) only costs the hook's pre-approval.
 → `references/formatting/assessment-file.md` § **Validation — run it after every write** owns the
 two modes, how to read the result and the bounded fix-and-re-run rule.
 
-The third signal is the **branch delta**. Resolve it with the bundled `scripts/branch-diff`
+The third signal is the **branch delta**. Resolve it with the bundled `scripts/run/resolve-branch-delta`
 script and read **`delta_empty`** off its JSON: `true` means the branch delta is empty; `false`
 means this branch has commits since the fork point, an uncommitted change, or both. **Keep its
 `base_ref`, `diff_ref` and `fallback`** — Testing diffs against exactly that `diff_ref`.
-→ `references/lib/branch-diff.md` owns the script, the refs it returns, and why `delta_empty` —
+→ `references/lib/resolve-branch-delta.md` owns the script, the refs it returns, and why `delta_empty` —
 rather than `git status` — is the routing signal; read it before routing on the delta.
 
 If `file_exists: true`, read the bounded `## Mitigations` slice of that file (the bounded
@@ -197,7 +197,7 @@ read.
 
 **Validate on every return, before you dispatch the next worker.** The worker wrote the file;
 you are the one who can check it, because the shell is yours alone — run
-`scripts/validate-assessment` with `--lenient` on `assessment_abs` after every worker that
+`scripts/run/validate-assessment` with `--lenient` on `assessment_abs` after every worker that
 wrote it, and fix what it reports. A malformed section is cheapest to repair here, while the worker that produced it can
 still be re-dispatched with the violations quoted back to it, and while it is still upstream of
 the next worker, which reads the file for itself.
@@ -316,7 +316,7 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    validation, secrets, crypto — retrieved by semantic search over the `ingrain` CLI. This is
    the review's **one** retrieval pass, driven by the plan and the selected threats — the
    mitigation steps that follow work from the sidecar it writes.
-   1. Mint `rules_abs` with the `rules-path` command from your `INGRAIN-ASSESSMENT-PATHS`
+   1. Mint `rules_abs` with the `mint-rules-path` command from your `INGRAIN-ASSESSMENT-PATHS`
       session context, exactly as you minted `assessment_abs`.
    2. Probe that the CLI is available.
    3. From the plan and the selected threats, reason about which security features need org
@@ -430,7 +430,7 @@ mitigations, plus two supporting things:
   was written, link its relative `rules_path` too.**
 - **The Maintenance instruction** — tell the implementing agent to keep the assessment file
   **in sync** as the implementation changes across iteration loops, and to locate it by
-  **re-running the `assessment-path` mint command** from its `INGRAIN-ASSESSMENT-PATHS`
+  **re-running the `mint-assessment-path` mint command** from its `INGRAIN-ASSESSMENT-PATHS`
   session context and writing to the `assessment_abs` it returns. Point it at the mint
   command rather than the relative link: that agent runs in a later session with no project
   root in view, so a relative path would resolve against whatever file it is editing and
@@ -447,7 +447,7 @@ Testing measures how robust the adopted mitigations are, by **negative testing**
 threat Gate 1 selected, can it still be realized in the code as built? The threats define the
 scope. It fires when
 **Phase select** lands on Testing — an assessment for this task exists, it carries `selected`
-mitigations, and the branch delta is non-empty (`scripts/branch-diff` → `delta_empty: false`).
+mitigations, and the branch delta is non-empty (`scripts/run/resolve-branch-delta` → `delta_empty: false`).
 **Everything above this line belongs to Development:** Steps 0–9, both gates, the critique
 steps, and the org-rules CLI lookup.
 
@@ -479,7 +479,7 @@ there; this section is a pointer, and the procedure is in that file.
 | The mitigation-generator is missing a rule | Rely on Step 5's retrieval, which runs before it — and on a revision round it re-reads the sidecar. The generator works from disk. |
 | A retrieved rule went unapplied | Let the critic carry it in: it flags the unapplied rule and the generator revises once. |
 | You need a rule to back a mitigation | Cite exactly the rules `ingrain context` returned, by their real ids. |
-| A worker's section looks correct | Run `scripts/validate-assessment` on it anyway (`--lenient` mid-run, strict at finalize) — the schema is what the next reader depends on, and an enum typo stays invisible until it breaks in a later session. |
+| A worker's section looks correct | Run `scripts/run/validate-assessment` on it anyway (`--lenient` mid-run, strict at finalize) — the schema is what the next reader depends on, and an enum typo stays invisible until it breaks in a later session. |
 | The validator still fails after your fixes | Fix what it names, re-run at most twice, and **say so in one line** naming the remaining violations — the user learns of it in the same turn. |
 | You are about to present a gate | Display the findings as a table first, then present the single-choice windows. |
 | A write to `.ingrain-security/` is held back in plan mode | Ask the user to allow writes to that folder — name in one line which file the run needs to write and why — then retry the same write to `assessment_abs` / `rules_abs` and carry on. The folder is the run's own artifact store, separate from the plan file. |
@@ -491,7 +491,7 @@ The procedure is **Development — the flow**; this is the tracker. Tick only wh
 done. Work top to bottom, one step at a time, in the order listed. Each
 gate incorporates exactly the selected subset.
 **After every write to `assessment_abs` — yours, or a worker's the moment it returns — run
-`scripts/validate-assessment` (`--lenient` until finalize) and fix what it reports.**
+`scripts/run/validate-assessment` (`--lenient` until finalize) and fix what it reports.**
 
 - [ ] 0. Triage dispatched — bias to `major` when uncertain; `minor` → stop, `major` → open the assessment file
 - [ ] 1. Threats generated into `## Threats`, seeded from any prior analysis

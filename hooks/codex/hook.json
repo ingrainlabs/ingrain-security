@@ -23,8 +23,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" codex/allow-assessment-write",
+            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" codex/allow-write-assessment",
             "statusMessage": "Checking assessment-file write"
+          }
+        ]
+      },
+      {
+        "matcher": "shell|local_shell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" codex/allow-run-script",
+            "statusMessage": "Checking runnable-script run"
           }
         ]
       }

@@ -10,7 +10,7 @@ shape.
 - **Path.** A single file written directly into `.ingrain-security/` at the project
   root — it is **both** the living working copy the workers write during the run **and**
   its persisted record, so finalizing it in place is the whole of persisting it. The
-  orchestrator mints it: it runs the `scripts/assessment-path` script
+  orchestrator mints it: it runs the `scripts/run/mint-assessment-path` script
   (`mint` subcommand) once at review start and reuses its **`assessment_abs`** — the
   absolute path — as the write target throughout; the relative `assessment_path` is a
   display form for prose and links only. **Every write goes to the absolute path** — a
@@ -50,7 +50,7 @@ shape.
   what keeps it usable as the Phase-select and resume signal. Two further fields say which
   empty case you are in — `template_seeded` (this mint wrote the skeleton) and
   `template_only` (the file is still an untouched skeleton).
-- **Pre-approved.** An `allow-assessment-write` hook auto-approves writes to this file on
+- **Pre-approved.** An `allow-write-assessment` hook auto-approves writes to this file on
   both hosts — `PreToolUse` on Claude Code, `PermissionRequest` on Codex — so expect **no
   permission prompt** when writing it. The grant covers only `assessment*.md` directly
   inside `.ingrain-security/` — which is exactly `assessment_abs`, and one more reason to
@@ -246,7 +246,7 @@ produced it, so a mitigation's Robustness always tracks the threats it covers.
 ### `## Maintenance (for the implementing agent)`
 - Instruction to keep the file in sync as the implementation evolves.
 - **How that agent locates this file.** It runs in a later session and has no minted path
-  in context, so it must **re-run** the `assessment-path` mint command from its
+  in context, so it must **re-run** the `mint-assessment-path` mint command from its
   `INGRAIN-ASSESSMENT-PATHS` session context and write to the `assessment_abs` it
   returns. Re-minting is deterministic in branch + title, so it resolves to this same
   file — and the mint is what resolves the path and ensures the folder, so `assessment_abs`
@@ -255,7 +255,7 @@ produced it, so a mitigation's Robustness always tracks the threats it covers.
 ## Validation — run it after every write
 
 **Every time this file is written, it is checked with the bundled
-`scripts/validate-assessment` script.** No exceptions: after the orchestrator opens it, after
+`scripts/run/validate-assessment` script.** No exceptions: after the orchestrator opens it, after
 each worker returns from writing its section, after a gate's `Selection` is recorded, and at
 finalize. The next reader is a different agent in a different context — a malformed entry is
 invisible until it breaks there, and by then the run that produced it is over.
@@ -270,9 +270,9 @@ Run it on the **same absolute path you just wrote to** (`assessment_abs`); the r
 command, with the plugin root already substituted, is in your `INGRAIN-ASSESSMENT-PATHS`
 session context:
 
-    bash <plugin>/skills/ingrain-security/scripts/validate-assessment <assessment_abs> [--lenient]
+    bash <plugin>/skills/ingrain-security/scripts/run/validate-assessment <assessment_abs> [--lenient]
 
-**Pre-approved, like the writes.** An `allow-script-run` hook auto-approves this command on
+**Pre-approved, like the writes.** An `allow-run-script` hook auto-approves this command on
 both hosts, so expect **no permission prompt** — run it as often as the rule below says. The
 grant covers a *bare* run of the plugin's own read-only scripts and nothing more: append
 anything to the command (a `;`, a pipe, a redirect) and it prompts again. **Run it exactly as
@@ -298,7 +298,7 @@ correcting what you wrote, so the file earns the pass on its content. If it stil
 after the second attempt, **say so in one line naming the remaining violations** and carry
 on — two attempts is the bound, and saying it out loud is what the check exists to secure.
 **Make every correction with the Edit or Write tool, on `assessment_abs`** — the
-`allow-assessment-write` hook pre-approves those tools for this file on both hosts, so the
+`allow-write-assessment` hook pre-approves those tools for this file on both hosts, so the
 fix lands with no permission prompt.
 
 ## Template
@@ -384,12 +384,12 @@ altered. Keep the Selection fields and coverage honest against the code you writ
 and keep every enumerated field within its allowed values. Ids are permanent: add a new
 threat with the next free `T<n>` and never renumber the existing ones.
 
-To locate this file, re-run the `assessment-path` mint command from your
+To locate this file, re-run the `mint-assessment-path` mint command from your
 INGRAIN-ASSESSMENT-PATHS session context and write to the absolute `assessment_abs`
 it returns — it resolves back to this same file, and the mint is what resolves the
 path and ensures the folder.
 
 Org rules for this task (if any were retrieved) live in the linked sidecar
-.ingrain-security/rules-<branch-slug>-<task-slug>.md — re-mint it with the `rules-path`
+.ingrain-security/rules-<branch-slug>-<task-slug>.md — re-mint it with the `mint-rules-path`
 command; it is persistent and maintained there.
 ```

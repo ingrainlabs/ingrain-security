@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# PermissionRequest hook for the ingrain-security plugin (Codex only — the Claude Code twin
-# is hooks/claude/allow-assessment-write, on the PreToolUse event).
+# The WRITE grant on Codex — PermissionRequest (the Claude Code twin is
+# hooks/claude/allow-write-assessment, on the PreToolUse event).
 #
 # Auto-approves an apply_patch ONLY when every file it touches is the assessment file this
 # plugin mints, so a review can write its analysis without an approval prompt on every
@@ -25,8 +25,11 @@
 #   - the command is a PURE patch: nothing outside the `*** Begin Patch` / `*** End Patch`
 #     envelope but an apply_patch/heredoc wrapper, so no `; curl evil` can ride along,
 #   - it only ADDS or UPDATES files — a Delete/Move is outside what the skill ever does,
-#   - every path it touches passes `is_assessment_target` (direct child of the project's
+#   - every path it touches passes `is_allowed_write_target` (direct child of the project's
 #     `.ingrain-security/` folder, named `assessment*.md`, no symlink in the way).
+#
+# Its sibling grant is hooks/codex/allow-run-script, which approves a RUN of one of the
+# scripts in scripts/run/ — different tool, different guard.
 #
 # This hook NEVER denies: it can only remove a prompt, never introduce a block. Any doubt —
 # a malformed payload, an unrecognized envelope line, a missing folder — falls through to
@@ -36,19 +39,27 @@
 # Registered in hooks/codex/hook.json, dispatched via hooks/run-hook.cmd. Exits 0 always: a
 # hook error must not break the user's tool call.
 
-set -uo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
-. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null || exit 0
-# shellcheck source=../../skills/ingrain-security/scripts/lib/assessment-write.sh
-. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/assessment-write.sh" 2>/dev/null || exit 0
-
 # Print nothing and exit 0 — the universal "no opinion, use the normal approval flow"
-# signal. Every rejection path in this hook routes here.
+# signal. Installed as the EXIT trap and paired with `set -e`, so every rejection path in this
+# hook routes here without having to say so line by line, and the final printf is the one path
+# that escapes it. That also forces exit 0 on every path: a hook error must not break the
+# user's tool call.
 defer() {
     exit 0
 }
+trap defer EXIT
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPTS="${SCRIPT_DIR}/../../skills/ingrain-security/scripts"
+# shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
+. "${SCRIPTS}/lib/project-root.sh" 2>/dev/null
+# shellcheck source=../../skills/ingrain-security/scripts/lib/hook-input.sh
+. "${SCRIPTS}/lib/hook-input.sh" 2>/dev/null
+# shellcheck source=../../skills/ingrain-security/scripts/lib/path.sh
+. "${SCRIPTS}/lib/path.sh" 2>/dev/null
+# shellcheck source=../../skills/ingrain-security/scripts/write/lib/allow-write-check.sh
+. "${SCRIPTS}/write/lib/allow-write-check.sh" 2>/dev/null
 
 # Collect the paths an apply_patch command touches, one per line, or return non-zero when
 # the command is anything other than a pure add/update patch.
@@ -62,13 +73,16 @@ defer() {
 # Anything unrecognized is a refusal, not a skip: an envelope verb this hook does not know
 # is exactly the case where it must not be guessing.
 collect_patch_paths() {
-    local patch="$1" line region="prefix" count=0 opener_re
-    local saw_opener=0 terminator="" closed=0
+    local patch="$1"
+
+    # Carried across iterations and read after the loop, so these keep their defaults up front.
+    local region="prefix" count=0 saw_opener=0 terminator="" closed=0
 
     # `apply_patch`, optionally opening a heredoc: `apply_patch <<'EOF'`, `<<-"PATCH"`, …
     # Group 2 captures the delimiter, so the suffix can be held to the one actually opened.
-    opener_re="^apply_patch([[:space:]]+<<-?[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?)?[[:space:]]*\$"
+    local opener_re="^apply_patch([[:space:]]+<<-?[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?)?[[:space:]]*\$"
 
+    local line
     while IFS= read -r line; do
         line="${line%$'\r'}"
 
@@ -77,7 +91,9 @@ collect_patch_paths() {
             # bare `apply_patch`, or `apply_patch <<'EOF'`. Nothing else, which is what stops
             # a chained shell command from being approved along with the patch.
             prefix)
-                [ -z "${line}" ] && continue
+                if [ -z "${line}" ]; then
+                    continue
+                fi
                 if [ "${line}" = "*** Begin Patch" ]; then
                     region="body"
                     continue
@@ -111,7 +127,9 @@ collect_patch_paths() {
             # none of the spaces the envelope check would catch, is a second shell command
             # riding along on the patch's approval.
             suffix)
-                [ -z "${line}" ] && continue
+                if [ -z "${line}" ]; then
+                    continue
+                fi
                 [ -n "${terminator}" ] || return 1
                 [ "${closed}" -eq 0 ] || return 1
                 [ "${line}" = "${terminator}" ] || return 1
@@ -128,34 +146,43 @@ collect_patch_paths() {
 }
 
 main() {
-    local payload tool patch cwd canon_dir paths path
-
-    payload="$(cat)" || defer
-    [ -n "${payload}" ] || defer
+    # Every `local` below sits on its own line, apart from its assignment: `local x="$(cmd)"`
+    # reports the status of `local`, which would hide a failed extraction from errexit.
+    local payload
+    payload="$(cat)"
+    [ -n "${payload}" ]
 
     # The hook.json matcher is a convenience filter, not a security boundary — re-check.
     # Codex reports `apply_patch`; Edit / Write are its documented matcher aliases and are
     # accepted in case a future version reports one of them instead.
-    tool="$(extract_string "${payload}" ".tool_name")" || defer
+    local tool
+    tool="$(extract_string "${payload}" ".tool_name")"
     case "${tool}" in
         apply_patch | Edit | Write) ;;
         *) defer ;;
     esac
 
-    patch="$(extract_string "${payload}" ".tool_input.command")" || defer
-    [ -n "${patch}" ] || defer
+    local patch
+    patch="$(extract_string "${payload}" ".tool_input.command")"
+    [ -n "${patch}" ]
 
-    paths="$(collect_patch_paths "${patch}")" || defer
-    [ -n "${paths}" ] || defer
+    local paths
+    paths="$(collect_patch_paths "${patch}")"
+    [ -n "${paths}" ]
 
-    canon_dir="$(canonical_assessment_dir "codex")" || defer
-    [ -n "${canon_dir}" ] || defer
+    local canon_dir
+    canon_dir="$(canonical_assessment_dir "codex")"
+    [ -n "${canon_dir}" ]
 
     # All-or-nothing: one path outside the grant defers the whole patch.
+    # An absent cwd is tolerated, not a defer: absolutize falls back to $PWD.
+    local cwd
     cwd="$(extract_string "${payload}" ".cwd")" || cwd=""
+
+    local path
     while IFS= read -r path; do
-        [ -n "${path}" ] || defer
-        is_assessment_target "${canon_dir}" "$(absolutize "${path}" "${cwd}")" || defer
+        [ -n "${path}" ]
+        is_allowed_write_target "${canon_dir}" "$(absolutize "${path}" "${cwd}")"
     done < <(printf '%s\n' "${paths}")
 
     printf '%s\n' \
@@ -163,4 +190,3 @@ main() {
 }
 
 main "$@"
-exit 0

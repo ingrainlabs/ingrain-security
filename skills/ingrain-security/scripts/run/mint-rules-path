@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Rules-path minter — twin of mint-assessment-path, for the org-rules sidecar. Minted at
+# planning time ONLY when org rules are retrieved. Unlike the assessment file it PERSISTS
+# past finalize, carrying the rules' ids, titles and bodies so the Testing pass reads them
+# back without re-querying the CLI. Emits ONE JSON object on stdout; diagnostics to stderr.
+# Usage, output and exit codes: --help.
+#
+# `rules_abs` (absolute) is CANONICAL; `rules_path` is display-only. The path takes the SAME
+# branch + task suffix as the assessment file, so the two are twin sidecars for one task.
+#
+# `set -uo pipefail` WITHOUT `-e`: git lookups on a non-git or detached-HEAD checkout must
+# degrade to an "unknown branch" result, not abort the script.
+
+set -uo pipefail
+
+usage() {
+    cat <<'EOF'
+Mint the ingrain-security org-rules sidecar path. Prints one JSON object to stdout.
+
+Usage:
+  mint-rules-path <host> mint --title "<task title>" [--branch-slug <slug>]
+  mint-rules-path --help
+
+Arguments:
+  <host>              config dotfolder base name: claude | codex | <future token>
+                      (selects project-root resolution only; not part of the path)
+
+mint flags:
+  --title T           the ## Task title; slugified into the filename (optional).
+  --branch-slug S     reuse an already-resolved branch slug (optional; else resolved
+                      from git). Any unresolvable segment is dropped from the name.
+
+Output (rules_abs is CANONICAL — the one path to write to; rules_path is the relative
+display form for prose and links). The `instruction` field restates this with the path
+interpolated. The project root comes from the git repo root, so mint may be run from any
+subdirectory:
+  <project_root>/.ingrain-security/rules-<branch-slug>-<task-slug>.md
+  Fallbacks: no branch -> rules-<task-slug>.md; no title -> rules-<branch-slug>.md;
+  both absent -> rules.md. The `rules-` prefix always leads.
+
+Minting also SEEDS the sidecar with its empty skeleton (`## Retrieved rules`,
+`## Per-mitigation mapping` — no content) when it does not exist yet; an existing file is
+never rewritten. `file_exists` therefore reports CONTENT, not the inode: it is true only when
+org rules were actually persisted for this task. `template_seeded` is true when this mint
+wrote the skeleton; `template_only` is true whenever the sidecar is still untouched — which
+means no org rules have been retrieved.
+
+Exit codes: 0 ok · 2 usage error · 1 runtime error.
+EOF
+}
+
+# --- helpers ----------------------------------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# All minting logic is shared: project-root.sh (resolve_project_root, seed_gitignore,
+# escape_for_json) and mint-path.sh (resolve_branch, slugify, mint_path, mint_dispatch).
+# shellcheck source=../lib/project-root.sh
+if ! . "${SCRIPT_DIR}/../lib/project-root.sh" 2>/dev/null; then
+    printf 'mint-rules-path: cannot load lib/project-root.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=../lib/artifact-template.sh
+if ! . "${SCRIPT_DIR}/../lib/artifact-template.sh" 2>/dev/null; then
+    printf 'rules-path: cannot load lib/artifact-template.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/mint-path.sh
+if ! . "${SCRIPT_DIR}/lib/mint-path.sh" 2>/dev/null; then
+    printf 'mint-rules-path: cannot load lib/mint-path.sh\n' >&2
+    exit 1
+fi
+
+mint_dispatch rules usage "$@"

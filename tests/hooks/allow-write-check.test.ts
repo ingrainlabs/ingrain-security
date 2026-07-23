@@ -1,8 +1,9 @@
 /**
- * Behavioral tests for the path canonicalizers in
- * `skills/ingrain-security/scripts/lib/assessment-write.sh` — the library both
- * allow-assessment-write hooks SOURCE rather than execute. The sibling
- * project-root-lib.test.ts covers normalize_dir/resolve_project_root the same way.
+ * Behavioral tests for the path canonicalizers the WRITE grant depends on: `physical_dir` from
+ * the shared `scripts/lib/path.sh`, and `canonical_assessment_dir` from the grant's own
+ * `scripts/write/lib/allow-write-check.sh` — libraries the allow-write-assessment hooks SOURCE
+ * rather than execute. The sibling project-root-lib.test.ts covers
+ * normalize_dir/resolve_project_root the same way.
  *
  * Because sourcing runs the functions in the host shell, `physical_dir` must not move the
  * caller's working directory: its `cd` is confined to a subshell. These tests pin that by
@@ -28,7 +29,8 @@ import { assertEquals } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
-const LIB = `${ROOT}skills/ingrain-security/scripts/lib`;
+const SCRIPTS = `${ROOT}skills/ingrain-security/scripts`;
+const LIB = `${SCRIPTS}/lib`;
 
 interface IProbe {
   /** What the bare call printed — the resolved path. */
@@ -38,7 +40,7 @@ interface IProbe {
 }
 
 /**
- * Source both libs (assessment-write.sh needs resolve_project_root), `cd` into `cwd`, then
+ * Source the guard and the libs it needs (resolve_project_root, physical_dir), `cd` into `cwd`, then
  * run `call` BARE in the current shell and report what it printed alongside the shell's $PWD
  * either side of it.
  *
@@ -54,7 +56,9 @@ async function probe(
   const script = `
     set -uo pipefail
     . "${LIB}/project-root.sh"
-    . "${LIB}/assessment-write.sh"
+    . "${LIB}/hook-input.sh"
+    . "${LIB}/path.sh"
+    . "${SCRIPTS}/write/lib/allow-write-check.sh"
     printf 'BEFORE:%s\\n' "\${PWD}"
     printf 'OUT:'
     ${call}
@@ -85,7 +89,7 @@ async function probe(
 
 /** Run `fn` against a fresh throwaway git project with the assessment folder seeded. */
 async function withProject(fn: (dir: string) => Promise<void>): Promise<void> {
-  const dir = await Deno.makeTempDir({ prefix: "assessment-write-lib-" });
+  const dir = await Deno.makeTempDir({ prefix: "ingrain-assessment-write-" });
   await sh(`git init -q "${dir}" && mkdir -p "${dir}/.ingrain-security" "${dir}/src"`);
   try {
     await fn(dir);

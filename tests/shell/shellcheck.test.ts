@@ -1,6 +1,6 @@
 /**
  * Runs ShellCheck over every shell script committed to the repo — the hooks, the
- * assessment-path minter and the release scripts. Offline, no model calls.
+ * mint-assessment-path minter and the release scripts. Offline, no model calls.
  *
  * Discovery is shebang-based rather than extension-based on purpose: the hook scripts
  * are deliberately extensionless (see `hooks/run-hook.cmd` for why), so a `*.sh` glob
@@ -28,13 +28,25 @@ const EXCLUDED = new Set(["hooks/run-hook.cmd"]);
  */
 const EXPECTED = [
   ".github/release.sh",
-  "hooks/claude/allow-assessment-write",
+  "hooks/claude/allow-write-assessment",
+  "hooks/claude/allow-run-script",
+  "hooks/codex/allow-run-script",
+  "hooks/codex/allow-write-assessment",
   "hooks/start/session-start",
-  "skills/ingrain-security/scripts/lib/artifact-template.sh",
+  "skills/ingrain-security/scripts/run/lib/allow-run-check.sh",
+  "skills/ingrain-security/scripts/write/lib/allow-write-check.sh",
+  "skills/ingrain-security/scripts/lib/hook-input.sh",
+  "skills/ingrain-security/scripts/lib/path.sh",
   "skills/ingrain-security/scripts/lib/project-root.sh",
-  "skills/ingrain-security/scripts/lib/mint-path.sh",
-  "skills/ingrain-security/scripts/rules-path",
-  "skills/ingrain-security/scripts/branch-diff",
+  "skills/ingrain-security/scripts/run/lib/mint-path.sh",
+  "skills/ingrain-security/scripts/run/lib/md-primitives.sh",
+  "skills/ingrain-security/scripts/run/lib/md-document.sh",
+  "skills/ingrain-security/scripts/run/lib/md-fields.sh",
+  "skills/ingrain-security/scripts/run/lib/assessment-schema.sh",
+  "skills/ingrain-security/scripts/run/lib/md-report.sh",
+  "skills/ingrain-security/scripts/run/mint-rules-path",
+  "skills/ingrain-security/scripts/run/resolve-branch-delta",
+  "skills/ingrain-security/scripts/run/validate-assessment",
 ];
 
 /**

@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# The RUN grant on Codex — PermissionRequest (Claude Code twin: hooks/claude/allow-run-script).
+#
+# Auto-approves a shell call when it is a bare run of one of the scripts in
+# skills/ingrain-security/scripts/run/. Codex passes `tool_input.command` as either a string or
+# an argv array (commonly the `bash -lc "<command>"` wrapper); both shapes are handled, and the
+# wrapper's string argument is re-parsed rather than trusted. The qualifying test lives one
+# level below the scripts in run/lib/allow-run-check.sh, shared with the Claude hook.
+# Never denies: anything that does not qualify defers to the normal approval prompt.
+#
+# Its sibling grant is hooks/codex/allow-write-assessment, which approves a WRITE to the
+# assessment file — different tool, different guard.
+#
+# Registered in hooks/codex/hook.json, dispatched via hooks/run-hook.cmd. Always exits 0.
+
+# Print nothing and exit 0: no opinion, use the normal approval flow. Installed as the EXIT
+# trap and paired with `set -e`, so EVERY failure below — a malformed payload, a missing
+# folder, a check that says no — lands here, and the final printf is the one path that escapes
+# it. That also forces exit 0 on every path: a hook error must not break the user's tool call.
+defer() {
+    exit 0
+}
+trap defer EXIT
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd -P)"
+SCRIPTS="${SCRIPT_DIR}/../../skills/ingrain-security/scripts"
+# shellcheck source=../../skills/ingrain-security/scripts/lib/hook-input.sh
+. "${SCRIPTS}/lib/hook-input.sh" 2>/dev/null
+# shellcheck source=../../skills/ingrain-security/scripts/lib/path.sh
+. "${SCRIPTS}/lib/path.sh" 2>/dev/null
+# shellcheck source=../../skills/ingrain-security/scripts/run/lib/allow-run-check.sh
+. "${SCRIPTS}/run/lib/allow-run-check.sh" 2>/dev/null
+
+main() {
+    # Every `local` below sits on its own line, apart from its assignment: `local x="$(cmd)"`
+    # reports the status of `local`, which would hide a failed extraction from errexit.
+    local payload
+    payload="$(cat)"
+    [ -n "${payload}" ]
+
+    # The hook.json matcher is a convenience filter, not a security boundary.
+    local tool
+    tool="$(extract_string "${payload}" ".tool_name")"
+    case "${tool}" in
+        shell | local_shell) ;;
+        *) defer ;;
+    esac
+
+    local run_dir
+    run_dir="$(runnable_scripts_dir "${PLUGIN_ROOT}")"
+    [ -n "${run_dir}" ]
+
+    # An absent cwd is tolerated, not a defer: the path helpers fall back to $PWD.
+    local cwd
+    cwd="$(extract_string "${payload}" ".cwd")" || cwd=""
+
+    # Argv array first; when the command is a string, extraction fails and the string
+    # parser answers instead.
+    if extract_string_array "${payload}" ".tool_input.command"; then
+        is_allowed_run_exec "${run_dir}" "${cwd}" "${PAYLOAD_ARGV[@]}"
+    else
+        local command
+        command="$(extract_string "${payload}" ".tool_input.command")"
+        is_allowed_run_command "${run_dir}" "${cwd}" "${command}"
+    fi
+
+    printf '%s\n' \
+        '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
+}
+
+main "$@"

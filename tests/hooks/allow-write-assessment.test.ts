@@ -1,5 +1,5 @@
 /**
- * Behavioral tests for the `hooks/claude/allow-assessment-write` PreToolUse hook —
+ * Behavioral tests for the `hooks/claude/allow-write-assessment` PreToolUse hook —
  * the one thing standing between the user and a permission prompt on every assessment
  * write. Like its siblings these EXECUTE the script under bash against a throwaway
  * project dir, so they need the `test:hooks` run+write permissions.
@@ -21,9 +21,9 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
-const HOOK = `${ROOT}hooks/claude/allow-assessment-write`;
-const MINT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
-const MINT_RULES = `${ROOT}skills/ingrain-security/scripts/rules-path`;
+const HOOK = `${ROOT}hooks/claude/allow-write-assessment`;
+const MINT = `${ROOT}skills/ingrain-security/scripts/run/mint-assessment-path`;
+const MINT_RULES = `${ROOT}skills/ingrain-security/scripts/run/mint-rules-path`;
 
 interface IHookResult {
   code: number;
@@ -167,7 +167,7 @@ Deno.test("allow: every file-editing tool, on both naming forms", async () => {
 
 Deno.test("allow: the rules sidecar path the minter actually produces", async () => {
   await withProject(async (dir) => {
-    // Same contract as the assessment case: drive the REAL rules-path minter so a naming
+    // Same contract as the assessment case: drive the REAL mint-rules-path minter so a naming
     // drift between the minter and the grant is caught here.
     const out = await new Deno.Command("bash", {
       args: [MINT_RULES, "claude", "mint", "--title", "Add authn"],

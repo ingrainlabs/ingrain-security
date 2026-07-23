@@ -1,4 +1,4 @@
-# ShellCheck configuration for the plugin's bash (hooks, the assessment-path minter,
+# ShellCheck configuration for the plugin's bash (hooks, the mint-assessment-path minter,
 # and the release scripts). Enforced by tests/shell/shellcheck.test.ts and in CI.
 
 # Follow the libs the hooks source, so the helpers they call are checked in context

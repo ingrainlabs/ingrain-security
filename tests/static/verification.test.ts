@@ -79,7 +79,7 @@ Deno.test("SKILL.md: routes to a phase from repo state, then points at the refer
   // The three Testing conditions, and the signals they are read from. The third is the BRANCH
   // DELTA, not the working tree: a fully-committed implementation must still route to Testing.
   assertStringIncludes(md, "file_exists");
-  assertStringIncludes(md, "scripts/branch-diff");
+  assertStringIncludes(md, "scripts/run/resolve-branch-delta");
   assertStringIncludes(md, "delta_empty");
   assertStringIncludes(md, "this section is a pointer, and the procedure is in that file");
 });
@@ -125,8 +125,8 @@ Deno.test("verification-pass.md: writes to the absolute assessment_abs, minted n
   assertStringIncludes(md, "assessment_abs");
   // The verifier dispatch template must hand out the absolute path, never a relative one.
   assertStringIncludes(md, "<the minted assessment_abs — the ABSOLUTE path, pasted in full>");
-  // The path is minted by the bundled script, and the relative form is display-only.
-  assertStringIncludes(md, "scripts/assessment-path");
+  // The path is minted by the plugin script, and the relative form is display-only.
+  assertStringIncludes(md, "scripts/run/mint-assessment-path");
   assertStringIncludes(md, "mint");
   assertStringIncludes(md, "assessment_path");
   // Same deterministic branch+task file the plan review wrote.
@@ -138,12 +138,15 @@ Deno.test("verification-pass.md: validates its one write against the schema, str
   // Testing writes the assessment once, and that write is a FINISHED file — so it runs the
   // validator without --lenient. Losing this leaves the last write of the whole lifecycle
   // unchecked, in the session that hands the file to everyone downstream.
-  assertStringIncludes(md, "scripts/validate-assessment");
+  assertStringIncludes(md, "scripts/run/validate-assessment");
   assertStringIncludes(md, "no `--lenient`");
   // The contract itself belongs to the schema reference; this file points at it.
   assertStringIncludes(md, "references/formatting/assessment-file.md");
   // And the checklist tracks it, like every other step-6 obligation.
-  assertStringIncludes(md, "validated clean by `scripts/validate-assessment` with NO `--lenient`");
+  assertStringIncludes(
+    md,
+    "validated clean by `scripts/run/validate-assessment` with NO `--lenient`",
+  );
 });
 
 Deno.test("verification-pass.md: guards title drift, stays in the Testing phase", async () => {
@@ -157,8 +160,8 @@ Deno.test("verification-pass.md: guards title drift, stays in the Testing phase"
 Deno.test("verification-pass.md: verifies the branch diff since the fork point and reuses the assessment schema", async () => {
   const md = await Deno.readTextFile(VERIFY);
   // The diff basis is the fork point — committed work included, not just the dirty tree — and it
-  // is resolved by the bundled script, so the gate and the review cannot drift apart.
-  assertStringIncludes(md, "scripts/branch-diff");
+  // is resolved by the plugin script, so the gate and the review cannot drift apart.
+  assertStringIncludes(md, "scripts/run/resolve-branch-delta");
   assertStringIncludes(md, "diff_ref");
   assertStringIncludes(md, "git diff <diff_ref>");
   assertStringIncludes(md, "git status");
@@ -193,8 +196,8 @@ Deno.test("verification-pass.md: marks the assessment checked (Robustness + Late
 
 Deno.test("verification-pass.md: reads org rules from the rules-*.md sidecar, no CLI", async () => {
   const md = await Deno.readTextFile(VERIFY);
-  // Rules come from the planning-written sidecar, minted with rules-path.
-  assertStringIncludes(md, "rules-path");
+  // Rules come from the planning-written sidecar, minted with mint-rules-path.
+  assertStringIncludes(md, "mint-rules-path");
   assertStringIncludes(md, "rules_abs");
   assertStringIncludes(md, "references/formatting/rules-file.md");
   // Existence is the signal; the Rule refs ids are the link into the sidecar.
@@ -295,9 +298,9 @@ Deno.test("assessment-file.md: defines the Justification + Robustness fields", a
 
 Deno.test("rules-file.md: defines the persistent org-rules sidecar schema", async () => {
   const md = await Deno.readTextFile(RULES_REF);
-  // Keyed by the same slug as the assessment, minted by rules-path.
+  // Keyed by the same slug as the assessment, minted by mint-rules-path.
   assertStringIncludes(md, "rules-<branch-slug>-<task-slug>.md");
-  assertStringIncludes(md, "rules-path");
+  assertStringIncludes(md, "mint-rules-path");
   // Its sections: retrieved rules (id/title/body) + per-mitigation mapping.
   assertStringIncludes(md, "## Retrieved rules");
   assertStringIncludes(md, "## Per-mitigation mapping");

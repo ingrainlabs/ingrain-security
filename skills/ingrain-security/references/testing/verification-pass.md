@@ -33,11 +33,11 @@ Robustness it leads with is a conclusion you re-derive from the evidence it cite
 
 Testing reads and finalizes the **same** per-task assessment file the plan review
 wrote — a single file in `.ingrain-security/` at the project root. **Mint its path** once,
-at the start of the run, with the bundled **`scripts/assessment-path`**
+at the start of the run, with the bundled **`scripts/run/mint-assessment-path`**
 script. Your SessionStart context carries the ready-to-run command (plugin root and host
 already substituted); it takes the form:
 
-    bash <plugin>/skills/ingrain-security/scripts/assessment-path <host> mint --title "<task title>"
+    bash <plugin>/skills/ingrain-security/scripts/run/mint-assessment-path <host> mint --title "<task title>"
 
 **The `--title` must be the task's title as Development recorded it — reuse the assessment's
 `## Task` → **Title** verbatim.** Copy it from the file rather than from the conversation:
@@ -64,14 +64,14 @@ pre-approval, and the file's schema — follow that schema exactly. The fields T
 `## Threats` → **Robustness** and `## Mitigations` → **Justification** + **Robustness**, plus
 `## Task` → `Latest stage`.
 
-**Write it with the Edit or Write tool, on `assessment_abs`** — `allow-assessment-write`
+**Write it with the Edit or Write tool, on `assessment_abs`** — `allow-write-assessment`
 pre-approves those for this file, so the write lands with no permission prompt.
 
 **Check the write.** Testing writes this file exactly once, at step 6, and that write is a
-finished file — so run the bundled **`scripts/validate-assessment`** script on `assessment_abs`
+finished file — so run the bundled **`scripts/run/validate-assessment`** script on `assessment_abs`
 straight after it, **strictly (no `--lenient`)**:
 
-    bash <plugin>/skills/ingrain-security/scripts/validate-assessment <assessment_abs>
+    bash <plugin>/skills/ingrain-security/scripts/run/validate-assessment <assessment_abs>
 
 Run it exactly as printed — nothing appended — and read the verdict off the `"valid"` field of
 the JSON it prints on stdout. Fix exactly what it reports and re-run, at most twice; if
@@ -84,10 +84,10 @@ keeps the validation the plan review already gave it.
 ## The diff under review
 
 Verify against the **branch delta** — everything this branch added since it diverged from the
-branch it was cut from, committed **and** uncommitted alike. Resolve it with the bundled
-**`scripts/branch-diff`** script and take **`base_ref`** (the parent branch, for the report),
+branch it was cut from, committed **and** uncommitted alike. Resolve it with the plugin's
+**`scripts/run/resolve-branch-delta`** script and take **`base_ref`** (the parent branch, for the report),
 **`diff_ref`** (what you actually diff against), `fallback` and `delta_empty` from its JSON.
-→ `references/lib/branch-diff.md` owns the script, the refs it returns, and the discipline
+→ `references/lib/resolve-branch-delta.md` owns the script, the refs it returns, and the discipline
 around them — notably that `diff_ref` is the run's **fixed basis**: resolve it once and pass
 that exact string to every verifier.
 
@@ -152,10 +152,10 @@ by the same branch + task slug (schema: `references/formatting/rules-file.md`). 
 robustness against *how the org implements* the control, locate that sidecar and hand each
 verifier the rule descriptions for the mitigations covering its threat.
 
-Mint its path with the bundled **`scripts/rules-path`** script, the twin of `assessment-path`;
+Mint its path with the plugin's **`scripts/run/mint-rules-path`** script, the twin of `mint-assessment-path`;
 your SessionStart context carries the ready-to-run command:
 
-    bash <plugin>/skills/ingrain-security/scripts/rules-path <host> mint --title "<task title>"
+    bash <plugin>/skills/ingrain-security/scripts/run/mint-rules-path <host> mint --title "<task title>"
 
 Use its **`rules_abs`** (absolute) as the read path, and the **same verbatim title** you minted
 the assessment with. Because it is keyed by the same branch + task slug, it resolves to the
@@ -291,7 +291,7 @@ file.
    **The assessment file**). If `file_exists: false`, you minted the wrong title — recover it
    from the file and re-mint. If no assessment for this task genuinely exists, state so and
    **stop** — Development is reached through Phase select, on a later invocation.
-1. **Capture the diff.** Run `scripts/branch-diff` to resolve `base_ref` + `diff_ref`, then
+1. **Capture the diff.** Run `scripts/run/resolve-branch-delta` to resolve `base_ref` + `diff_ref`, then
    capture the branch diff **once** (see **The diff under review**). If **Phase select** already
    ran it this turn, reuse the JSON you are holding rather than paying for it twice — the script
    is deterministic, so either way you get the same refs. If you reached Testing by an explicit
@@ -305,7 +305,7 @@ file.
    covers. Set aside the `selected` mitigations whose `Threats` is `—` for the
    general-instruction pass. If **no threat is selected and no mitigation is adopted**, state
    "nothing to verify", set `Latest stage: testing`, and **stop**.
-3. **Locate the rules file.** Mint `rules_abs` with the `rules-path` command and the same
+3. **Locate the rules file.** Mint `rules_abs` with the `mint-rules-path` command and the same
    verbatim title (see **The rules file**). If `file_exists: true`, it carries this task's org
    rules — you will hand each verifier the rule(s) behind its threat's covering mitigations by
    pointer. If `file_exists: false`, no rules were retrieved at planning; verifiers judge from
@@ -332,7 +332,7 @@ file.
    record the current implementation. The
    `rules-<…>.md` sidecar is a persistent planning artifact — **leave it exactly as you found
    it**.
-   Then **validate the file strictly** — `scripts/validate-assessment <assessment_abs>` with no
+   Then **validate the file strictly** — `scripts/run/validate-assessment <assessment_abs>` with no
    `--lenient` — and fix what it reports before you report to the coding agent (see **The
    assessment file** → Check the write). This is the "mark checked" step — the file now records
    what was verified, so it is also the last moment a malformed entry can be caught before the
@@ -378,17 +378,17 @@ Development.
 
 The procedure is **Testing — the flow**; this is the tracker. Tick only what is actually
 done. Work top to bottom; this phase runs to its own end. Every mint
-(`assessment-path` and `rules-path`) uses the assessment's `## Task` Title **verbatim** — a
+(`mint-assessment-path` and `mint-rules-path`) uses the assessment's `## Task` Title **verbatim** — a
 paraphrase mints a different file and silently loses the task. Every read and the finalize
 write use the absolute `assessment_abs`; the relative `assessment_path` is display-only. Hand
 off by pointer: a dispatch carries paths into the assessment, the sidecar and the diff, and
 each verifier opens them itself. Report the empty cases out loud.
 
 - [ ] 0. Assessment located — title minted verbatim; no assessment for this task → stop
-- [ ] 1. Fork point resolved with `scripts/branch-diff` (`base_ref` + `diff_ref` + `fallback`) and branch diff captured once — `HEAD` only as a reported fallback; `delta_empty: true` → stop
+- [ ] 1. Fork point resolved with `scripts/run/resolve-branch-delta` (`base_ref` + `diff_ref` + `fallback`) and branch diff captured once — `HEAD` only as a reported fallback; `delta_empty: true` → stop
 - [ ] 2. Scope collected — `selected` threats paired with their covering `selected` mitigations (an uncovered threat is still in scope), untagged rows set aside; nothing selected → set `Latest stage: testing` and stop
 - [ ] 3. Rules sidecar located (`rules_abs`) — an absent sidecar is an expected state; verification proceeds either way
 - [ ] 4. One verifier dispatched per selected threat, plus the general-instruction pass — justification FIRST, then `weak`/`adequate`/`strong`
 - [ ] 5. Each threat's Robustness concluded — justification weighed BEFORE the level; a level stands only when its evidence carries it; the conclusion is YOURS; each mitigation's Robustness carried across, weakest governs
-- [ ] 6. `## Threats` → `Robustness` + `## Mitigations` → `Justification` + `Robustness` + `Latest stage: testing` written — YOU write, the verifier only returns; sidecar untouched; then validated clean by `scripts/validate-assessment` with NO `--lenient`
+- [ ] 6. `## Threats` → `Robustness` + `## Mitigations` → `Justification` + `Robustness` + `Latest stage: testing` written — YOU write, the verifier only returns; sidecar untouched; then validated clean by `scripts/run/validate-assessment` with NO `--lenient`
 - [ ] 7. Reported to the coding agent — `weak` threats named with their residual path; the coding agent owns the code changes

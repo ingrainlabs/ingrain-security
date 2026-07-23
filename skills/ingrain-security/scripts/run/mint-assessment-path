@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Assessment-path minter: the review's one write target, so the orchestrator never
+# hand-builds it. Emits ONE JSON object on stdout; diagnostics to stderr.
+# Usage, output and exit codes: --help.
+#
+# `assessment_abs` (absolute) is CANONICAL — every worker dispatch and every Write/Edit
+# uses it; `assessment_path` is display-only.
+#
+# The path is deterministic in branch + task, so it doubles as the task identity: the same
+# task on the same branch resolves to the same file and the run resumes it in place
+# (`file_exists` reports this). No timestamp, no random token. The project root comes from
+# the git repo root, so any subdirectory anchors the same folder.
+#
+# `set -uo pipefail` WITHOUT `-e`: git lookups on a non-git or detached-HEAD checkout must
+# degrade to an "unknown branch" result, not abort the script.
+
+set -uo pipefail
+
+usage() {
+    cat <<'EOF'
+Mint the ingrain-security assessment-file path. Prints one JSON object to stdout.
+
+Usage:
+  mint-assessment-path <host> mint --title "<task title>" [--branch-slug <slug>]
+  mint-assessment-path --help
+
+Arguments:
+  <host>              config dotfolder base name: claude | codex | <future token>
+                      (selects project-root resolution only; not part of the path)
+
+mint flags:
+  --title T           the ## Task title; slugified into the filename (optional).
+  --branch-slug S     reuse an already-resolved branch slug (optional; else resolved
+                      from git). Any unresolvable segment is dropped from the name.
+
+Output (assessment_abs is CANONICAL — the one path to write to; assessment_path is the
+relative display form for prose and links). The `instruction` field restates this with
+the path interpolated. The project root comes from the git repo root, so mint may be run
+from any subdirectory:
+  <project_root>/.ingrain-security/assessment-<branch-slug>-<task-slug>.md
+  Fallbacks: no branch -> assessment-<task-slug>.md; no title -> assessment-<branch-slug>.md;
+  both absent -> assessment.md. The `assessment-` prefix always leads.
+
+Minting also SEEDS the file with its empty skeleton (headings, both table headers, field
+labels — no content) when it does not exist yet, so no writer starts from a blank page; an
+existing file is never rewritten. `file_exists` therefore reports CONTENT, not the inode: it
+is true only when the file already holds written analysis (the run resumes the same task's
+prior work). `template_seeded` is true when this mint wrote the skeleton; `template_only` is
+true whenever the file is still an untouched skeleton.
+
+Exit codes: 0 ok · 2 usage error · 1 runtime error.
+EOF
+}
+
+# --- helpers ----------------------------------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# resolve_project_root, seed_gitignore and escape_for_json live in project-root.sh (shared
+# with the hooks); resolve_branch, slugify, mint_path and mint_dispatch live in mint-path.sh
+# (shared with the mint-rules-path minter). This script is now just the assessment label + usage.
+# shellcheck source=../lib/project-root.sh
+if ! . "${SCRIPT_DIR}/../lib/project-root.sh" 2>/dev/null; then
+    printf 'mint-assessment-path: cannot load lib/project-root.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=../lib/artifact-template.sh
+if ! . "${SCRIPT_DIR}/../lib/artifact-template.sh" 2>/dev/null; then
+    printf 'assessment-path: cannot load lib/artifact-template.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/mint-path.sh
+if ! . "${SCRIPT_DIR}/lib/mint-path.sh" 2>/dev/null; then
+    printf 'mint-assessment-path: cannot load lib/mint-path.sh\n' >&2
+    exit 1
+fi
+
+mint_dispatch assessment usage "$@"

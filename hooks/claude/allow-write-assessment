@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# The WRITE grant on Claude Code — PreToolUse (the Codex twin is
+# hooks/codex/allow-write-assessment, on the PermissionRequest event).
+#
+# Auto-approves the file-editing tools ONLY when their target is the assessment file this
+# plugin mints, so a review can write its analysis without a permission prompt on every
+# edit. Everything else defers to the normal permission flow.
+#
+# Why a hook and not a permission rule: a plugin cannot ship `permissions.allow` rules
+# (plugin settings.json supports only `agent` and `subagentStatusLine`), and a PreToolUse
+# `permissionDecision: "allow"` is the one plugin-shippable mechanism that bypasses the
+# prompt. Note this is also why the assessment folder must NOT live under `.claude/`: that
+# is a PROTECTED path whose writes are never auto-approved, and which `permissions.allow`
+# rules cannot pre-approve either.
+#
+# The grant is deliberately narrow. A write is approved only when the tool is one of
+# Write / Edit / MultiEdit / NotebookEdit and its target passes `is_allowed_write_target`
+# (direct child of the project's `.ingrain-security/` folder, named `assessment*.md`, no
+# symlink anywhere in the way) — see
+# skills/ingrain-security/scripts/write/lib/allow-write-check.sh, which holds that test, shared
+# with the Codex hook.
+#
+# Its sibling grant is hooks/claude/allow-run-script, which approves a RUN of one of the
+# scripts in scripts/run/ — different tool, different guard.
+#
+# This hook NEVER emits "deny": it can only remove a prompt, never introduce a block. Any
+# doubt — a malformed payload, an ambiguous path, a missing folder — falls through to
+# "defer" (empty stdout), which leaves the user's normal permission prompt in place.
+# Failing closed here means failing to an ordinary prompt, never to a blocked session.
+#
+# Registered in hooks/claude/hook.json, dispatched via hooks/run-hook.cmd. Exits 0 always:
+# a hook error must not break the user's tool call.
+
+# Print nothing and exit 0 — the universal "no opinion, use the normal permission flow"
+# signal. Installed as the EXIT trap and paired with `set -e`, so every rejection path in this
+# hook routes here without having to say so line by line, and the final printf is the one path
+# that escapes it. That also forces exit 0 on every path: a hook error must not break the
+# user's tool call.
+defer() {
+    exit 0
+}
+trap defer EXIT
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPTS="${SCRIPT_DIR}/../../skills/ingrain-security/scripts"
+# shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
+. "${SCRIPTS}/lib/project-root.sh" 2>/dev/null
+# shellcheck source=../../skills/ingrain-security/scripts/lib/hook-input.sh
+. "${SCRIPTS}/lib/hook-input.sh" 2>/dev/null
+# shellcheck source=../../skills/ingrain-security/scripts/lib/path.sh
+. "${SCRIPTS}/lib/path.sh" 2>/dev/null
+# shellcheck source=../../skills/ingrain-security/scripts/write/lib/allow-write-check.sh
+. "${SCRIPTS}/write/lib/allow-write-check.sh" 2>/dev/null
+
+main() {
+    # Every `local` below sits on its own line, apart from its assignment: `local x="$(cmd)"`
+    # reports the status of `local`, which would hide a failed extraction from errexit.
+    local payload
+    payload="$(cat)"
+    [ -n "${payload}" ]
+
+    # The hook.json matcher is a convenience filter, not a security boundary — re-check.
+    local tool
+    tool="$(extract_string "${payload}" ".tool_name")"
+    case "${tool}" in
+        Write | Edit | MultiEdit | NotebookEdit) ;;
+        *) defer ;;
+    esac
+
+    local file_path
+    file_path="$(extract_string "${payload}" ".tool_input.file_path")"
+    [ -n "${file_path}" ]
+
+    # An absent cwd is tolerated, not a defer: absolutize falls back to $PWD.
+    local cwd
+    cwd="$(extract_string "${payload}" ".cwd")" || cwd=""
+    file_path="$(absolutize "${file_path}" "${cwd}")"
+
+    local canon_dir
+    canon_dir="$(canonical_assessment_dir "claude")"
+    [ -n "${canon_dir}" ]
+    is_allowed_write_target "${canon_dir}" "${file_path}"
+
+    printf '%s\n' \
+        '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"ingrain-security assessment file"}}'
+}
+
+main "$@"

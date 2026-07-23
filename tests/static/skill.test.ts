@@ -23,13 +23,15 @@ const DISPATCH_REF = `${ROOT}skills/ingrain-security/references/development/disp
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
 const SESSION_START = `${ROOT}hooks/start/session-start`;
-const ALLOW_HOOK = `${ROOT}hooks/claude/allow-assessment-write`;
-const CODEX_ALLOW_HOOK = `${ROOT}hooks/codex/allow-assessment-write`;
-const ALLOW_LIB = `${ROOT}skills/ingrain-security/scripts/lib/assessment-write.sh`;
+const WRITE_HOOK = `${ROOT}hooks/claude/allow-write-assessment`;
+const CODEX_WRITE_HOOK = `${ROOT}hooks/codex/allow-write-assessment`;
+const WRITE_LIB = `${ROOT}skills/ingrain-security/scripts/write/lib/allow-write-check.sh`;
+const RUN_HOOK = `${ROOT}hooks/claude/allow-run-script`;
+const CODEX_RUN_HOOK = `${ROOT}hooks/codex/allow-run-script`;
 const ENSURE_DIR = `${ROOT}hooks/start/ensure-assessment-dir`;
 const PROJECT_ROOT_LIB = `${ROOT}skills/ingrain-security/scripts/lib/project-root.sh`;
-const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
-const MINT_LIB = `${ROOT}skills/ingrain-security/scripts/lib/mint-path.sh`;
+const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/run/mint-assessment-path`;
+const MINT_LIB = `${ROOT}skills/ingrain-security/scripts/run/lib/mint-path.sh`;
 
 const WORKERS = [
   "ingrain-relevance-triage",
@@ -140,8 +142,8 @@ Deno.test("SKILL.md: mints the assessment path and defers its schema to the refe
   // The file's schema/template is defined in a dedicated reference file, and SKILL.md points
   // at it rather than restating it.
   assertStringIncludes(md, "references/formatting/assessment-file.md");
-  // The path is minted by the bundled script (mint), not hand-built.
-  assertStringIncludes(md, "scripts/assessment-path");
+  // The path is minted by the plugin script (mint), not hand-built.
+  assertStringIncludes(md, "scripts/run/mint-assessment-path");
   assertStringIncludes(md, "mint");
   assertStringIncludes(md, "assessment_path");
 });
@@ -165,7 +167,7 @@ Deno.test("assessment-file.md: defines the strict on-disk format and its allowed
   assertStringIncludes(md, "256"); // justification max length
   assertStringIncludes(md, "3–6"); // threat count: soft target, not a hard limit
   // The path is obtained from the bundled path-minting script.
-  assertStringIncludes(md, "scripts/assessment-path");
+  assertStringIncludes(md, "scripts/run/mint-assessment-path");
 });
 
 Deno.test("SKILL.md + assessment-file.md: the assessment file name is keyed by branch + task", async () => {
@@ -204,7 +206,7 @@ Deno.test("ownership: SKILL.md does not restate what assessment-file.md owns", a
 });
 
 /**
- * The validator wiring. `scripts/validate-assessment` checks a written assessment file
+ * The validator wiring. `scripts/run/validate-assessment` checks a written assessment file
  * against the schema its reference file specifies, and the rule is that it runs after EVERY
  * write — so `assessment-file.md` owns the contract (modes, exit codes, the retry bound) and
  * SKILL.md carries only the when. A skill that stops naming it silently goes back to writing
@@ -212,7 +214,7 @@ Deno.test("ownership: SKILL.md does not restate what assessment-file.md owns", a
  */
 Deno.test("validation: assessment-file.md owns the after-every-write contract", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
-  assertStringIncludes(md, "scripts/validate-assessment");
+  assertStringIncludes(md, "scripts/run/validate-assessment");
   // Both modes, and which one belongs to a finished file.
   assertStringIncludes(md, "--lenient");
   assertStringIncludes(md.toLowerCase(), "finalize");
@@ -222,7 +224,7 @@ Deno.test("validation: assessment-file.md owns the after-every-write contract", 
 
 Deno.test("validation: SKILL.md runs it after every write and strictly at finalize", async () => {
   const md = await Deno.readTextFile(SKILL);
-  assertStringIncludes(md, "scripts/validate-assessment");
+  assertStringIncludes(md, "scripts/run/validate-assessment");
   assertStringIncludes(md, "--lenient");
   // The spine points at the owner rather than restating the contract.
   assertStringIncludes(md, "references/formatting/assessment-file.md");
@@ -316,21 +318,31 @@ Deno.test("session-start: points the orchestrator at assessment_abs", async () =
   assertStringIncludes(hook, "assessment_abs");
 });
 
-Deno.test("session-start: injects the branch-diff runner Phase select routes on", async () => {
+Deno.test("session-start: injects the resolve-branch-delta runner Phase select routes on", async () => {
   const hook = await Deno.readTextFile(SESSION_START);
   // Both prose files promise the ready-to-run command arrives in SessionStart context. Without
   // the runner the orchestrator hand-rolls a merge-base loop, which is the drift this replaces.
-  assertStringIncludes(hook, "scripts/branch-diff");
-  assertStringIncludes(hook, "branch_diff_runner_escaped");
-  assertStringIncludes(hook, "${branch_diff_runner_escaped}");
+  assertStringIncludes(hook, "scripts/run/resolve-branch-delta");
+  assertStringIncludes(hook, "branch_delta_runner_escaped");
+  assertStringIncludes(hook, "${branch_delta_runner_escaped}");
   // The routing signal itself has to reach the agent, not just the command.
   assertStringIncludes(hook, "delta_empty");
 });
 
-Deno.test("assessment-path: emits an instruction and anchors on the git repo root", async () => {
+Deno.test("session-start: injects the validator runner the after-every-write rule needs", async () => {
+  const hook = await Deno.readTextFile(SESSION_START);
+  assertStringIncludes(hook, "scripts/run/validate-assessment");
+  assertStringIncludes(hook, "validate_runner_escaped");
+  assertStringIncludes(hook, "${validate_runner_escaped}");
+  // The rule travels with the command: mid-run mode, and who runs it for the workers.
+  assertStringIncludes(hook, "--lenient");
+  assertStringIncludes(hook, "workers hold no shell");
+});
+
+Deno.test("mint-assessment-path: emits an instruction and anchors on the git repo root", async () => {
   const script = await Deno.readTextFile(PATH_SCRIPT);
   // The minting logic (JSON emission included) now lives in the shared mint-path.sh, which
-  // both assessment-path and rules-path source; the thin script just labels + dispatches.
+  // both mint-assessment-path and mint-rules-path source; the thin script just labels + dispatches.
   assertStringIncludes(script, "lib/project-root.sh");
   assertStringIncludes(script, "lib/mint-path.sh");
   assertStringIncludes(script, "mint_dispatch assessment usage");
@@ -339,7 +351,7 @@ Deno.test("assessment-path: emits an instruction and anchors on the git repo roo
   // The label-parameterized JSON keeps the assessment field names byte-identical.
   assertStringIncludes(lib, '"%s_abs":"%s"');
   // Root resolution lives in project-root.sh; the anchoring is covered end-to-end by the
-  // "run from a subdirectory" cases in tests/hooks/assessment-path.test.ts.
+  // "run from a subdirectory" cases in tests/hooks/mint-assessment-path.test.ts.
   assertStringIncludes(await Deno.readTextFile(PROJECT_ROOT_LIB), "rev-parse --show-toplevel");
 });
 
@@ -353,25 +365,45 @@ Deno.test("assessment-path: emits an instruction and anchors on the git repo roo
  * guards exist to catch would walk straight through.
  */
 async function sourcesLib(script: string, lib: string): Promise<boolean> {
-  const source = new RegExp(String.raw`^(?:if !\s+)?\.\s+\S*lib/${lib}\.sh`, "m");
+  const source = new RegExp(String.raw`^(?:if !\s+)?\.\s+\S*${lib}\.sh`, "m");
   return source.test(await Deno.readTextFile(script));
 }
 
 Deno.test("project-root.sh: is sourced by every script that resolves the project root", async () => {
   // The lib exists to keep every one of these in lockstep — a copy drifting back into any of
-  // them is the regression this guards. Both hosts' allow-hooks are in the list: they resolve
-  // the project root exactly like the scripts do.
-  for (const script of [PATH_SCRIPT, ENSURE_DIR, ALLOW_HOOK, CODEX_ALLOW_HOOK]) {
-    assertEquals(await sourcesLib(script, "project-root"), true, `${script} must source the lib`);
+  // them is the regression this guards. Both hosts' auto-approve hooks are in the list: they
+  // resolve the project root exactly like the scripts do.
+  for (const script of [PATH_SCRIPT, ENSURE_DIR, WRITE_HOOK, CODEX_WRITE_HOOK]) {
+    assertEquals(
+      await sourcesLib(script, "lib/project-root"),
+      true,
+      `${script} must source the lib`,
+    );
   }
 });
 
-Deno.test("assessment-write.sh: is sourced by both allow-hooks", async () => {
+Deno.test("allow-write-check.sh: is sourced by both hooks of the WRITE grant", async () => {
   // The grant itself — the assessment naming and the folder containment check — lives in this
   // one lib so the two hosts cannot drift apart on what they auto-approve. A hook that inlined
   // its own check would pass every other test in this file.
-  for (const hook of [ALLOW_HOOK, CODEX_ALLOW_HOOK]) {
-    assertEquals(await sourcesLib(hook, "assessment-write"), true, `${hook} must source the lib`);
+  for (const hook of [WRITE_HOOK, CODEX_WRITE_HOOK]) {
+    assertEquals(
+      await sourcesLib(hook, "write/lib/allow-write-check"),
+      true,
+      `${hook} must source the lib`,
+    );
+  }
+});
+
+Deno.test("allow-run-check.sh: is sourced by both hooks of the RUN grant", async () => {
+  // The RUN grant's twin of the guard above: the allowlist and the command parsing live in one
+  // lib, so the two hosts cannot drift apart on which commands they auto-approve.
+  for (const hook of [RUN_HOOK, CODEX_RUN_HOOK]) {
+    assertEquals(
+      await sourcesLib(hook, "run/lib/allow-run-check"),
+      true,
+      `${hook} must source the lib`,
+    );
   }
 });
 
@@ -387,7 +419,7 @@ Deno.test("hook.json: valid JSON configuring a SessionStart hook", async () => {
 });
 
 Deno.test("hook.json: both platforms pass their host token to session-start", async () => {
-  // session-start needs the host so it can inject a host-correct assessment-path command.
+  // session-start needs the host so it can inject a host-correct mint-assessment-path command.
   const claude = JSON.stringify(JSON.parse(await Deno.readTextFile(HOOK_JSON)));
   const codex = JSON.stringify(JSON.parse(await Deno.readTextFile(CODEX_HOOK_JSON)));
   assertStringIncludes(claude, "start/session-start claude");
@@ -404,7 +436,7 @@ Deno.test("hook.json: Claude registers the PreToolUse auto-approve hook", async 
   const pre = hook.hooks?.PreToolUse;
   assertEquals(Array.isArray(pre), true, "PreToolUse must be registered");
   const serialized = JSON.stringify(pre);
-  assertStringIncludes(serialized, "claude/allow-assessment-write");
+  assertStringIncludes(serialized, "claude/allow-write-assessment");
   // The matcher must cover every file-editing tool the hook itself accepts.
   for (const tool of ["Write", "Edit", "MultiEdit", "NotebookEdit"]) {
     assertStringIncludes(serialized, tool);
@@ -418,7 +450,7 @@ Deno.test("hook.json: Codex registers the PermissionRequest auto-approve hook", 
   const request = hook.hooks?.PermissionRequest;
   assertEquals(Array.isArray(request), true, "PermissionRequest must be registered");
   const serialized = JSON.stringify(request);
-  assertStringIncludes(serialized, "codex/allow-assessment-write");
+  assertStringIncludes(serialized, "codex/allow-write-assessment");
   // The matcher must cover every tool name the hook itself accepts. Codex reports
   // `apply_patch`; Edit and Write are its documented aliases for the same tool.
   for (const tool of ["apply_patch", "Edit", "Write"]) {
@@ -426,15 +458,15 @@ Deno.test("hook.json: Codex registers the PermissionRequest auto-approve hook", 
   }
 });
 
-Deno.test("allow-assessment-write: both hooks only ever allow, never deny", async () => {
+Deno.test("allow-write-assessment: both hooks only ever allow, never deny", async () => {
   // The hooks' core safety property, asserted on the sources themselves: they can remove a
   // permission prompt but must never introduce a block. A "deny" verdict appearing here
   // would mean the plugin can silently veto a user's edit.
-  const claude = await Deno.readTextFile(ALLOW_HOOK);
+  const claude = await Deno.readTextFile(WRITE_HOOK);
   assertStringIncludes(claude, '"permissionDecision":"allow"');
   assertEquals(claude.includes('"permissionDecision":"deny"'), false);
 
-  const codex = await Deno.readTextFile(CODEX_ALLOW_HOOK);
+  const codex = await Deno.readTextFile(CODEX_WRITE_HOOK);
   assertStringIncludes(codex, '"behavior":"allow"');
   assertEquals(codex.includes('"behavior":"deny"'), false);
   // Only additive patch verbs are approved: a delete or a move is outside the grant.
@@ -442,7 +474,7 @@ Deno.test("allow-assessment-write: both hooks only ever allow, never deny", asyn
 
   // Both hosts get their grant from the same shared test, so they cannot drift apart on it:
   // the minter's naming, directly inside the assessment folder.
-  const lib = await Deno.readTextFile(ALLOW_LIB);
+  const lib = await Deno.readTextFile(WRITE_LIB);
   assertStringIncludes(lib, "assessment*.md");
   assertStringIncludes(lib, "/.ingrain-security");
 });

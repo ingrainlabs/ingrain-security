@@ -12,8 +12,8 @@ and the selected threats before mitigations exist. Follow this structure exactly
 
 - **Path.** A single file written directly into `.ingrain-security/` at the project root, a
   **sibling of the assessment file**. Nobody hand-builds it: the orchestrator (in Development
-  at the retrieval step, or in the verification pass) runs the bundled
-  `scripts/rules-path` script (`mint` subcommand) and uses its **`rules_abs`** — the absolute
+  at the retrieval step, or in the verification pass) runs the plugin's
+  `scripts/run/mint-rules-path` script (`mint` subcommand) and uses its **`rules_abs`** — the absolute
   path — as the write/read target, passing that same absolute path to every worker that reads
   or appends to it; the relative `rules_path` is a display form for prose and
   links only. The name is deterministic in the branch + task, keyed by the **same slug** as
@@ -37,7 +37,7 @@ and the selected threats before mitigations exist. Follow this structure exactly
   deleted at finalize, this file survives it — so the Testing verification pass (which runs
   in a later session) can re-mint the path and read the rule descriptions. It is
   **git-ignored** (the folder self-ignores), so it stays uncommitted.
-- **Pre-approved for writing.** The `allow-assessment-write` hook auto-approves writes to
+- **Pre-approved for writing.** The `allow-write-assessment` hook auto-approves writes to
   `rules*.md` directly inside `.ingrain-security/` (the same grant that covers `assessment*.md`),
   so expect **no permission prompt** when writing it. Any other path still prompts. In
   **plan mode** the write is held for the user's approval all the same: ask them to allow
@@ -96,7 +96,7 @@ Only the rule **titles** it records reach the user, at Gate 2; the file itself s
 
 ## Maintenance
 
-To locate this file, re-run the `rules-path` mint command from the
+To locate this file, re-run the `mint-rules-path` mint command from the
 `INGRAIN-ASSESSMENT-PATHS` session context and use the absolute `rules_abs` it returns — it
 resolves back to this same file (deterministic in branch + title). The mint is what resolves
 the path and ensures the folder, so `rules_abs` is ready to write to as it comes back.

@@ -1,23 +1,13 @@
-# Shared path-minter for the ingrain-security plugin.
+# The path-minting shared by run/mint-assessment-path (label: assessment) and
+# run/mint-rules-path (label: rules). They differ ONLY in that label, which drives the filename
+# lead, the JSON field prefix, the diagnostic token and the `instruction` string — so the logic
+# lives here and cannot drift.
 #
-# The dialect is declared here rather than by a shebang, because this file is sourced,
-# not executed — ShellCheck has no other way to know it is bash.
+# Declares its dialect here because it is sourced, not executed.
 # shellcheck shell=bash
 #
-# Sourced — never executed. Sets no shell options: every caller runs `set -uo pipefail`
-# WITHOUT `-e` on purpose (git lookups on a non-git or detached-HEAD checkout must degrade
-# to an empty result, not abort), and sourcing must not change that. Requires two siblings
-# to be sourced first: project-root.sh (resolve_project_root, resolve_branch, seed_gitignore,
-# escape_for_json) and artifact-template.sh (seed_artifact_template).
-#
-# Sourced by:
-#   skills/ingrain-security/scripts/assessment-path   (label: assessment)
-#   skills/ingrain-security/scripts/rules-path        (label: rules)
-#
-# The two minters differ ONLY in their `label` (assessment | rules), which drives the
-# filename lead, the JSON field prefix, the diagnostic program token, and the `instruction`
-# string. Both write a deterministic `.ingrain-security/<label>-<branch-slug>-<task-slug>.md`
-# path — twin sidecars in one folder — so the logic lives here and cannot drift.
+# Sets no shell options; needs ../../lib/project-root.sh sourced first (resolve_project_root,
+# resolve_branch, seed_gitignore, escape_for_json).
 
 # Slugify: lowercase, reduce every disallowed char to `-`, collapse `-` runs, trim.
 # So `feature/foo` -> `feature-foo`, `Feature/Foo Bar` -> `feature-foo-bar`.
@@ -45,18 +35,18 @@ mint_path() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --title)
-                [ $# -ge 2 ] || { printf '%s-path: --title needs a value\n' "${label}" >&2; return 2; }
+                [ $# -ge 2 ] || { printf 'mint-%s-path: --title needs a value\n' "${label}" >&2; return 2; }
                 title="$2"
                 shift 2
                 ;;
             --branch-slug)
-                [ $# -ge 2 ] || { printf '%s-path: --branch-slug needs a value\n' "${label}" >&2; return 2; }
+                [ $# -ge 2 ] || { printf 'mint-%s-path: --branch-slug needs a value\n' "${label}" >&2; return 2; }
                 slug_flag="$2"
                 have_slug="true"
                 shift 2
                 ;;
             *)
-                printf '%s-path: unknown mint flag "%s"\n' "${label}" "$1" >&2
+                printf 'mint-%s-path: unknown mint flag "%s"\n' "${label}" "$1" >&2
                 return 2
                 ;;
         esac
@@ -64,11 +54,11 @@ mint_path() {
 
     local project_root
     project_root="$(resolve_project_root "${host}")"
-    [ -n "${project_root}" ] || { printf '%s-path: could not resolve project root\n' "${label}" >&2; return 1; }
+    [ -n "${project_root}" ] || { printf 'mint-%s-path: could not resolve project root\n' "${label}" >&2; return 1; }
 
     local host_slug
     host_slug="$(slugify "${host}")"
-    [ -n "${host_slug}" ] || { printf '%s-path: invalid host token "%s"\n' "${label}" "${host}" >&2; return 2; }
+    [ -n "${host_slug}" ] || { printf 'mint-%s-path: invalid host token "%s"\n' "${label}" "${host}" >&2; return 2; }
 
     # Reuse the caller's already-resolved slug when given; otherwise resolve from git.
     local branch branch_slug
@@ -91,11 +81,11 @@ mint_path() {
     # the tree (same guard as ensure-assessment-dir). Then ensure the folder and its
     # self-ignoring .gitignore exist before the agent writes the file.
     if [ -L "${project_root}/${target_dir}" ]; then
-        printf '%s-path: %s is a symlink; refusing\n' "${label}" "${target_dir}" >&2
+        printf 'mint-%s-path: %s is a symlink; refusing\n' "${label}" "${target_dir}" >&2
         return 1
     fi
     mkdir -p "${project_root}/${target_dir}" 2>/dev/null \
-        || { printf '%s-path: could not create %s\n' "${label}" "${target_dir}" >&2; return 1; }
+        || { printf 'mint-%s-path: could not create %s\n' "${label}" "${target_dir}" >&2; return 1; }
     seed_gitignore "${project_root}/${target_dir}"
 
     local name="${label}"
@@ -165,7 +155,7 @@ mint_dispatch() {
             return 0
             ;;
         "")
-            printf '%s-path: missing <host>. Try --help.\n' "${label}" >&2
+            printf 'mint-%s-path: missing <host>. Try --help.\n' "${label}" >&2
             return 2
             ;;
     esac
@@ -174,11 +164,11 @@ mint_dispatch() {
     case "${subcommand}" in
         mint) shift 2; mint_path "${host}" "${label}" "$@" ;;
         "")
-            printf '%s-path: missing subcommand (mint). Try --help.\n' "${label}" >&2
+            printf 'mint-%s-path: missing subcommand (mint). Try --help.\n' "${label}" >&2
             return 2
             ;;
         *)
-            printf '%s-path: unknown subcommand "%s" (mint). Try --help.\n' "${label}" "${subcommand}" >&2
+            printf 'mint-%s-path: unknown subcommand "%s" (mint). Try --help.\n' "${label}" "${subcommand}" >&2
             return 2
             ;;
     esac

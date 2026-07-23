@@ -1,4 +1,4 @@
-# Branch diff reference
+# Branch delta reference
 
 The **branch delta** is everything this branch added since it diverged from the branch it was
 cut from — **committed and uncommitted alike**. It is what Phase select routes on and what
@@ -16,13 +16,13 @@ cut from other feature branches, release branches, and long-lived integration br
 parent is whatever branch this one was actually cut from — which is what the script works out. Sharing one resolver is what keeps
 Phase select and the review agreed on what is under test.
 
-The bundled **`scripts/branch-diff`** script resolves it: it takes every other local and remote
+The plugin's **`scripts/run/resolve-branch-delta`** script resolves it: it takes every other local and remote
 branch, computes its merge-base with `HEAD`, discards any whose merge-base *is* `HEAD` (those
 contain no divergence), and keeps the merge-base with the **most recent commit date** — the
 nearest branch point. Your SessionStart context carries the ready-to-run command; it is
 read-only, touching git state alone:
 
-    bash <plugin>/skills/ingrain-security/scripts/branch-diff <host>
+    bash <plugin>/skills/ingrain-security/scripts/run/resolve-branch-delta <host>
 
 Where two refs tie on the same merge-base commit the script prefers the local branch name;
 they yield an identical `diff_ref` either way.

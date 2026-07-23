@@ -1,65 +1,17 @@
 #!/usr/bin/env bash
-# Branch-delta resolver for the ingrain-security plugin — third sibling to the two minters.
+# Branch-delta resolver: the review's DIFF BASIS, from one read-only git query. Phase select
+# reads `delta_empty`, Testing reads `base_ref` + `diff_ref`; both must agree, which is why
+# this is one script and not two prose procedures. Emits ONE JSON object on stdout,
+# diagnostics to stderr, and writes nothing. Usage, output and exit codes: --help.
 #
-# Single source of truth for the review's DIFF BASIS, so no agent hand-rolls a merge-base
-# loop in prose. It answers two questions with one read-only git query:
+# `<host>` selects project-root resolution, and here that is correctness: every git call runs
+# `git -C "<project_root>"`, so a cwd inside a vendored NESTED repo cannot resolve a fork point
+# for one repository while the assessment describes another.
 #
-#   1. Phase select (SKILL.md): is there any code on this branch to verify? -> `delta_empty`
-#   2. Testing (verification-pass.md): what do I diff against? -> `base_ref` + `diff_ref`
-#
-# Both callers must agree, which is exactly why this is one script and not two prose
-# procedures: a gate that tests the working tree while the review reads the branch diff
-# sends a fully-COMMITTED implementation to the plan review, where none of it is verified.
-#
-# Emits ONE JSON object on stdout; diagnostics go to stderr. It is READ-ONLY: it resolves,
-# reports, and writes nothing — no file, no folder, no git state.
-#
-# Usage:
-#   branch-diff <host> [resolve]
-#   branch-diff --help
-#
-#   <host>  the host's config dotfolder base name — "claude" (Claude Code), "codex"
-#           (Codex), or any future coding agent's token. It selects project-root
-#           resolution only, exactly like the minters — but here that is a correctness
-#           requirement, not symmetry: every git call runs `git -C "<project_root>"`, so a
-#           cwd inside a vendored NESTED repo cannot resolve a fork point for one
-#           repository while the assessment file describes another.
-#
-#   The subcommand defaults to `resolve` when omitted, unlike the minters' required
-#   `mint`. There is only one thing this script can do, and an exit-2 on the bare
-#   `branch-diff <host>` form would be a failure mode with nothing behind it.
-#
-# THE FORK POINT. The parent branch is never assumed to be `main` — branches are routinely
-# cut from other feature, release or integration branches. We take every other local and
-# remote branch, compute its merge-base with HEAD, discard any whose merge-base IS HEAD
-# (those carry no divergence), and keep the merge-base with the most recent commit date —
-# the nearest branch point. Where two refs tie on the same merge-base commit, `refs/heads`
-# is emitted before `refs/remotes` and the sort is STABLE, so the local branch name wins
-# and `base_ref` is reproducible; `diff_ref` is identical either way.
-#
-# THE FALLBACK. When no fork point resolves — a detached HEAD, a repo with no other branch,
-# a shallow clone whose history is too truncated for merge-base, a freshly cut branch with
-# no commits yet — `diff_ref` becomes HEAD and only the uncommitted delta is visible. The
-# `reason` field names which case it was, because they are NOT equivalent: `no-divergence`
-# (a branch cut moments ago) means HEAD captures everything and the review is COMPLETE,
-# while the others mean the review is genuinely narrower than intended and the report must
-# say so.
-#
-# ORDERING NOTE — load-bearing and not obvious. Phase select mints the assessment file
-# BEFORE it runs this script. That is only safe because `.ingrain-security/` self-ignores
-# (its .gitignore is a bare `*`, which matches the ignore file too — see
-# lib/project-root.sh seed_gitignore). The mint therefore cannot flip `uncommitted` to
-# true and manufacture a phantom Testing route out of the skill's own bookkeeping.
-#
-# Exit codes: 0 ok · 2 usage error (bad host/subcommand) · 1 runtime error.
-#
-# Every DEGRADED case still exits 0 with a complete JSON object — a non-git directory, an
-# empty repo, a detached HEAD. Callers route on `fallback`/`reason`, never on a status code.
-#
-# Bundled with the skill and run directly by the orchestrator (which already has a bash
-# shell — the ready-to-run command, with plugin root + host substituted, is injected by the
-# session-start hook). Uses `set -uo pipefail` WITHOUT `-e`: merge-base, show, rev-list and
-# rev-parse all fail routinely on precisely the checkouts this script exists to survive.
+# Every DEGRADED case still exits 0 with a complete JSON object — a non-git directory, an empty
+# repo, a detached HEAD. Callers route on `fallback`/`reason`, never on a status code.
+# `set -uo pipefail` WITHOUT `-e`: merge-base, show, rev-list and rev-parse all fail routinely
+# on precisely the checkouts this script exists to survive.
 
 set -uo pipefail
 
@@ -68,8 +20,8 @@ usage() {
 Resolve the ingrain-security branch delta and diff basis. Prints one JSON object to stdout.
 
 Usage:
-  branch-diff <host> [resolve]
-  branch-diff --help
+  resolve-branch-delta <host> [resolve]
+  resolve-branch-delta --help
 
 Arguments:
   <host>              config dotfolder base name: claude | codex | <future token>
@@ -99,9 +51,9 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # resolve_project_root, resolve_branch and escape_for_json live in project-root.sh. The
 # minters' lib is deliberately NOT sourced: this script mints nothing and creates nothing.
-# shellcheck source=lib/project-root.sh
-if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
-    printf 'branch-diff: cannot load lib/project-root.sh\n' >&2
+# shellcheck source=../lib/project-root.sh
+if ! . "${SCRIPT_DIR}/../lib/project-root.sh" 2>/dev/null; then
+    printf 'resolve-branch-delta: cannot load lib/project-root.sh\n' >&2
     exit 1
 fi
 
@@ -119,6 +71,10 @@ other_refs() {
 
 # Resolve the nearest branch point as a single TAB-separated line: <ct>\t<ref>\t<merge-base>.
 # Echoes empty when nothing qualifies, which is the caller's fallback signal.
+#
+# The parent is never assumed to be `main`: every other ref's merge-base competes and the most
+# recent wins. `other_refs` emits refs/heads before refs/remotes and the sort is STABLE, so a
+# tie resolves to the local branch name and `base_ref` is reproducible.
 #
 # The result is CAPTURED and tested for emptiness rather than checked by exit status: under
 # `pipefail`, `head -1` closing the pipe SIGPIPEs the upstream loop and the pipeline reports
@@ -139,19 +95,30 @@ resolve_fork_point() {
 # --- main -------------------------------------------------------------------------
 
 resolve_delta() {
-    local host="$1" project_root branch head_sha best
+    local host="$1"
+
+    # The RESULT fields, initialized up front because each one is set on some paths only and
+    # read by the final printf on all of them — under `set -u` a later declaration would leave
+    # a degraded case reading an unbound variable instead of its default.
     local base_ref="" diff_ref="HEAD" fallback="true" reason="" shallow="false"
-    local commits_ahead=0 uncommitted="false" delta_empty status_out
-    local diff_command status_command instruction
+    local commits_ahead=0 uncommitted="false"
 
+    local project_root
     project_root="$(resolve_project_root "${host}")"
-    [ -n "${project_root}" ] || { printf 'branch-diff: could not resolve project root\n' >&2; return 1; }
+    [ -n "${project_root}" ] || { printf 'resolve-branch-delta: could not resolve project root\n' >&2; return 1; }
 
+    local branch
     branch="$(resolve_branch "${project_root}")"
 
     # `status --porcelain` answers on any git checkout, including one with no commits at
     # all (untracked files still show), so it is read before the HEAD guard below.
+    #
+    # Phase select mints the assessment file BEFORE running this script. That is only safe
+    # because `.ingrain-security/` self-ignores (a bare `*`, matching the ignore file too —
+    # lib/project-root.sh seed_gitignore), so the mint cannot flip `uncommitted` to true and
+    # manufacture a Testing route out of the skill's own bookkeeping.
     if git -C "${project_root}" rev-parse --git-dir >/dev/null 2>&1; then
+        local status_out
         status_out="$(git -C "${project_root}" status --porcelain 2>/dev/null)"
         [ -n "${status_out}" ] && uncommitted="true"
         [ "$(git -C "${project_root}" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ] \
@@ -163,10 +130,12 @@ resolve_delta() {
     if [ -z "${reason}" ]; then
         # An empty repo fails rev-parse/show/rev-list alike; guard once here rather than
         # letting three calls degrade separately into a half-populated result.
+        local head_sha
         if ! head_sha="$(git -C "${project_root}" rev-parse --verify HEAD 2>/dev/null)" \
             || [ -z "${head_sha}" ]; then
             reason="no-commits"
         else
+            local best
             best="$(resolve_fork_point "${project_root}" "${branch}" "${head_sha}")"
             if [ -n "${best}" ]; then
                 base_ref="$(printf '%s' "${best}" | cut -f2)"
@@ -185,19 +154,21 @@ resolve_delta() {
         fi
     fi
 
+    local delta_empty
     if [ "${commits_ahead}" -eq 0 ] && [ "${uncommitted}" = "false" ]; then
         delta_empty="true"
     else
         delta_empty="false"
     fi
 
-    diff_command="git -C \"${project_root}\" diff ${diff_ref}"
-    status_command="git -C \"${project_root}\" status --porcelain"
+    local diff_command="git -C \"${project_root}\" diff ${diff_ref}"
+    local status_command="git -C \"${project_root}\" status --porcelain"
 
     # Carried in the JSON so the refs and the rule governing them arrive together, in the
     # same tool result, at the moment the agent is about to dispatch its verifiers. Same
     # reasoning as the minters' instruction field: a static sentence read thousands of
     # tokens earlier gets lost.
+    local instruction
     if [ "${delta_empty}" = "true" ]; then
         instruction="This branch has no delta to verify: no commits since ${diff_ref} and a clean working tree. Phase select routes this to Development (there is no code for this task yet); Testing stops and reports \"no changes to verify\"."
     elif [ "${fallback}" = "true" ] && [ "${reason}" = "no-divergence" ]; then
@@ -231,7 +202,7 @@ case "${1:-}" in
         exit 0
         ;;
     "")
-        printf 'branch-diff: missing <host>. Try --help.\n' >&2
+        printf 'resolve-branch-delta: missing <host>. Try --help.\n' >&2
         exit 2
         ;;
 esac
@@ -240,13 +211,13 @@ host="$1"
 case "${2:-resolve}" in
     resolve) ;;
     *)
-        printf 'branch-diff: unknown subcommand "%s" (resolve). Try --help.\n' "$2" >&2
+        printf 'resolve-branch-delta: unknown subcommand "%s" (resolve). Try --help.\n' "$2" >&2
         exit 2
         ;;
 esac
 
 # The minters validate the host token via slugify; here it is only ever a JSON field and a
 # selector for resolve_project_root, so an empty token is the one thing worth rejecting.
-[ -n "${host}" ] || { printf 'branch-diff: empty <host>. Try --help.\n' >&2; exit 2; }
+[ -n "${host}" ] || { printf 'resolve-branch-delta: empty <host>. Try --help.\n' >&2; exit 2; }
 
 resolve_delta "${host}"
