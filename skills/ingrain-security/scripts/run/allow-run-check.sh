@@ -8,7 +8,9 @@
 # shellcheck shell=bash
 #
 # Sourced by hooks/claude/allow-run-script (PreToolUse) and hooks/codex/allow-run-script
-# (PermissionRequest). Sets no shell options. Needs, sourced first:
+# (PermissionRequest). Sets no shell options, and is errexit-safe: both hooks run `set -e` and
+# call these predicates bare, so a "no" must be a `return 1`, never a failing command left in
+# statement position. Needs, sourced first:
 #   ../lib/hook-input.sh   extract_string_array
 #   ../lib/path.sh         physical_dir, absolutize
 #
@@ -88,7 +90,9 @@ tokenize_command() {
     done
 
     [ "${state}" = "plain" ] || return 1
-    [ "${started}" -eq 1 ] && COMMAND_TOKENS+=("${token}")
+    if [ "${started}" -eq 1 ]; then
+        COMMAND_TOKENS+=("${token}")
+    fi
     [ "${#COMMAND_TOKENS[@]}" -gt 0 ]
 }
 
@@ -131,7 +135,9 @@ is_allowed_run_argv() {
     [ -n "${parent}" ] || return 1
     [ "${parent}" = "${run_dir}" ] || return 1
 
-    [ -L "${parent}/${base}" ] && return 1
+    if [ -L "${parent}/${base}" ]; then
+        return 1
+    fi
     [ -f "${parent}/${base}" ]
 }
 
@@ -141,7 +147,9 @@ is_allowed_run_command() {
     local run_dir="$1" cwd="$2" command="$3"
 
     [ -n "${command}" ] || return 1
-    has_unexpected_char "${command}" && return 1
+    if has_unexpected_char "${command}"; then
+        return 1
+    fi
     tokenize_command "${command}" || return 1
     is_allowed_run_argv "${run_dir}" "${cwd}" "${COMMAND_TOKENS[@]}"
 }
@@ -159,8 +167,10 @@ is_allowed_run_exec() {
             bash | sh | bash.exe | sh.exe)
                 case "$2" in
                     -*c)
-                        is_allowed_run_command "${run_dir}" "${cwd}" "$3"
-                        return
+                        if is_allowed_run_command "${run_dir}" "${cwd}" "$3"; then
+                            return 0
+                        fi
+                        return 1
                         ;;
                 esac
                 ;;

@@ -6,7 +6,9 @@
 # Sourced by hooks/claude/allow-write-assessment (PreToolUse) and hooks/codex/allow-write-assessment
 # (PermissionRequest) — Claude names the target in `tool_input.file_path`, Codex in an
 # apply_patch envelope; everything downstream of that difference lives here so the two hosts
-# cannot drift. Sets no shell options. Needs, sourced first:
+# cannot drift. Sets no shell options, and is errexit-safe: both hooks run `set -e` and call
+# these predicates bare, so a "no" must be a `return 1`, never a failing command left in
+# statement position. Needs, sourced first:
 #   ../lib/project-root.sh   resolve_project_root
 #   ../lib/hook-input.sh     extract_string
 #   ../lib/path.sh           physical_dir, absolutize
@@ -20,7 +22,9 @@
 canonical_assessment_dir() {
     local dir
     dir="$(resolve_project_root "$1")/.ingrain-security"
-    [ -L "${dir}" ] && return 1
+    if [ -L "${dir}" ]; then
+        return 1
+    fi
     physical_dir "${dir}"
 }
 
@@ -52,6 +56,8 @@ is_allowed_write_target() {
         *) return 1 ;;
     esac
 
-    [ -L "${canon_parent}/${base}" ] && return 1
+    if [ -L "${canon_parent}/${base}" ]; then
+        return 1
+    fi
     return 0
 }

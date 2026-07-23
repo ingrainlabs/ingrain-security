@@ -8,21 +8,24 @@
 # Emits NOTHING on stdout: SessionStart stdout is injected into the session
 # context, and this hook has no context to add.
 #
-# Unlike sibling hooks this uses `set -uo pipefail` WITHOUT `-e`: a failed write
-# (a permission error, or a refused symlink target) must never abort the user's
-# session. Every write is guarded and the script always reaches `exit 0`.
-#
 # Shared by both platforms; registered in hooks/claude/hook.json and
 # hooks/codex/hook.json and dispatched through hooks/run-hook.cmd.
 
-set -uo pipefail
+# Stop quietly and exit 0. Installed as the EXIT trap and paired with `set -e`, so any
+# failure below — a missing lib, an unresolvable project root, a refused symlink target, a
+# permission error on a write — is a silent no-op rather than something that aborts the
+# user's session.
+stop_quietly() {
+    exit 0
+}
+trap stop_quietly EXIT
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Project-root resolution and the .gitignore seed are shared with the PreToolUse hook
-# and with scripts/run/mint-assessment-path, alongside which the lib lives. A missing lib is a
-# silent no-op: this hook must never abort the user's session.
+# and with scripts/run/mint-assessment-path, alongside which the lib lives.
 # shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
-. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null || exit 0
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null
 
 # Seed README.md on first creation only — never clobber a user-edited one.
 # printf (not a heredoc) — documented bash 5.3 heredoc hang.
@@ -32,7 +35,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck disable=SC2016
 seed_readme() {
     local readme="$1/README.md"
-    [ -f "${readme}" ] && return 0
+    if [ -f "${readme}" ]; then
+        return 0
+    fi
     printf '%s\n' \
         '# Threat assessments' \
         '' \
@@ -54,16 +59,18 @@ seed_readme() {
 main() {
     local host="${1:-}" project_root assessment_dir
     project_root="$(resolve_project_root "${host}")"
-    [ -n "${project_root}" ] || return 0
+    [ -n "${project_root}" ]
     assessment_dir="${project_root}/.ingrain-security"
 
     # Never follow a pre-placed symlink at the target — a crafted repo could point
     # it outside the tree. Silent no-op; this hook must not abort the session (M4).
-    [ -L "${assessment_dir}" ] && return 0
+    if [ -L "${assessment_dir}" ]; then
+        return 0
+    fi
 
     # Create the folder on first run.
     if [ ! -d "${assessment_dir}" ]; then
-        mkdir -p "${assessment_dir}" 2>/dev/null || return 0
+        mkdir -p "${assessment_dir}" 2>/dev/null
     fi
 
     seed_readme "${assessment_dir}"
@@ -72,4 +79,3 @@ main() {
 
 # No stdout on purpose (see header).
 main "$@"
-exit 0
