@@ -255,7 +255,7 @@ produced it, so a mitigation's Robustness always tracks the threats it covers.
 ## Validation — run it after every write
 
 **Every time this file is written, it is checked with the bundled
-`scripts/validate-assessment` script.** No exceptions: after the orchestrator opens it, after
+`scripts/run/validate-assessment` script.** No exceptions: after the orchestrator opens it, after
 each worker returns from writing its section, after a gate's `Selection` is recorded, and at
 finalize. The next reader is a different agent in a different context — a malformed entry is
 invisible until it breaks there, and by then the run that produced it is over.
@@ -270,7 +270,7 @@ Run it on the **same absolute path you just wrote to** (`assessment_abs`); the r
 command, with the plugin root already substituted, is in your `INGRAIN-ASSESSMENT-PATHS`
 session context:
 
-    bash <plugin>/skills/ingrain-security/scripts/validate-assessment <assessment_abs> [--lenient]
+    bash <plugin>/skills/ingrain-security/scripts/run/validate-assessment <assessment_abs> [--lenient]
 
 **Pre-approved, like the writes.** An `allow-script-run` hook auto-approves this command on
 both hosts, so expect **no permission prompt** — run it as often as the rule below says. The

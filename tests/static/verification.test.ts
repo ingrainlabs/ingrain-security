@@ -138,12 +138,15 @@ Deno.test("verification-pass.md: validates its one write against the schema, str
   // Testing writes the assessment once, and that write is a FINISHED file — so it runs the
   // validator without --lenient. Losing this leaves the last write of the whole lifecycle
   // unchecked, in the session that hands the file to everyone downstream.
-  assertStringIncludes(md, "scripts/validate-assessment");
+  assertStringIncludes(md, "scripts/run/validate-assessment");
   assertStringIncludes(md, "no `--lenient`");
   // The contract itself belongs to the schema reference; this file points at it.
   assertStringIncludes(md, "references/formatting/assessment-file.md");
   // And the checklist tracks it, like every other step-6 obligation.
-  assertStringIncludes(md, "validated clean by `scripts/validate-assessment` with NO `--lenient`");
+  assertStringIncludes(
+    md,
+    "validated clean by `scripts/run/validate-assessment` with NO `--lenient`",
+  );
 });
 
 Deno.test("verification-pass.md: guards title drift, stays in the Testing phase", async () => {

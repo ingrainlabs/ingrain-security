@@ -167,7 +167,7 @@ Deno.test("assessment-file.md: defines the strict on-disk format and its allowed
   assertStringIncludes(md, "256"); // justification max length
   assertStringIncludes(md, "3–6"); // threat count: soft target, not a hard limit
   // The path is obtained from the bundled path-minting script.
-  assertStringIncludes(md, "scripts/assessment-path");
+  assertStringIncludes(md, "scripts/run/mint-assessment-path");
 });
 
 Deno.test("SKILL.md + assessment-file.md: the assessment file name is keyed by branch + task", async () => {
@@ -206,7 +206,7 @@ Deno.test("ownership: SKILL.md does not restate what assessment-file.md owns", a
 });
 
 /**
- * The validator wiring. `scripts/validate-assessment` checks a written assessment file
+ * The validator wiring. `scripts/run/validate-assessment` checks a written assessment file
  * against the schema its reference file specifies, and the rule is that it runs after EVERY
  * write — so `assessment-file.md` owns the contract (modes, exit codes, the retry bound) and
  * SKILL.md carries only the when. A skill that stops naming it silently goes back to writing
@@ -214,7 +214,7 @@ Deno.test("ownership: SKILL.md does not restate what assessment-file.md owns", a
  */
 Deno.test("validation: assessment-file.md owns the after-every-write contract", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
-  assertStringIncludes(md, "scripts/validate-assessment");
+  assertStringIncludes(md, "scripts/run/validate-assessment");
   // Both modes, and which one belongs to a finished file.
   assertStringIncludes(md, "--lenient");
   assertStringIncludes(md.toLowerCase(), "finalize");
@@ -224,7 +224,7 @@ Deno.test("validation: assessment-file.md owns the after-every-write contract", 
 
 Deno.test("validation: SKILL.md runs it after every write and strictly at finalize", async () => {
   const md = await Deno.readTextFile(SKILL);
-  assertStringIncludes(md, "scripts/validate-assessment");
+  assertStringIncludes(md, "scripts/run/validate-assessment");
   assertStringIncludes(md, "--lenient");
   // The spine points at the owner rather than restating the contract.
   assertStringIncludes(md, "references/formatting/assessment-file.md");

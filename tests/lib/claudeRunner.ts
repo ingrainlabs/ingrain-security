@@ -151,7 +151,7 @@ export const workerDispatchPrompt = async (
 };
 
 /** Path to the bundled assessment-path minter, the single source of truth for the file's name. */
-const MINT_SCRIPT = `${PLUGIN_DIR}/skills/ingrain-security/scripts/assessment-path`;
+const MINT_SCRIPT = `${PLUGIN_DIR}/skills/ingrain-security/scripts/run/mint-assessment-path`;
 
 /**
  * Mint a real assessment file in a throwaway project dir and return both paths.

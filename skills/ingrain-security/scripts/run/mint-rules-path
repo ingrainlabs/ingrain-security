@@ -59,8 +59,8 @@ if ! . "${SCRIPT_DIR}/../lib/project-root.sh" 2>/dev/null; then
     printf 'mint-rules-path: cannot load lib/project-root.sh\n' >&2
     exit 1
 fi
-# shellcheck source=lib/artifact-template.sh
-if ! . "${SCRIPT_DIR}/lib/artifact-template.sh" 2>/dev/null; then
+# shellcheck source=../lib/artifact-template.sh
+if ! . "${SCRIPT_DIR}/../lib/artifact-template.sh" 2>/dev/null; then
     printf 'rules-path: cannot load lib/artifact-template.sh\n' >&2
     exit 1
 fi

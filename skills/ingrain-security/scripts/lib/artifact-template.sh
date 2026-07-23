@@ -8,8 +8,8 @@
 # WITHOUT `-e` on purpose, and sourcing must not change that.
 #
 # Sourced by:
-#   skills/ingrain-security/scripts/assessment-path   (label: assessment)
-#   skills/ingrain-security/scripts/rules-path        (label: rules)
+#   skills/ingrain-security/scripts/run/mint-assessment-path  (label: assessment)
+#   skills/ingrain-security/scripts/run/mint-rules-path       (label: rules)
 #
 # A mint seeds this skeleton into the artifact when the file does not exist yet, so no
 # writer ever starts from a blank page. The skeleton carries ONLY structure — every heading

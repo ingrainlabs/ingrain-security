@@ -135,7 +135,7 @@ This is always on for the live tiers — Deno streams each test's output live (w
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
   `skills/ingrain-security/references/development/<name>.md` body as the system prompt with
   `--allowed-tools Read,Grep,Glob,Write,Edit`. Each case mints a real assessment file in a throwaway
-  project dir (via the bundled `scripts/assessment-path`) and hands the worker that absolute path as
+  project dir (via the bundled `scripts/run/mint-assessment-path`) and hands the worker that absolute path as
   its write target, then asserts the worker actually modified the seeded file and checks the
   output's _shape_ (a verdict keyword, a 0–100 score, risk descending by threat tag, required
   fields) over the return and the file together. Assertions are loose because live output varies.
