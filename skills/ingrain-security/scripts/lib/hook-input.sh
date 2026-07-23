@@ -19,17 +19,21 @@
 # `strings` makes the type explicit: a non-string at the path yields no output and a non-zero
 # exit, not a stringified approximation.
 #
-# Echoes the decoded value; returns non-zero when jq is unavailable, the payload is not
-# valid JSON, or the path holds no string.
+# Echoes the decoded value. Returns non-zero only when jq is unavailable: an invalid payload,
+# an absent path, or a non-string at the path all echo nothing and return zero, so callers
+# must test the result for emptiness rather than the exit status. Every call site does — see
+# the `[ -n … ]` guards in the four hooks, and `is_allowed_run_command` in
+# ../run/lib/allow-run-check.sh for the one that is checked a frame down.
 extract_string() {
     local payload="$1" path="$2"
     command -v jq >/dev/null 2>&1 || return 1
 
-    # `local` on its own line: folding the substitution into it would replace jq's exit
-    # status with `local`'s own, turning a failed extraction into an empty-string success.
-    local value
-    value="$(printf '%s' "${payload}" | jq -e -r "${path} | strings" 2>/dev/null)" || return 1
-    printf '%s' "${value}"
+    # The substitution is folded into `local` deliberately. `local` reports its own exit
+    # status, so the `|| return 1` below never fires and jq's failure surfaces as empty
+    # output instead — the emptiness checks at the call sites carry the defer decision.
+    # shellcheck disable=SC2155
+    local payload="$(printf '%s' "${payload}" | jq -e -r "${path} | strings" 2>/dev/null)" || return 1
+    printf '%s' "${payload}"
 }
 
 # Read a JSON array of strings out of the payload ($1) at jq path ($2) onto PAYLOAD_ARGV,
