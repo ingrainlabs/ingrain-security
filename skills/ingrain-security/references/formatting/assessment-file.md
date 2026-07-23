@@ -37,10 +37,10 @@ shape.
   explicit `git add -f <file>` opt-in.
 - **Seeded with a skeleton.** The same mint **writes this file's empty skeleton** when it does
   not exist yet — every heading in schema order and the field labels of the fixed sections,
-  with **no content**: no example entries, no placeholder values. `## Threats` and
+  as **structure only**: every value left empty, every entry left to the writer. `## Threats` and
   `## Mitigations` are seeded as bare headings, and the worker that fills each writes its
   `### <id> — <title>` entries beneath.
-  So no writer starts from a blank page;
+  So every writer starts from a ready-made page:
   **fill the sections in place** rather than re-creating the page — an existing file is always
   filled as it stands. The skeleton is deliberately valid under `validate-assessment --lenient`
   and invalid strictly, which is what marks an unfilled skeleton apart from a finished

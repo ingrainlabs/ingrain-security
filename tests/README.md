@@ -39,22 +39,9 @@ Run all commands from this `tests/` directory.
 lib/      claudeRunner.ts (spawn helper) · matchers.ts (assertions) · sampleInputs.ts (canned plans) · reporter.ts (input/output printer)
 static/   offline lint of worker-reference frontmatter + advisory ROLE + skill/hook structure (no model calls)
 scripts/  validate-assessment.test.ts — runs the schema validator under bash over valid and one-defect-per-case fixtures (no model calls)
-<<<<<<< HEAD
-<<<<<<< HEAD
-hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)
+hooks/    assessment-hooks.test.ts · assessment-path.test.ts · rules-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts · assessment-write-lib.test.ts · project-root-lib.test.ts — run the hook/path scripts and their shared libs under bash against a throwaway project (no model calls)
 shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
-<<<<<<< HEAD
-=======
-hooks/    assessment-hooks.test.ts — runs the assessment hook scripts under bash against a throwaway project (no model calls)
->>>>>>> e98327b (Add temp file write (#6))
-=======
-hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)
-shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
->>>>>>> b794e31 (tmp logic fix  (#12))
-agents/   agents.test.ts — table-driven live tests, one case per worker (dispatched via its reference file)
-=======
 agents/   agents.test.ts — table-driven live tests, one case per worker scenario (dispatched via its reference file)
->>>>>>> eb54a90 (Test skill  (#14))
 skill/    trigger.test.ts (review starts / minor stops) · orchestration.test.ts (gated)
 ```
 
