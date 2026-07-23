@@ -65,6 +65,8 @@ interface IPathJson {
   assessment_abs: string;
   basename: string;
   file_exists: boolean;
+  template_seeded: boolean;
+  template_only: boolean;
   instruction: string;
 }
 
