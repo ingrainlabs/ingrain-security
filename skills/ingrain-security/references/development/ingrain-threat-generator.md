@@ -23,7 +23,7 @@ description: >-
 >   descriptive fields (Asset, Vector, Description, Assumptions) per the schema in
 >   `references/formatting/assessment-file.md` and leaving every scoring field as `—` — the
 >   risk-scorer fills those, and the orchestrator fills Selection later; most tasks warrant
->   3–6 threats — keep it short and scoped (treat the count as a target). Then return to the
+>   3–6 threats — keep it short and scoped. Then return to the
 >   orchestrator ONLY a one-line headline (e.g. the threat count) plus a pointer to
 >   that section — not the full list.
 
