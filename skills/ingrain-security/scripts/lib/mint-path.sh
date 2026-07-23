@@ -38,12 +38,10 @@ slugify() {
 # skeleton reads as absent, and `template_seeded` / `template_only` say which of the two
 # empty cases this is. Returns 2 on a usage error, 1 on a runtime error, 0 on ok.
 mint_path() {
-    local host="$1" label="$2" host_slug title="" slug_flag="" have_slug="false" project_root
-    local branch branch_slug branch_known task_slug name basename
-    local target_dir path_rel path_abs seed_state file_exists template_seeded template_only
-    local instruction
+    local host="$1" label="$2"
     shift 2
 
+    local title="" slug_flag="" have_slug="false"
     while [ $# -gt 0 ]; do
         case "$1" in
             --title)
@@ -64,13 +62,16 @@ mint_path() {
         esac
     done
 
+    local project_root
     project_root="$(resolve_project_root "${host}")"
     [ -n "${project_root}" ] || { printf '%s-path: could not resolve project root\n' "${label}" >&2; return 1; }
 
+    local host_slug
     host_slug="$(slugify "${host}")"
     [ -n "${host_slug}" ] || { printf '%s-path: invalid host token "%s"\n' "${label}" "${host}" >&2; return 2; }
 
     # Reuse the caller's already-resolved slug when given; otherwise resolve from git.
+    local branch branch_slug
     if [ "${have_slug}" = "true" ]; then
         branch_slug="$(slugify "${slug_flag}")"
         branch=""
@@ -78,11 +79,13 @@ mint_path() {
         branch="$(resolve_branch "${project_root}")"
         branch_slug="$(slugify "${branch}")"
     fi
+    local branch_known
     if [ -n "${branch_slug}" ]; then branch_known="true"; else branch_known="false"; fi
 
+    local task_slug
     task_slug="$(slugify "${title}")"
 
-    target_dir=".ingrain-security"
+    local target_dir=".ingrain-security"
 
     # Never write into a symlinked target — a crafted repo could redirect it outside
     # the tree (same guard as ensure-assessment-dir). Then ensure the folder and its
@@ -95,20 +98,24 @@ mint_path() {
         || { printf '%s-path: could not create %s\n' "${label}" "${target_dir}" >&2; return 1; }
     seed_gitignore "${project_root}/${target_dir}"
 
-    name="${label}"
+    local name="${label}"
     [ "${branch_known}" = "true" ] && name="${name}-${branch_slug}"
     [ -n "${task_slug}" ] && name="${name}-${task_slug}"
-    basename="${name}.md"
-    path_rel="${target_dir}/${basename}"
-    path_abs="${project_root}/${path_rel}"
+    local basename="${name}.md"
+    local path_rel="${target_dir}/${basename}"
+    local path_abs="${project_root}/${path_rel}"
 
     # Seed the empty skeleton so no writer starts from a blank page, and read back what the
     # file actually holds. `file_exists` reports CONTENT, not the inode: an untouched
     # skeleton is reported as absent, so every reader of this field — Phase select, the
     # resume check, the "were org rules retrieved" check — keeps its meaning now that a
     # mint always leaves a file behind.
+    # `local` on its own line: folding the substitution into it would replace the exit
+    # status of seed_artifact_template with `local`'s own, swallowing a failed write.
+    local seed_state
     seed_state="$(seed_artifact_template "${label}" "${title}" "${path_abs}")" \
         || { printf '%s-path: could not write %s\n' "${label}" "${path_abs}" >&2; return 1; }
+    local file_exists template_seeded template_only
     case "${seed_state}" in
         seeded)        file_exists="false" template_seeded="true"  template_only="true"  ;;
         template_only) file_exists="false" template_seeded="false" template_only="true"  ;;
@@ -119,6 +126,7 @@ mint_path() {
     # in the same tool result, at the moment the agent is about to write. A static sentence
     # in SKILL.md is read thousands of tokens earlier and gets lost; this one is unmissable
     # and already has the path substituted in.
+    local instruction
     case "${label}" in
         rules)
             instruction="Write the retrieved org rules ONLY to rules_abs (${path_abs}). That folder is this repository's single .ingrain-security/ directory and it already exists — never create an .ingrain-security/ folder anywhere else, and never resolve the path against the file you happen to be editing. Pass rules_abs verbatim to every Write/Edit call; rules_path is a display-only form for prose and links. The file already holds the correct empty skeleton — fill its sections in place rather than re-creating the page."
