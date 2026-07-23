@@ -66,8 +66,6 @@ if ! . "${SCRIPT_DIR}/lib/validate-md.sh" 2>/dev/null; then
 fi
 
 main() {
-    local path="" lenient="false"
-
     case "${1:-}" in
         -h | --help)
             usage
@@ -79,8 +77,11 @@ main() {
             ;;
     esac
 
-    path="$1"
+    local path="$1"
     shift
+
+    # Set only by the flag below, read after the loop — so it carries its default in.
+    local lenient="false"
     while [ $# -gt 0 ]; do
         case "$1" in
             --lenient)

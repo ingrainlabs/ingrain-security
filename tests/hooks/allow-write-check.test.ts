@@ -1,7 +1,7 @@
 /**
  * Behavioral tests for the path canonicalizers the WRITE grant depends on: `physical_dir` from
  * the shared `scripts/lib/path.sh`, and `canonical_assessment_dir` from the grant's own
- * `scripts/write/allow-write-check.sh` — libraries the allow-write-assessment hooks SOURCE
+ * `scripts/write/lib/allow-write-check.sh` — libraries the allow-write-assessment hooks SOURCE
  * rather than execute. The sibling project-root-lib.test.ts covers
  * normalize_dir/resolve_project_root the same way.
  *
@@ -58,7 +58,7 @@ async function probe(
     . "${LIB}/project-root.sh"
     . "${LIB}/hook-input.sh"
     . "${LIB}/path.sh"
-    . "${SCRIPTS}/write/allow-write-check.sh"
+    . "${SCRIPTS}/write/lib/allow-write-check.sh"
     printf 'BEFORE:%s\\n' "\${PWD}"
     printf 'OUT:'
     ${call}

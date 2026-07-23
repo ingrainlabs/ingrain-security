@@ -25,7 +25,7 @@ const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
 const SESSION_START = `${ROOT}hooks/start/session-start`;
 const WRITE_HOOK = `${ROOT}hooks/claude/allow-write-assessment`;
 const CODEX_WRITE_HOOK = `${ROOT}hooks/codex/allow-write-assessment`;
-const WRITE_LIB = `${ROOT}skills/ingrain-security/scripts/write/allow-write-check.sh`;
+const WRITE_LIB = `${ROOT}skills/ingrain-security/scripts/write/lib/allow-write-check.sh`;
 const RUN_HOOK = `${ROOT}hooks/claude/allow-run-script`;
 const CODEX_RUN_HOOK = `${ROOT}hooks/codex/allow-run-script`;
 const ENSURE_DIR = `${ROOT}hooks/start/ensure-assessment-dir`;
@@ -388,7 +388,7 @@ Deno.test("allow-write-check.sh: is sourced by both hooks of the WRITE grant", a
   // its own check would pass every other test in this file.
   for (const hook of [WRITE_HOOK, CODEX_WRITE_HOOK]) {
     assertEquals(
-      await sourcesLib(hook, "write/allow-write-check"),
+      await sourcesLib(hook, "write/lib/allow-write-check"),
       true,
       `${hook} must source the lib`,
     );
@@ -400,7 +400,7 @@ Deno.test("allow-run-check.sh: is sourced by both hooks of the RUN grant", async
   // lib, so the two hosts cannot drift apart on which commands they auto-approve.
   for (const hook of [RUN_HOOK, CODEX_RUN_HOOK]) {
     assertEquals(
-      await sourcesLib(hook, "run/allow-run-check"),
+      await sourcesLib(hook, "run/lib/allow-run-check"),
       true,
       `${hook} must source the lib`,
     );

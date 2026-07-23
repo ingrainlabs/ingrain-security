@@ -22,8 +22,12 @@
 # Echoes the decoded value; returns non-zero when jq is unavailable, the payload is not
 # valid JSON, or the path holds no string.
 extract_string() {
-    local payload="$1" path="$2" value
+    local payload="$1" path="$2"
     command -v jq >/dev/null 2>&1 || return 1
+
+    # `local` on its own line: folding the substitution into it would replace jq's exit
+    # status with `local`'s own, turning a failed extraction into an empty-string success.
+    local value
     value="$(printf '%s' "${payload}" | jq -e -r "${path} | strings" 2>/dev/null)" || return 1
     printf '%s' "${value}"
 }
@@ -33,14 +37,16 @@ extract_string() {
 # when jq is unavailable, the payload is not valid JSON, or the path holds anything but a
 # non-empty array of strings.
 extract_string_array() {
-    local payload="$1" path="$2" program element
+    local payload="$1" path="$2"
     command -v jq >/dev/null 2>&1 || return 1
 
     # NUL-terminate inside jq and read the stream directly: bash drops NUL bytes from a
     # variable, so a command substitution here would join the arguments into one.
+    local program
     program="${path} | if type == \"array\" and length > 0 and (map(type == \"string\") | all)"
     program="${program} then .[] + \"\\u0000\" else empty end"
 
+    local element
     PAYLOAD_ARGV=()
     while IFS= read -r -d '' element; do
         PAYLOAD_ARGV+=("${element}")

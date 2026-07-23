@@ -9,9 +9,9 @@
 # cannot drift. Sets no shell options, and is errexit-safe: both hooks run `set -e` and call
 # these predicates bare, so a "no" must be a `return 1`, never a failing command left in
 # statement position. Needs, sourced first:
-#   ../lib/project-root.sh   resolve_project_root
-#   ../lib/hook-input.sh     extract_string
-#   ../lib/path.sh           physical_dir, absolutize
+#   ../../lib/project-root.sh   resolve_project_root
+#   ../../lib/hook-input.sh     extract_string
+#   ../../lib/path.sh           physical_dir, absolutize
 #
 # Every function returns non-zero on anything it cannot represent exactly, which both hooks
 # read as "defer" — including when jq is missing.
@@ -43,10 +43,13 @@ canonical_assessment_dir() {
 # and run/mint-rules-path all create the folder — so a parent that cannot be entered is grounds
 # to refuse.
 is_allowed_write_target() {
-    local canon_dir="$1" path="$2" parent base canon_parent
+    local canon_dir="$1" path="$2"
 
+    local parent base
     parent="$(dirname "${path}")"
     base="$(basename "${path}")"
+
+    local canon_parent
     canon_parent="$(physical_dir "${parent}")" || return 1
     [ -n "${canon_parent}" ] || return 1
     [ "${canon_parent}" = "${canon_dir}" ] || return 1

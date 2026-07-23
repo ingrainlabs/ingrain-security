@@ -58,8 +58,8 @@ SCRIPTS="${SCRIPT_DIR}/../../skills/ingrain-security/scripts"
 . "${SCRIPTS}/lib/hook-input.sh" 2>/dev/null
 # shellcheck source=../../skills/ingrain-security/scripts/lib/path.sh
 . "${SCRIPTS}/lib/path.sh" 2>/dev/null
-# shellcheck source=../../skills/ingrain-security/scripts/write/allow-write-check.sh
-. "${SCRIPTS}/write/allow-write-check.sh" 2>/dev/null
+# shellcheck source=../../skills/ingrain-security/scripts/write/lib/allow-write-check.sh
+. "${SCRIPTS}/write/lib/allow-write-check.sh" 2>/dev/null
 
 # Collect the paths an apply_patch command touches, one per line, or return non-zero when
 # the command is anything other than a pure add/update patch.
@@ -73,13 +73,16 @@ SCRIPTS="${SCRIPT_DIR}/../../skills/ingrain-security/scripts"
 # Anything unrecognized is a refusal, not a skip: an envelope verb this hook does not know
 # is exactly the case where it must not be guessing.
 collect_patch_paths() {
-    local patch="$1" line region="prefix" count=0 opener_re
-    local saw_opener=0 terminator="" closed=0
+    local patch="$1"
+
+    # Carried across iterations and read after the loop, so these keep their defaults up front.
+    local region="prefix" count=0 saw_opener=0 terminator="" closed=0
 
     # `apply_patch`, optionally opening a heredoc: `apply_patch <<'EOF'`, `<<-"PATCH"`, …
     # Group 2 captures the delimiter, so the suffix can be held to the one actually opened.
-    opener_re="^apply_patch([[:space:]]+<<-?[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?)?[[:space:]]*\$"
+    local opener_re="^apply_patch([[:space:]]+<<-?[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?)?[[:space:]]*\$"
 
+    local line
     while IFS= read -r line; do
         line="${line%$'\r'}"
 
@@ -143,34 +146,40 @@ collect_patch_paths() {
 }
 
 main() {
-    # Declared apart from their assignments on purpose: `local x="$(cmd)"` reports the status
-    # of `local`, which would hide a failed extraction from errexit.
-    local payload tool patch cwd canon_dir paths path
-
+    # Every `local` below sits on its own line, apart from its assignment: `local x="$(cmd)"`
+    # reports the status of `local`, which would hide a failed extraction from errexit.
+    local payload
     payload="$(cat)"
     [ -n "${payload}" ]
 
     # The hook.json matcher is a convenience filter, not a security boundary — re-check.
     # Codex reports `apply_patch`; Edit / Write are its documented matcher aliases and are
     # accepted in case a future version reports one of them instead.
+    local tool
     tool="$(extract_string "${payload}" ".tool_name")"
     case "${tool}" in
         apply_patch | Edit | Write) ;;
         *) defer ;;
     esac
 
+    local patch
     patch="$(extract_string "${payload}" ".tool_input.command")"
     [ -n "${patch}" ]
 
+    local paths
     paths="$(collect_patch_paths "${patch}")"
     [ -n "${paths}" ]
 
+    local canon_dir
     canon_dir="$(canonical_assessment_dir "codex")"
     [ -n "${canon_dir}" ]
 
     # All-or-nothing: one path outside the grant defers the whole patch.
     # An absent cwd is tolerated, not a defer: absolutize falls back to $PWD.
+    local cwd
     cwd="$(extract_string "${payload}" ".cwd")" || cwd=""
+
+    local path
     while IFS= read -r path; do
         [ -n "${path}" ]
         is_allowed_write_target "${canon_dir}" "$(absolutize "${path}" "${cwd}")"

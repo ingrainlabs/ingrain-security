@@ -57,10 +57,13 @@ seed_readme() {
 }
 
 main() {
-    local host="${1:-}" project_root assessment_dir
+    local host="${1:-}"
+
+    local project_root
     project_root="$(resolve_project_root "${host}")"
     [ -n "${project_root}" ]
-    assessment_dir="${project_root}/.ingrain-security"
+
+    local assessment_dir="${project_root}/.ingrain-security"
 
     # Never follow a pre-placed symlink at the target — a crafted repo could point
     # it outside the tree. Silent no-op; this hook must not abort the session (M4).

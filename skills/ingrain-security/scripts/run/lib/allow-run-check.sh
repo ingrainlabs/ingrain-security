@@ -1,18 +1,19 @@
-# The RUN grant: is this shell command nothing but a bare run of one of the scripts in this
-# folder? Holds the allowlist, the parser that splits an untrusted command into words, and the
-# predicates that answer for each shape a host can present.
+# The RUN grant: is this shell command nothing but a bare run of one of the scripts in the
+# folder above? Holds the allowlist, the parser that splits an untrusted command into words,
+# and the predicates that answer for each shape a host can present.
 #
-# Declares its dialect here because it is sourced, not executed. It sits in `run/` beside the
-# scripts it guards but is NOT one of them: absent from RUNNABLE_SCRIPTS, so
-# `bash run/allow-run-check.sh` defers like any other non-runnable path.
+# Declares its dialect here because it is sourced, not executed — which is why it lives in
+# `run/lib/` with the area's other sourced files rather than one level up among the scripts it
+# guards. It is NOT one of them: absent from RUNNABLE_SCRIPTS, so
+# `bash run/lib/allow-run-check.sh` defers like any other non-runnable path.
 # shellcheck shell=bash
 #
 # Sourced by hooks/claude/allow-run-script (PreToolUse) and hooks/codex/allow-run-script
 # (PermissionRequest). Sets no shell options, and is errexit-safe: both hooks run `set -e` and
 # call these predicates bare, so a "no" must be a `return 1`, never a failing command left in
 # statement position. Needs, sourced first:
-#   ../lib/hook-input.sh   extract_string_array
-#   ../lib/path.sh         physical_dir, absolutize
+#   ../../lib/hook-input.sh   extract_string_array
+#   ../../lib/path.sh         physical_dir, absolutize
 #
 # Every function returns non-zero on anything it cannot represent exactly, which both hooks
 # read as "defer".
@@ -49,11 +50,15 @@ has_unexpected_char() {
 # delimiters. Run has_unexpected_char FIRST, never this alone. Returns non-zero on an
 # unterminated quote or an empty command.
 tokenize_command() {
-    local s="$1" len i ch state="plain" token="" started=0
+    local s="$1"
 
     COMMAND_TOKENS=()
-    len="${#s}"
+    local len="${#s}"
 
+    # Carried across iterations, so declared before the loop rather than inside it.
+    local state="plain" token="" started=0
+
+    local i ch
     for ((i = 0; i < len; i++)); do
         ch="${s:i:1}"
         case "${state}" in
@@ -96,9 +101,9 @@ tokenize_command() {
     [ "${#COMMAND_TOKENS[@]}" -gt 0 ]
 }
 
-# This folder — the plugin's `scripts/run/` — physically resolved from the hook's location
-# ($1 = plugin root). Derived, never hardcoded, so the grant follows the installed copy.
-# The folder IS the boundary: a script qualifies only when its canonical parent is this dir.
+# The folder above this one — the plugin's `scripts/run/` — physically resolved from the hook's
+# location ($1 = plugin root). Derived, never hardcoded, so the grant follows the installed copy.
+# That folder IS the boundary: a script qualifies only when its canonical parent is that dir.
 runnable_scripts_dir() {
     physical_dir "$1/skills/ingrain-security/scripts/run"
 }
@@ -108,7 +113,7 @@ runnable_scripts_dir() {
 # `bash <script> [args…]`; an interpreter flag (`bash -c …`) is refused. The script's
 # canonical parent must EQUAL the run dir, and the name must not be a symlink.
 is_allowed_run_argv() {
-    local run_dir="$1" cwd="$2" script base parent
+    local run_dir="$1" cwd="$2"
     shift 2
 
     [ "$#" -ge 1 ] || return 1
@@ -119,11 +124,12 @@ is_allowed_run_argv() {
             ;;
     esac
 
-    script="$1"
+    local script="$1"
     case "${script}" in
         -*) return 1 ;;
     esac
 
+    local base
     base="$(basename "${script}")"
     case " ${RUNNABLE_SCRIPTS} " in
         *" ${base} "*) ;;
@@ -131,6 +137,8 @@ is_allowed_run_argv() {
     esac
 
     script="$(absolutize "${script}" "${cwd}")"
+
+    local parent
     parent="$(physical_dir "$(dirname "${script}")")" || return 1
     [ -n "${parent}" ] || return 1
     [ "${parent}" = "${run_dir}" ] || return 1

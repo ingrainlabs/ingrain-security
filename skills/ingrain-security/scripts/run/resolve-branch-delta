@@ -95,14 +95,19 @@ resolve_fork_point() {
 # --- main -------------------------------------------------------------------------
 
 resolve_delta() {
-    local host="$1" project_root branch head_sha best
-    local base_ref="" diff_ref="HEAD" fallback="true" reason="" shallow="false"
-    local commits_ahead=0 uncommitted="false" delta_empty status_out
-    local diff_command status_command instruction
+    local host="$1"
 
+    # The RESULT fields, initialized up front because each one is set on some paths only and
+    # read by the final printf on all of them — under `set -u` a later declaration would leave
+    # a degraded case reading an unbound variable instead of its default.
+    local base_ref="" diff_ref="HEAD" fallback="true" reason="" shallow="false"
+    local commits_ahead=0 uncommitted="false"
+
+    local project_root
     project_root="$(resolve_project_root "${host}")"
     [ -n "${project_root}" ] || { printf 'resolve-branch-delta: could not resolve project root\n' >&2; return 1; }
 
+    local branch
     branch="$(resolve_branch "${project_root}")"
 
     # `status --porcelain` answers on any git checkout, including one with no commits at
@@ -113,6 +118,7 @@ resolve_delta() {
     # lib/project-root.sh seed_gitignore), so the mint cannot flip `uncommitted` to true and
     # manufacture a Testing route out of the skill's own bookkeeping.
     if git -C "${project_root}" rev-parse --git-dir >/dev/null 2>&1; then
+        local status_out
         status_out="$(git -C "${project_root}" status --porcelain 2>/dev/null)"
         [ -n "${status_out}" ] && uncommitted="true"
         [ "$(git -C "${project_root}" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ] \
@@ -124,10 +130,12 @@ resolve_delta() {
     if [ -z "${reason}" ]; then
         # An empty repo fails rev-parse/show/rev-list alike; guard once here rather than
         # letting three calls degrade separately into a half-populated result.
+        local head_sha
         if ! head_sha="$(git -C "${project_root}" rev-parse --verify HEAD 2>/dev/null)" \
             || [ -z "${head_sha}" ]; then
             reason="no-commits"
         else
+            local best
             best="$(resolve_fork_point "${project_root}" "${branch}" "${head_sha}")"
             if [ -n "${best}" ]; then
                 base_ref="$(printf '%s' "${best}" | cut -f2)"
@@ -146,19 +154,21 @@ resolve_delta() {
         fi
     fi
 
+    local delta_empty
     if [ "${commits_ahead}" -eq 0 ] && [ "${uncommitted}" = "false" ]; then
         delta_empty="true"
     else
         delta_empty="false"
     fi
 
-    diff_command="git -C \"${project_root}\" diff ${diff_ref}"
-    status_command="git -C \"${project_root}\" status --porcelain"
+    local diff_command="git -C \"${project_root}\" diff ${diff_ref}"
+    local status_command="git -C \"${project_root}\" status --porcelain"
 
     # Carried in the JSON so the refs and the rule governing them arrive together, in the
     # same tool result, at the moment the agent is about to dispatch its verifiers. Same
     # reasoning as the minters' instruction field: a static sentence read thousands of
     # tokens earlier gets lost.
+    local instruction
     if [ "${delta_empty}" = "true" ]; then
         instruction="This branch has no delta to verify: no commits since ${diff_ref} and a clean working tree. Phase select routes this to Development (there is no code for this task yet); Testing stops and reports \"no changes to verify\"."
     elif [ "${fallback}" = "true" ] && [ "${reason}" = "no-divergence" ]; then

@@ -61,9 +61,11 @@ vld_lower() {
 # True when the (already trimmed) value $1 equals one of the remaining arguments,
 # compared case-insensitively.
 vld_in_list() {
-    local value candidate
+    local value
     value="$(vld_lower "$1")"
     shift
+
+    local candidate
     for candidate in "$@"; do
         [ "${value}" = "$(vld_lower "${candidate}")" ] && return 0
     done
@@ -107,8 +109,10 @@ DOC=()
 DOC_COUNT=0
 
 vld_load() {
-    local path="$1" line
+    local path="$1"
     DOC=("")
+
+    local line
     while IFS= read -r line || [ -n "${line}" ]; do
         DOC+=("${line}")
     done < "${path}"
@@ -122,9 +126,10 @@ SEC_TITLES=()
 SEC_STARTS=()
 
 vld_index_sections() {
-    local i title
     SEC_TITLES=()
     SEC_STARTS=()
+
+    local i title
     for ((i = 1; i <= DOC_COUNT; i++)); do
         case "${DOC[i]}" in
             '## '*)
@@ -139,8 +144,10 @@ vld_index_sections() {
 # The index of the section whose heading starts with $1 (case-insensitive), or -1. Prefix
 # matching lets `## Maintenance (for the implementing agent)` answer to `Maintenance`.
 vld_section_index() {
-    local want lower i
+    local want
     want="$(vld_lower "$1")"
+
+    local i lower
     for ((i = 0; i < ${#SEC_TITLES[@]}; i++)); do
         lower="$(vld_lower "${SEC_TITLES[i]}")"
         case "${lower}" in
@@ -157,9 +164,11 @@ vld_section_index() {
 # starts on the line after the heading and ends before the next `##` heading (or at the
 # end of the file).
 vld_section_range() {
-    local idx="$1" start end next
-    start=$((SEC_STARTS[idx] + 1))
-    next=$((idx + 1))
+    local idx="$1"
+    local start=$((SEC_STARTS[idx] + 1))
+    local next=$((idx + 1))
+
+    local end
     if [ "${next}" -lt "${#SEC_STARTS[@]}" ]; then
         end=$((SEC_STARTS[next] - 1))
     else
@@ -172,10 +181,13 @@ vld_section_range() {
 # section names (prefixes).
 vld_check_unknown_sections() {
     local known_list=("$@")
-    local i j lower known matched
+
+    local i lower matched
     for ((i = 0; i < ${#SEC_TITLES[@]}; i++)); do
         lower="$(vld_lower "${SEC_TITLES[i]}")"
         matched="false"
+
+        local j known
         for ((j = 0; j < ${#known_list[@]}; j++)); do
             known="$(vld_lower "${known_list[j]}")"
             case "${lower}" in
@@ -194,7 +206,10 @@ vld_check_unknown_sections() {
 # file as a whole; one out of order is reported on its heading line. `--lenient` waives the
 # missing-section report, holding the sections that ARE present to their order.
 vld_check_required_sections() {
-    local name idx previous=-1 previous_name=""
+    # Carried across iterations — each section is checked against the one before it.
+    local previous=-1 previous_name=""
+
+    local name idx
     for name in "$@"; do
         idx="$(vld_section_index "${name}")"
         if [ "${idx}" -lt 0 ]; then
@@ -218,7 +233,9 @@ VLD_FIELD_LINE=0
 VLD_VALUE=""
 
 vld_field() {
-    local start="$1" end="$2" name="$3" i line
+    local start="$1" end="$2" name="$3"
+
+    local i line
     for ((i = start; i <= end && i <= DOC_COUNT; i++)); do
         line="${DOC[i]}"
         case "${line}" in
@@ -264,11 +281,12 @@ ENTRY_ENDS=()
 # as the id, which then fails the id check. An entry's body runs to the line before the
 # next `###` or to the end of the range.
 vld_index_entries() {
-    local start="$1" end="$2" i text id
+    local start="$1" end="$2"
     ENTRY_IDS=()
     ENTRY_STARTS=()
     ENTRY_ENDS=()
 
+    local i text id
     for ((i = start; i <= end && i <= DOC_COUNT; i++)); do
         case "${DOC[i]}" in
             '### '*)
@@ -296,12 +314,16 @@ vld_index_entries() {
 VLD_SEEN_IDS=""
 
 vld_check_id() {
-    local line="$1" value="$2" prefix="$3" lower_prefix folded
+    local line="$1" value="$2" prefix="$3"
+
+    local lower_prefix
     lower_prefix="$(vld_lower "${prefix}")"
     if ! [[ "${value}" =~ ^[${prefix}${lower_prefix}][0-9]+$ ]]; then
         vld_error "${line}" "id: \"${value}\" is not of the form ${prefix}<n>"
         return 1
     fi
+
+    local folded
     folded="$(vld_lower "${value}")"
     case " ${VLD_SEEN_IDS} " in
         *" ${folded} "*)
@@ -379,13 +401,13 @@ vld_check_first_heading() {
 }
 
 vld_check_task_section() {
-    local idx range start end heading
+    local idx
     idx="$(vld_section_index "Task")"
     [ "${idx}" -lt 0 ] && return 0
+
+    local range
     range="$(vld_section_range "${idx}")"
-    start="${range%% *}"
-    end="${range##* }"
-    heading="${SEC_STARTS[idx]}"
+    local start="${range%% *}" end="${range##* }" heading="${SEC_STARTS[idx]}"
 
     vld_require_field "${start}" "${end}" "Title" "${heading}"
     if vld_require_field "${start}" "${end}" "Latest stage" "${heading}"; then
@@ -394,13 +416,13 @@ vld_check_task_section() {
 }
 
 vld_check_triage_section() {
-    local idx range start end heading
+    local idx
     idx="$(vld_section_index "Triage")"
     [ "${idx}" -lt 0 ] && return 0
+
+    local range
     range="$(vld_section_range "${idx}")"
-    start="${range%% *}"
-    end="${range##* }"
-    heading="${SEC_STARTS[idx]}"
+    local start="${range%% *}" end="${range##* }" heading="${SEC_STARTS[idx]}"
 
     if vld_require_field "${start}" "${end}" "Verdict" "${heading}"; then
         vld_check_enum "${VLD_FIELD_LINE}" "Verdict" "${VLD_VALUE}" minor major
@@ -415,15 +437,15 @@ vld_check_triage_section() {
 VLD_THREAT_TAGS=""
 
 vld_check_threats_section() {
-    local idx range start end heading i entry_start entry_end entry_head
-
     VLD_THREAT_TAGS=""
+
+    local idx
     idx="$(vld_section_index "Threats")"
     [ "${idx}" -lt 0 ] && return 0
+
+    local range
     range="$(vld_section_range "${idx}")"
-    start="${range%% *}"
-    end="${range##* }"
-    heading="${SEC_STARTS[idx]}"
+    local start="${range%% *}" end="${range##* }"
 
     # No entries is legitimate in either mode: a `minor` triage has no threats, and mid-run
     # the heading lands before the worker that fills it.
@@ -431,6 +453,7 @@ vld_check_threats_section() {
     [ "${#ENTRY_STARTS[@]}" -eq 0 ] && return 0
 
     VLD_SEEN_IDS=""
+    local i entry_start entry_end entry_head
     for ((i = 0; i < ${#ENTRY_STARTS[@]}; i++)); do
         entry_head="${ENTRY_STARTS[i]}"
         entry_start=$((entry_head + 1))
@@ -469,13 +492,13 @@ vld_check_threats_section() {
 }
 
 vld_check_risk_score_section() {
-    local idx range start end heading
+    local idx
     idx="$(vld_section_index "Risk score")"
     [ "${idx}" -lt 0 ] && return 0
+
+    local range
     range="$(vld_section_range "${idx}")"
-    start="${range%% *}"
-    end="${range##* }"
-    heading="${SEC_STARTS[idx]}"
+    local start="${range%% *}" end="${range##* }" heading="${SEC_STARTS[idx]}"
 
     # Entry-field checks, not bare vld_require_field: the risk scorer fills this section as
     # it scores the threats, so `—` here means the same "not yet".
@@ -489,9 +512,11 @@ vld_check_risk_score_section() {
 # Check a mitigation's **Threats** field: `—` for a general implementation instruction,
 # else a comma-separated list of ids this file's `## Threats` section declares.
 vld_check_threat_tags() {
-    local line="$1" value="$2" tag folded rest
+    local line="$1" value="$2"
     vld_is_unset "${value}" && return 0
-    rest="${value}"
+
+    local rest="${value}"
+    local tag folded
     while [ -n "${rest}" ]; do
         if [[ "${rest}" == *","* ]]; then
             tag="$(vld_trim "${rest%%,*}")"
@@ -515,9 +540,11 @@ vld_check_threat_tags() {
 
 # Check a **Rule refs** cell: `—`, or a comma-separated list of non-empty ids.
 vld_check_rule_refs() {
-    local line="$1" value="$2" ref rest
+    local line="$1" value="$2"
     vld_is_unset "${value}" && return 0
-    rest="${value}"
+
+    local rest="${value}"
+    local ref
     while [ -n "${rest}" ]; do
         if [[ "${rest}" == *","* ]]; then
             ref="$(vld_trim "${rest%%,*}")"
@@ -532,20 +559,20 @@ vld_check_rule_refs() {
 }
 
 vld_check_mitigations_section() {
-    local idx range start end heading i entry_start entry_end entry_head
-
+    local idx
     idx="$(vld_section_index "Mitigations")"
     [ "${idx}" -lt 0 ] && return 0
+
+    local range
     range="$(vld_section_range "${idx}")"
-    start="${range%% *}"
-    end="${range##* }"
-    heading="${SEC_STARTS[idx]}"
+    local start="${range%% *}" end="${range##* }"
 
     # As in Threats: an empty section is not a defect in either mode.
     vld_index_entries "${start}" "${end}"
     [ "${#ENTRY_STARTS[@]}" -eq 0 ] && return 0
 
     VLD_SEEN_IDS=""
+    local i entry_start entry_end entry_head
     for ((i = 0; i < ${#ENTRY_STARTS[@]}; i++)); do
         entry_head="${ENTRY_STARTS[i]}"
         entry_start=$((entry_head + 1))
@@ -594,11 +621,15 @@ vld_report_stderr() {
 # Print the machine-readable result as ONE JSON object on stdout, the same shape the
 # sibling scripts emit.
 vld_report_json() {
-    local path="$1" valid i
+    local path="$1"
+
+    local valid
     if [ "${#VLD_ERR_LINES[@]}" -eq 0 ]; then valid="true"; else valid="false"; fi
 
     printf '{"path":"%s","lenient":%s,"valid":%s,"error_count":%s,"errors":[' \
         "$(escape_for_json "${path}")" "${VLD_LENIENT}" "${valid}" "${#VLD_ERR_LINES[@]}"
+
+    local i
     for ((i = 0; i < ${#VLD_ERR_LINES[@]}; i++)); do
         [ "${i}" -gt 0 ] && printf ','
         printf '{"line":%s,"message":"%s"}' \

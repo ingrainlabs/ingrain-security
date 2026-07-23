@@ -101,7 +101,9 @@ against the file you are editing, and do not create an \`.ingrain-security/\` fo
 # existing file is never rewritten. $1 label, $2 title, $3 absolute path.
 # Returns 1 when the write fails.
 seed_artifact_template() {
-    local label="$1" title="$2" path="$3" template
+    local label="$1" title="$2" path="$3"
+
+    local template
     template="$(render_artifact_template "${label}" "${title}")"
 
     if [ ! -f "${path}" ]; then
