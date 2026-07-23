@@ -71,7 +71,7 @@ it carries. The relative `assessment_path` is a **display form** only: put it in
 tables and plan-file links; every write target takes the absolute form.
 
 **Change that file with the Edit or Write tool, always** — yours and every worker's alike.
-`allow-assessment-write` pre-approves both for this path, so the change lands with no
+`allow-write-assessment` pre-approves both for this path, so the change lands with no
 permission prompt and the user sees the before/after. Your shell has a different job: it runs
 this plugin's four read-only scripts and the `ingrain` CLI, and it never edits the assessment
 file. Every field is its own line, so almost every change is a one-line Edit; where one is

@@ -64,7 +64,7 @@ pre-approval, and the file's schema — follow that schema exactly. The fields T
 `## Threats` → **Robustness** and `## Mitigations` → **Justification** + **Robustness**, plus
 `## Task` → `Latest stage`.
 
-**Write it with the Edit or Write tool, on `assessment_abs`** — `allow-assessment-write`
+**Write it with the Edit or Write tool, on `assessment_abs`** — `allow-write-assessment`
 pre-approves those for this file, so the write lands with no permission prompt.
 
 **Check the write.** Testing writes this file exactly once, at step 6, and that write is a

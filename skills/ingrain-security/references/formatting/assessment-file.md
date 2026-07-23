@@ -50,7 +50,7 @@ shape.
   what keeps it usable as the Phase-select and resume signal. Two further fields say which
   empty case you are in — `template_seeded` (this mint wrote the skeleton) and
   `template_only` (the file is still an untouched skeleton).
-- **Pre-approved.** An `allow-assessment-write` hook auto-approves writes to this file on
+- **Pre-approved.** An `allow-write-assessment` hook auto-approves writes to this file on
   both hosts — `PreToolUse` on Claude Code, `PermissionRequest` on Codex — so expect **no
   permission prompt** when writing it. The grant covers only `assessment*.md` directly
   inside `.ingrain-security/` — which is exactly `assessment_abs`, and one more reason to
@@ -272,7 +272,7 @@ session context:
 
     bash <plugin>/skills/ingrain-security/scripts/run/validate-assessment <assessment_abs> [--lenient]
 
-**Pre-approved, like the writes.** An `allow-script-run` hook auto-approves this command on
+**Pre-approved, like the writes.** An `allow-run-script` hook auto-approves this command on
 both hosts, so expect **no permission prompt** — run it as often as the rule below says. The
 grant covers a *bare* run of the plugin's own read-only scripts and nothing more: append
 anything to the command (a `;`, a pipe, a redirect) and it prompts again. **Run it exactly as
@@ -298,7 +298,7 @@ correcting what you wrote, so the file earns the pass on its content. If it stil
 after the second attempt, **say so in one line naming the remaining violations** and carry
 on — two attempts is the bound, and saying it out loud is what the check exists to secure.
 **Make every correction with the Edit or Write tool, on `assessment_abs`** — the
-`allow-assessment-write` hook pre-approves those tools for this file on both hosts, so the
+`allow-write-assessment` hook pre-approves those tools for this file on both hosts, so the
 fix lands with no permission prompt.
 
 ## Template

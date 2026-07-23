@@ -39,7 +39,7 @@ command?") straight to the user, so the fetch retries in place.
 
 **Every Development worker is dispatched with exactly five tools: Read, Grep, Glob, Edit and
 Write** — it inspects the plan and repo with the first three, and writes its own section of
-the assessment file with Edit or Write, which `allow-assessment-write` pre-approves for that
+the assessment file with Edit or Write, which `allow-write-assessment` pre-approves for that
 path. It works from the rules already on disk; the sidecar's path is what you pass them.
 
 **No worker carries a shell**, so a worker that needs the file changed changes it with Edit or
