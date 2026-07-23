@@ -61,6 +61,8 @@ interface IPathJson {
   rules_abs: string;
   basename: string;
   file_exists: boolean;
+  template_seeded: boolean;
+  template_only: boolean;
   instruction: string;
 }
 
@@ -122,18 +124,47 @@ Deno.test("rules mint: writes into .ingrain-security/, keyed by branch + task", 
   });
 });
 
-Deno.test("rules mint: file_exists reflects an already-present sidecar (resume)", async () => {
+Deno.test("rules mint: file_exists reflects an already-WRITTEN sidecar (resume)", async () => {
   await withProject(async (dir) => {
     await sh(gitRepo("feature/foo"), dir);
     const first = await runJson(["claude", "mint", "--title", "Add JWT auth"], {
       projectDir: dir,
     });
+    // The seeded skeleton means "no rules retrieved"; write real rules over it.
     await Deno.writeTextFile(first.rules_abs, "# org rules\n");
     const second = await runJson(["claude", "mint", "--title", "Add JWT auth"], {
       projectDir: dir,
     });
     assertEquals(second.rules_path, first.rules_path); // same task -> same file
     assertEquals(second.file_exists, true);
+    assertEquals(second.template_only, false);
+  });
+});
+
+Deno.test("rules mint: seeds the empty sidecar skeleton, which is not 'rules retrieved'", async () => {
+  await withProject(async (dir) => {
+    await sh(gitRepo("feature/foo"), dir);
+    const first = await runJson(["claude", "mint", "--title", "Add JWT auth"], {
+      projectDir: dir,
+    });
+    assertEquals(first.template_seeded, true);
+    assertEquals(first.template_only, true);
+    assertEquals(first.file_exists, false);
+
+    const md = await Deno.readTextFile(first.rules_abs);
+    assertStringIncludes(md, "# Org rules — Add JWT auth");
+    assertStringIncludes(md, "\n## Retrieved rules\n");
+    assertStringIncludes(md, "## Per-mitigation mapping");
+    assertEquals(/^### /m.test(md), false, "skeleton must hold no rule entries");
+
+    // Re-minting an untouched sidecar leaves it byte-identical and still "no rules".
+    const second = await runJson(["claude", "mint", "--title", "Add JWT auth"], {
+      projectDir: dir,
+    });
+    assertEquals(second.template_seeded, false);
+    assertEquals(second.template_only, true);
+    assertEquals(second.file_exists, false);
+    assertEquals(await Deno.readTextFile(first.rules_abs), md);
   });
 });
 

@@ -25,6 +25,11 @@
 # Re-minting the SAME task on the SAME branch resolves to the SAME file (`file_exists`
 # reports this). No timestamp, no random token.
 #
+# Minting also SEEDS the sidecar with its empty skeleton (lib/artifact-template.sh) when it is
+# absent; an existing file is never rewritten. `file_exists` reports written CONTENT rather
+# than the inode — an untouched skeleton reads as `false`, so "were org rules retrieved for
+# this task?" stays answerable from the JSON now that a mint always leaves a file behind.
+#
 # Exit codes: 0 ok · 2 usage error (bad host/subcommand/flag) · 1 runtime error.
 #
 # Uses `set -uo pipefail` WITHOUT `-e`: git lookups on a non-git or detached-HEAD checkout
@@ -55,8 +60,14 @@ interpolated. The project root comes from the git repo root, so mint may be run 
 subdirectory:
   <project_root>/.ingrain-security/rules-<branch-slug>-<task-slug>.md
   Fallbacks: no branch -> rules-<task-slug>.md; no title -> rules-<branch-slug>.md;
-  both absent -> rules.md. The `rules-` prefix always leads. `file_exists` is true when
-  the file already exists (org rules were persisted for this task at planning time).
+  both absent -> rules.md. The `rules-` prefix always leads.
+
+Minting also SEEDS the sidecar with its empty skeleton (`## Retrieved rules`,
+`## Per-mitigation mapping` — no content) when it does not exist yet; an existing file is
+never rewritten. `file_exists` therefore reports CONTENT, not the inode: it is true only when
+org rules were actually persisted for this task. `template_seeded` is true when this mint
+wrote the skeleton; `template_only` is true whenever the sidecar is still untouched — which
+means no org rules have been retrieved.
 
 Exit codes: 0 ok · 2 usage error · 1 runtime error.
 EOF
@@ -70,6 +81,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/project-root.sh
 if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
     printf 'rules-path: cannot load lib/project-root.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/artifact-template.sh
+if ! . "${SCRIPT_DIR}/lib/artifact-template.sh" 2>/dev/null; then
+    printf 'rules-path: cannot load lib/artifact-template.sh\n' >&2
     exit 1
 fi
 # shellcheck source=lib/mint-path.sh

@@ -30,6 +30,12 @@
 # resumes/updates it in place — `file_exists` reports this); a different task or branch
 # resolves to a different file. No timestamp, no random token.
 #
+# Minting also SEEDS the file with its empty skeleton (lib/artifact-template.sh) when it is
+# absent, so the first writer fills a correctly shaped page instead of reproducing the schema
+# from prose. An existing file is never rewritten, and `file_exists` reports written CONTENT
+# rather than the inode — an untouched skeleton reads as `false`, which keeps Phase select and
+# the resume check working now that a mint always leaves a file behind.
+#
 # Exit codes: 0 ok · 2 usage error (bad host/subcommand/flag) · 1 runtime error.
 #
 # Bundled with the skill and run directly by the orchestrator (which already has a
@@ -63,8 +69,14 @@ the path interpolated. The project root comes from the git repo root, so mint ma
 from any subdirectory:
   <project_root>/.ingrain-security/assessment-<branch-slug>-<task-slug>.md
   Fallbacks: no branch -> assessment-<task-slug>.md; no title -> assessment-<branch-slug>.md;
-  both absent -> assessment.md. The `assessment-` prefix always leads. `file_exists`
-  is true when the file already exists (the run resumes the same task's prior analysis).
+  both absent -> assessment.md. The `assessment-` prefix always leads.
+
+Minting also SEEDS the file with its empty skeleton (headings, both table headers, field
+labels — no content) when it does not exist yet, so no writer starts from a blank page; an
+existing file is never rewritten. `file_exists` therefore reports CONTENT, not the inode: it
+is true only when the file already holds written analysis (the run resumes the same task's
+prior work). `template_seeded` is true when this mint wrote the skeleton; `template_only` is
+true whenever the file is still an untouched skeleton.
 
 Exit codes: 0 ok · 2 usage error · 1 runtime error.
 EOF
@@ -79,6 +91,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/project-root.sh
 if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
     printf 'assessment-path: cannot load lib/project-root.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/artifact-template.sh
+if ! . "${SCRIPT_DIR}/lib/artifact-template.sh" 2>/dev/null; then
+    printf 'assessment-path: cannot load lib/artifact-template.sh\n' >&2
     exit 1
 fi
 # shellcheck source=lib/mint-path.sh
