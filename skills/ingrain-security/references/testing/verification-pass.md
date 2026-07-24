@@ -68,18 +68,8 @@ pre-approval, and the file's schema — follow that schema exactly. The fields T
 pre-approves those for this file, so the write lands with no permission prompt.
 
 **Check the write.** Testing writes this file exactly once, at step 6, and that write is a
-finished file — so run the bundled **`scripts/validate-assessment`** script on `assessment_abs`
-straight after it, **strictly (no `--lenient`)**:
-
-    bash <plugin>/skills/ingrain-security/scripts/validate-assessment <assessment_abs>
-
-Run it exactly as printed — nothing appended — and read the verdict off the `"valid"` field of
-the JSON it prints on stdout. Fix exactly what it reports and re-run, at most twice; if
-violations survive, name them in one line of your report so they reach the user with the
-result.
-→ `references/formatting/assessment-file.md` § **Validation — run it after every write** owns
-the modes, how to read the result and that bound. The `rules-<…>.md` sidecar is read-only here, so it
-keeps the validation the plan review already gave it.
+finished file — so read it back against the schema straight after, and fix any field that does
+not match. The `rules-<…>.md` sidecar is read-only here and is not touched.
 
 ## The diff under review
 
@@ -332,11 +322,10 @@ file.
    record the current implementation. The
    `rules-<…>.md` sidecar is a persistent planning artifact — **leave it exactly as you found
    it**.
-   Then **validate the file strictly** — `scripts/validate-assessment <assessment_abs>` with no
-   `--lenient` — and fix what it reports before you report to the coding agent (see **The
-   assessment file** → Check the write). This is the "mark checked" step — the file now records
-   what was verified, so it is also the last moment a malformed entry can be caught before the
-   next session inherits it.
+   Then **read the file back against the schema** and fix what does not match before you report
+   to the coding agent (see **The assessment file** → Check the write). This is the "mark
+   checked" step — the file now records what was verified, so it is also the last moment a
+   malformed entry can be caught before the next session inherits it.
 7. **Report to the coding agent.** Present the findings (see **Reporting format**) and close
    with a one-line verdict. If any threat is `weak`, ask the coding agent to revisit exactly
    those — naming the residual path for each.
@@ -390,5 +379,5 @@ each verifier opens them itself. Report the empty cases out loud.
 - [ ] 3. Rules sidecar located (`rules_abs`) — an absent sidecar is an expected state; verification proceeds either way
 - [ ] 4. One verifier dispatched per selected threat, plus the general-instruction pass — justification FIRST, then `weak`/`adequate`/`strong`
 - [ ] 5. Each threat's Robustness concluded — justification weighed BEFORE the level; a level stands only when its evidence carries it; the conclusion is YOURS; each mitigation's Robustness carried across, weakest governs
-- [ ] 6. `## Threats` → `Robustness` + `## Mitigations` → `Justification` + `Robustness` + `Latest stage: testing` written — YOU write, the verifier only returns; sidecar untouched; then validated clean by `scripts/validate-assessment` with NO `--lenient`
+- [ ] 6. `## Threats` → `Robustness` + `## Mitigations` → `Justification` + `Robustness` + `Latest stage: testing` written — YOU write, the verifier only returns; sidecar untouched; then read back against the schema
 - [ ] 7. Reported to the coding agent — `weak` threats named with their residual path; the coding agent owns the code changes

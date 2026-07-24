@@ -73,21 +73,11 @@ tables and plan-file links; every write target takes the absolute form.
 **Change that file with the Edit or Write tool, always** — yours and every worker's alike.
 `allow-assessment-write` pre-approves both for this path, so the change lands with no
 permission prompt and the user sees the before/after. Your shell has a different job: it runs
-this plugin's four read-only scripts and the `ingrain` CLI, and it never edits the assessment
+this plugin's three read-only scripts and the `ingrain` CLI, and it never edits the assessment
 file. Every field is its own line, so almost every change is a one-line Edit; where one is
 long, it is still an Edit — the cost of pasting it is what buys a reviewable change.
 → `references/formatting/assessment-file.md` owns what the script resolves, the name's derivation, and
 the file's schema — read it before your first write.
-
-**Every write to `assessment_abs` is followed by a validation run** — yours and every worker's
-alike. Run the bundled `scripts/validate-assessment` script on the path you just wrote, with
-`--lenient` while the run is in progress and **without it at finalize**, and fix what it
-reports before the next step. The ready-to-run command is in your
-`INGRAIN-ASSESSMENT-PATHS` session context — **run it exactly as given, nothing appended**: the
-verdict is the `"valid"` field of the JSON it prints on stdout, and appending anything (a `;`,
-a pipe, a redirect) only costs the hook's pre-approval.
-→ `references/formatting/assessment-file.md` § **Validation — run it after every write** owns the
-two modes, how to read the result and the bounded fix-and-re-run rule.
 
 The third signal is the **branch delta**. Resolve it with the bundled `scripts/branch-diff`
 script and read **`delta_empty`** off its JSON: `true` means the branch delta is empty; `false`
@@ -195,12 +185,11 @@ Branch on the keyword the worker leads its return with (`minor`/`major`,
 `approved`/`needs-revision`), and pass the **next** worker a pointer to the sections it must
 read.
 
-**Validate on every return, before you dispatch the next worker.** The worker wrote the file;
-you are the one who can check it, because the shell is yours alone — run
-`scripts/validate-assessment` with `--lenient` on `assessment_abs` after every worker that
-wrote it, and fix what it reports. A malformed section is cheapest to repair here, while the worker that produced it can
-still be re-dispatched with the violations quoted back to it, and while it is still upstream of
-the next worker, which reads the file for itself.
+**Read the section back on every return, before you dispatch the next worker.** Check it
+against the schema in `references/formatting/assessment-file.md` — the field labels, the enum
+values, one field per line. A malformed section is cheapest to repair here, while the worker
+that produced it can still be re-dispatched with the problem quoted back to it, and while it is
+still upstream of the next worker, which reads the file for itself.
 
 **Model:** set each worker's model from the **Recommended model** line in its own reference
 file. You stay on the session model. Host-dependent — ignore where per-subagent model
@@ -250,8 +239,7 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
      title, banner and every empty section, so fill the `## Task` fields in place rather than
      writing the page over (`file_exists: true` means you are resuming this task's prior
      analysis).
-     The worker's `## Triage` section is already in it. Then **validate it** (`--lenient` — the
-     file is a skeleton at this point, which is exactly what that mode is for).
+     The worker's `## Triage` section is already in it.
 
 1. **Threats** — dispatch `ingrain-threat-generator`, pointing it at the plan **and the
    `## Triage` section** (Surfaces seed the search; extend beyond them). **If triage returned a
@@ -287,8 +275,8 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
       order — with the columns below.
    3. **Present** one single-choice window per threat; mark high/critical recommended.
    4. **Record** each threat's `Selection` in `## Threats` (include → `selected`, exclude →
-      `excluded`; `undecided` only if the user is explicitly unsure), then **validate**
-      (`--lenient`) — a mistyped `Selection` here silently drops a threat from Testing's scope.
+      `excluded`; `undecided` only if the user is explicitly unsure) — a mistyped `Selection`
+      here silently drops a threat from Testing's scope.
 
    | Column | Contents |
    |--------|----------|
@@ -364,7 +352,7 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    3. **Present** one single-choice window per mitigation, labeled by short title + the threat
       id(s) it addresses (or `general`).
    4. **Record** each mitigation's `Selection` in `## Mitigations` (adopt → `selected`, decline
-      → `excluded`), then **validate** (`--lenient`).
+      → `excluded`).
 
    | Column | Contents |
    |--------|----------|
@@ -413,13 +401,9 @@ they are iteration scratch, and the finalized file carries only end results. **L
 verification pass reads in a later session. One write, to the minted `assessment_abs`; the
 file already lives at its final path, so **finalizing it in place *is* persisting it**.
 
-Then **validate it strictly — no `--lenient`**: this is the finished file, and the file is
-finalized only once the script comes back clean. Validate the `rules-<…>.md` sidecar the same
-way when one was written. Fix and re-run per the bounded rule
-(`references/formatting/assessment-file.md` § **Validation — run it after every write**); if
-anything survives two attempts, name it in your closing verdict so the user hears it in the
-same turn. Everything downstream — the plan file's link, the implementing agent, the Testing
-pass in a later session — has this file and nothing else; the run that wrote it is gone by then.
+Read the finished file back against the schema before you call it done. Everything downstream —
+the plan file's link, the implementing agent, the Testing pass in a later session — has this
+file and nothing else; the run that wrote it is gone by then.
 
 **2. Write the results into the plan file.** Incorporate the selected threats and adopted
 mitigations, plus two supporting things:
@@ -479,8 +463,7 @@ there; this section is a pointer, and the procedure is in that file.
 | The mitigation-generator is missing a rule | Rely on Step 5's retrieval, which runs before it — and on a revision round it re-reads the sidecar. The generator works from disk. |
 | A retrieved rule went unapplied | Let the critic carry it in: it flags the unapplied rule and the generator revises once. |
 | You need a rule to back a mitigation | Cite exactly the rules `ingrain context` returned, by their real ids. |
-| A worker's section looks correct | Run `scripts/validate-assessment` on it anyway (`--lenient` mid-run, strict at finalize) — the schema is what the next reader depends on, and an enum typo stays invisible until it breaks in a later session. |
-| The validator still fails after your fixes | Fix what it names, re-run at most twice, and **say so in one line** naming the remaining violations — the user learns of it in the same turn. |
+| A worker's section looks correct | Read it against the schema anyway — the schema is what the next reader depends on, and an enum typo stays invisible until it breaks in a later session. |
 | You are about to present a gate | Display the findings as a table first, then present the single-choice windows. |
 | A write to `.ingrain-security/` is held back in plan mode | Ask the user to allow writes to that folder — name in one line which file the run needs to write and why — then retry the same write to `assessment_abs` / `rules_abs` and carry on. The folder is the run's own artifact store, separate from the plan file. |
 | You are in plan mode or keeping output lean | Print the gate table all the same — it is mandatory visible output in every mode. Read the bounded slice of the assessment file, which is the read the context-window discipline permits, and print the table before any window. |
@@ -490,8 +473,8 @@ there; this section is a pointer, and the procedure is in that file.
 The procedure is **Development — the flow**; this is the tracker. Tick only what is actually
 done. Work top to bottom, one step at a time, in the order listed. Each
 gate incorporates exactly the selected subset.
-**After every write to `assessment_abs` — yours, or a worker's the moment it returns — run
-`scripts/validate-assessment` (`--lenient` until finalize) and fix what it reports.**
+**After every write to `assessment_abs` — yours, or a worker's the moment it returns — read the
+written section back against the schema in `references/formatting/assessment-file.md`.**
 
 - [ ] 0. Triage dispatched — bias to `major` when uncertain; `minor` → stop, `major` → open the assessment file
 - [ ] 1. Threats generated into `## Threats`, seeded from any prior analysis
@@ -502,4 +485,4 @@ gate incorporates exactly the selected subset.
 - [ ] 6. Mitigations generated for the selected threats ONLY, grounded in the sidecar; generator ran without a shell of its own
 - [ ] 7. Single mitigation critique pass done — approved, or one revision applied; mitigations frozen
 - [ ] 8. Gate 2 — table displayed FIRST, then one window per mitigation; `Selection` recorded
-- [ ] Finalize — `Latest stage: development` set, critique sections deleted, sidecar kept, assessment validated strictly, plan file links it + Maintenance
+- [ ] Finalize — `Latest stage: development` set, critique sections deleted, sidecar kept, plan file links it + Maintenance

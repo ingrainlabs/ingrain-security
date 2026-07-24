@@ -18,9 +18,8 @@
 # finalized file. `## Threats` and `## Mitigations` are seeded empty; the worker that fills
 # each writes its `### <id> — <title>` entries under the heading.
 #
-# It is deliberately valid under `validate-assessment --lenient` (sections present but
-# unfilled is exactly what leniency waives) and deliberately INVALID strictly: an unfilled
-# skeleton is not a finished assessment.
+# Sections present but unfilled is the skeleton's whole point: an unfilled skeleton is not a
+# finished assessment, and nothing in it should read as one.
 #
 # Because the skeleton is deterministic in (label, title), a caller can tell an untouched
 # artifact from a written one by comparing the file against a freshly rendered skeleton —
