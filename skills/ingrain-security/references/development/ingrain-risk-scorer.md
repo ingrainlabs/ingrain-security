@@ -21,9 +21,11 @@ description: >-
 > - **Hand-off contract:** read the frozen threats from the `## Threats` section of
 >   the stored analysis file (path per your dispatch), fill each threat entry's five scoring
 >   field lines there (Justification, Impact, Likelihood, Risk score, Criticality), and write
->   the plan-level residual risk into the `## Risk score` section — following the schema in
->   `references/formatting/assessment-file.md` exactly. Each field is its own line, so each is
->   a one-line Edit; leave every other line of the entry as you found it. Then return to the
+>   the plan-level residual risk into the `## Risk score` section — following the **field card**
+>   seeded under each of those headings exactly; it is the whole of the shape you need (read
+>   `references/formatting/assessment-file.md` only if you need what a field *means*). An entry's
+>   five scoring lines are contiguous, so replace them in **one Edit per threat entry** — never
+>   one Edit per field; leave every other line of the entry as you found it. Then return to the
 >   orchestrator ONLY the overall plan score + criticality plus a one-line pointer — not the
 >   full score list.
 

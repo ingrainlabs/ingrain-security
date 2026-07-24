@@ -12,11 +12,17 @@
 #   skills/ingrain-security/scripts/rules-path        (label: rules)
 #
 # A mint seeds this skeleton into the artifact when the file does not exist yet, so no
-# writer ever starts from a blank page. The skeleton carries ONLY structure — every heading
-# in schema order and the field labels of the sections whose fields are fixed — and no
-# content: no example entries and no placeholder values that could survive into the
-# finalized file. `## Threats` and `## Mitigations` are seeded empty; the worker that fills
-# each writes its `### <id> — <title>` entries under the heading.
+# writer ever starts from a blank page. The skeleton carries structure and a FIELD CARD per
+# section — never content: no example entries and no placeholder values that could survive
+# into the finalized file. `## Threats` and `## Mitigations` hold no entries; the worker that
+# fills each writes its `### <id> — <title>` entries under the card.
+#
+# The cards below RENDER the schema that `references/formatting/assessment-file.md` (and, for
+# the sidecar, `rules-file.md`) owns — see its § The field cards carry the shape for what they
+# are for and why they are PERMANENT. What that leaves to this file is the rendering itself,
+# under three invariants: a field or value changed in the reference is changed here in the
+# same edit; no line of a card may begin with `###`, so an untouched skeleton still holds no
+# entry by any test of it; and a card is static text, so the skeleton stays deterministic.
 #
 # Sections present but unfilled is the skeleton's whole point: an unfilled skeleton is not a
 # finished assessment, and nothing in it should read as one.
@@ -46,11 +52,19 @@ render_artifact_template() {
 > mitigations. Read by the mitigation critic, Gate 2, and the verification skill. Git-ignored.
 >
 > Skeleton seeded by the \`rules-path\` minter — fill the sections below; do not re-create
-> the page. While it is untouched, no org rules have been retrieved for this task.
+> the page. The comment under each heading is that section's field card — write from it.
+> While it is untouched, no org rules have been retrieved for this task.
 
 ## Retrieved rules
+<!-- One entry per retrieved rule: a \"### <id> — <title>\" heading, then the rule body
+     underneath — verbatim and in full, exactly as the ingrain CLI returned it. Ids are
+     machine-facing and must match the Rule refs in the assessment file. -->
 
-## Per-mitigation mapping"
+## Per-mitigation mapping
+<!-- One line per mitigation that follows at least one rule, keyed by its permanent id:
+     \"M<nn> → <id>[, <id>…]\" plus a one-line note on how the rule(s) shaped it. A
+     mitigation with no backing rule is simply absent here. Every id used here must have an
+     entry under Retrieved rules. -->"
         return 0
     fi
 
@@ -60,24 +74,44 @@ render_artifact_template() {
 > implementation evolves (see Maintenance below). Git-ignored.
 >
 > Skeleton seeded by the \`assessment-path\` minter — fill the sections below; do not
-> re-create the page. Each is empty until the stage that owns it writes it.
+> re-create the page. Each is empty until the stage that owns it writes it. The comment
+> under each heading is that section's field card — write from it.
 
 ## Task
+<!-- Title: the task's title. Latest stage: development|testing — development while the plan
+     review and the implementation are in progress; testing once the verification pass has
+     run. -->
 ${title_field}
 Latest stage: development
 
 ## Triage
+<!-- Verdict: minor|major. Security relevant: true|false. Surfaces: a bullet list, present
+     when major. Prior analysis: optional — a pointer to a prior analysis of this task, or
+     none. -->
 Verdict:
 Security relevant:
 Surfaces:
 
 ## Threats
+<!-- Each threat is a \"### T<nn> — <title>\" heading, then these fields, one per line, in
+     this order: Asset, Vector, Description, Assumptions, Justification (≤256 chars),
+     Impact (critical|high|medium|low), Likelihood (very high|high|medium|low),
+     Risk score (0-100), Criticality (low|medium|high|critical),
+     Selection (selected|excluded|undecided), Robustness (weak|adequate|strong).
+     A field whose stage has not run yet reads \"—\". Ids are permanent. -->
 
 ## Risk score
+<!-- Score: 0-100. Criticality: low|medium|high|critical. The plan-level residual risk. -->
 Score:
 Criticality:
 
 ## Mitigations
+<!-- Each mitigation is a \"### M<nn> — <title>\" heading, then these fields, one per line, in
+     this order: Description, Yield (high|medium|low), Effort (high|medium|low),
+     Threats (the T-ids it covers, or — for a general implementation instruction),
+     Rule refs (org rule ids, or —), Selection (selected|excluded|undecided),
+     Justification (≤256 chars), Robustness (weak|adequate|strong).
+     A field whose stage has not run yet reads \"—\". Ids are permanent. -->
 
 ## Coverage / open items
 
@@ -85,8 +119,9 @@ Criticality:
 Update this file whenever the implementation diverges from the analysis — a new
 surface, a threat's acceptance changes, or a mitigation is added, dropped, or
 altered. Keep the Selection fields and coverage honest against the code you write,
-and keep every enumerated field within its allowed values. Ids are permanent: add a
-new threat with the next free \`T<n>\` and never renumber the existing ones.
+and keep every enumerated field within the values its section's field card names —
+the comment under each heading. Ids are permanent: add a new threat with the next
+free \`T<n>\` and never renumber the existing ones.
 
 To locate this file, re-run the \`assessment-path\` mint command from your
 INGRAIN-ASSESSMENT-PATHS session context and write to the absolute \`assessment_abs\`

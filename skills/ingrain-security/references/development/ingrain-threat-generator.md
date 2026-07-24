@@ -20,10 +20,12 @@ description: >-
 >   supports per-subagent model selection).
 > - **Hand-off contract:** write one `### T<n> — <title>` entry per threat into the
 >   `## Threats` section of the stored analysis file (path per your dispatch), filling the
->   descriptive fields (Asset, Vector, Description, Assumptions) per the schema in
->   `references/formatting/assessment-file.md` and leaving every scoring field as `—` — the
+>   descriptive fields (Asset, Vector, Description, Assumptions) per the **field card** seeded
+>   under that heading — it is the whole of the shape you need — and leaving every scoring
+>   field as `—` — the
 >   risk-scorer fills those, and the orchestrator fills Selection later; most tasks warrant
->   3–6 threats — keep it short and scoped. Then return to the
+>   3–6 threats — keep it short and scoped. Write **every entry in a single Write or Edit** —
+>   the whole section in one call, not one call per entry and never one per field. Then return to the
 >   orchestrator ONLY a one-line headline (e.g. the threat count) plus a pointer to
 >   that section — not the full list.
 

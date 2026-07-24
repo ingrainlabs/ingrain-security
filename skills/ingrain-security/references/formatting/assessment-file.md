@@ -36,14 +36,24 @@ shape.
   folder — the ignore file included — stays out of `git status`; sharing a file is an
   explicit `git add -f <file>` opt-in.
 - **Seeded with a skeleton.** The same mint **writes this file's empty skeleton** when it does
-  not exist yet — every heading in schema order and the field labels of the fixed sections,
-  as **structure only**: every value left empty, every entry left to the writer. `## Threats` and
-  `## Mitigations` are seeded as bare headings, and the worker that fills each writes its
-  `### <id> — <title>` entries beneath.
+  not exist yet — every heading in schema order, a **field card** under each, and the field
+  labels of the fixed sections, as **structure only**: every value left empty, every entry left
+  to the writer. `## Threats` and `## Mitigations` are seeded as heading + card, and the worker
+  that fills each writes its `### <id> — <title>` entries beneath.
   So every writer starts from a ready-made page:
   **fill the sections in place** rather than re-creating the page — an existing file is always
   filled as it stands. An unfilled skeleton is recognisable on sight: the headings are all
   there, every value beneath them is still empty.
+- **The field cards carry the shape; this file carries the meaning.** A card is an HTML comment
+  under a section heading naming that section's fields, their order and their exact enumerated
+  values — rendered from the spec below by `scripts/lib/artifact-template.sh`. It is where
+  writers get the shape, because it arrives with the file they must open to write at all, where
+  recovering the same shape from this reference costs a full read of it. **This file stays
+  normative**: it owns what each field *means*, the reasoning schemas, id permanence and the
+  lifecycle, and a writer opens it when meaning is what it is missing. The two must not drift —
+  **a field or an allowed value changed here is changed in the card in the same edit.** The
+  cards are **permanent**: finalize deletes the scratch sections and keeps them, because the
+  implementing agent and the Testing pass run in later sessions with no reference in context.
   Because of the seeding, **`file_exists` reports written content, not the file's
   presence**: an untouched skeleton reads as `false`, exactly like no file at all, which is
   what keeps it usable as the Phase-select and resume signal. Two further fields say which
@@ -147,7 +157,8 @@ Robustness: —
 
 **One field per line is what makes this file cheap to maintain.** Every stage after the
 generator fills a field the stage before it left `—` — the risk scorer, Gate 1, the
-verification pass — and each of those is an Edit of one short line. Write the fields in the
+verification pass — and each of those touches a contiguous run of lines inside an entry, so a
+stage costs **one Edit per entry**, not one per field. Write the fields in the
 order above; a field the stage that owns it has not run yet reads `—`.
 
 **Justification leads the scoring fields on purpose.** The scorer fills an entry top-down,

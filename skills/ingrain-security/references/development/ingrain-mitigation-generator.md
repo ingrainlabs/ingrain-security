@@ -22,12 +22,15 @@ description: >-
 >   analysis file (path your dispatch specifies),
 >   filling Description, Yield, Effort, the Threats each addresses (`0..N` ids — `—`
 >   for a general implementation instruction), and the Rule refs it follows (`0..N` rule ids)
->   per the schema in `references/formatting/assessment-file.md` — the orchestrator fills Selection at
+>   per the **field card** seeded under that heading — the orchestrator fills Selection at
 >   Gate 2. In the **`rules_abs` sidecar** your one write is the **`## Per-mitigation mapping`**
->   section, per the `references/formatting/rules-file.md` schema — that one section is your
+>   section, per the field card under *that* heading — that one section is your
 >   whole write there. The orchestrator creates the sidecar and fills `## Retrieved rules`
 >   before you run, so leave every other section of it exactly as you found it. The sidecar
->   **persists** past finalize, where the assessment's scratch sections are deleted. Then
+>   **persists** past finalize, where the assessment's scratch sections are deleted. **Each of
+>   those two sections is one call** — a single Write or Edit carrying every entry, not one call
+>   per entry and never one per field; on the revision round it is one Edit per entry you
+>   actually revise. Then
 >   return to the orchestrator a one-line headline (e.g. the mitigation count) plus a pointer
 >   to those files — the files themselves carry the full list.
 
@@ -67,14 +70,14 @@ mitigation — one grounded in your own analysis — carries `—` in Rule refs.
 ## Output
 
 Write two things: the mitigation entries into the `## Mitigations` section of the **assessment
-file** (per the `references/formatting/assessment-file.md` schema), and — if a sidecar exists and
-any mitigation follows a rule — the `## Per-mitigation mapping` in the **`rules_abs` sidecar**
-(per the `references/formatting/rules-file.md` schema).
+file**, and — if a sidecar exists and any mitigation follows a rule — the
+`## Per-mitigation mapping` in the **`rules_abs` sidecar**. **Both files carry a field card
+under every heading, and it is the whole of the shape you need** — write from it.
+`references/formatting/assessment-file.md` and `references/formatting/rules-file.md` stay the
+owners of what a field *means*; open one only when meaning is what you are missing.
 
 **Into the `## Mitigations` section** — one `### M<n> — <title>` entry per mitigation, to the
-field spec in `references/formatting/assessment-file.md` → `## Mitigations`. That spec owns every
-field's constraint and enumerated values — **read it and write from it**. Three things it leaves
-to you:
+field card under that heading. Three things the card leaves to you:
 
 - **id** — assign in the order you write them, `M01`, `M02`, …, and **never change one afterwards**. An id is permanent: a mitigation dropped on the revision round retires its id, and the survivors keep theirs.
 - **Threats** — reference only selected threats, by their `T<n>` ids, and make sure every selected threat ends up covered by at least one **threat** mitigation.
@@ -91,7 +94,7 @@ The user works the list in priority order, but that order is computed when the l
 Because nothing about that order lives in the file, a revision round changes no ids: you edit the entries that changed, add entries for what is new, and leave the rest alone. The `M<n> →` keys in the `rules_abs` sidecar stay valid for the same reason.
 
 **Into the `rules_abs` sidecar** — the **`## Per-mitigation mapping`** section only, per the
-`references/formatting/rules-file.md` schema. The sidecar **persists** past finalize, and
+field card under that heading. The sidecar **persists** past finalize, and
 only the rule titles it records surface to the user, at Gate 2:
 - One line per mitigation that follows ≥1 rule, keyed by its id: `M<n> → <id>[, <id>…]` with a one-line note on how the rule informed it. Omit mitigations whose Rule refs is `—`.
 - Every id you write into a mitigation's **Rule refs** must already exist as a `## Retrieved rules` entry in the sidecar, and must appear here too — that entry is what gives the orchestrator a title to render at Gate 2. **Cite ids that are already in the sidecar**, and leave `## Retrieved rules` to whoever retrieved the rule: only the agent that fetched a body can vouch for it.
