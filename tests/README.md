@@ -167,6 +167,7 @@ deno task ci                 # what CI runs: lint + fmt:check + test:offline
 
 ```bash
 <<<<<<< HEAD
+<<<<<<< HEAD
 deno task test:agent         # 7 live worker cases (6 workers; triage runs twice) + the 2 skill trigger tests
 deno task test:integration   # everything, incl. the full orchestration cycle (slow)
 =======
@@ -178,6 +179,9 @@ deno task test:integration   # everything, incl. full orchestration (slow)
 >>>>>>> 4134693 (fix rebase 2)
 =======
 deno task test:agent         # 6 per-worker tests + the 2 skill trigger tests
+=======
+deno task test:agent         # 7 live worker cases (6 workers; triage runs twice) + the 2 skill trigger tests
+>>>>>>> ee798c2 (fix rebase 6)
 deno task test:integration   # everything, incl. the full orchestration cycle (slow)
 >>>>>>> 362fd03 (fix rebase 5)
 
@@ -255,6 +259,9 @@ earlier mode's transcript in its own subdir.
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> ee798c2 (fix rebase 6)
 | Command                  | Needs an agent? | Model calls             | Time      | Auth |
 | ------------------------ | --------------- | ----------------------- | --------- | ---- |
 | `test:static`            | no              | 0                       | < 1s      | no   |
@@ -265,6 +272,7 @@ earlier mode's transcript in its own subdir.
 | `ci` (+ lint, fmt:check) | no              | 0                       | a few s   | no   |
 | `test:agent`             | yes             | ~9 (7 worker cases + 2) | a few min | yes  |
 | `test:integration`       | yes             | + full cycle to Gate 1  | 5–20 min  | yes  |
+<<<<<<< HEAD
 =======
 | Command            | Model calls            | Time      | Auth |
 | ------------------ | ---------------------- | --------- | ---- |
@@ -285,6 +293,8 @@ earlier mode's transcript in its own subdir.
 | `test:agent`             | yes             | ~8 (6 workers + 2)     | a few min | yes  |
 | `test:integration`       | yes             | + full cycle to Gate 1 | 5–20 min  | yes  |
 >>>>>>> 362fd03 (fix rebase 5)
+=======
+>>>>>>> ee798c2 (fix rebase 6)
 
 ## Notes
 

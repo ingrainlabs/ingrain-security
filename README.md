@@ -204,8 +204,8 @@ the skill manually.
 findings folded into your plan.
 
 **Sandboxing & network access.** The review's only outbound network calls are the
-mitigation generator's read-only `ingrain context security_rules` lookups — one per
-distinct question it needs org guidance on — which fetch your org's security rules
+read-only `ingrain context security_rules` lookups of its two rule-retrieval passes —
+one per distinct question it needs org guidance on — which fetch your org's security rules
 (via `INGRAIN_SYNC_URL` + API token). If you run your coding agent under a sandbox
 that restricts network or command execution, **allow those `ingrain context` CLI
 runs** so org-rule retrieval works. Without it the review still

@@ -21,10 +21,10 @@ description: >-
 > - **Hand-off contract:** write the threat rows into the `## Threats` table of
 >   the stored analysis file (path per your dispatch), filling the descriptive columns (Tag,
 >   Title, Asset, Vector, Description, Assumptions) per the schema in
->   `references/assessment-file.md` — the risk-scorer fills the scoring columns and
+>   `references/formatting/assessment-file.md` — the risk-scorer fills the scoring columns and
 >   re-tags the rows into risk order, and the orchestrator fills Selection later; most
 >   tasks warrant 3–6 rows — keep it
->   short and scoped (a target, not a hard cap). Then return to the
+>   short and scoped (treat the count as a target). Then return to the
 >   orchestrator ONLY a one-line headline (e.g. the threat count) plus a pointer to
 >   that section — not the full list.
 
@@ -76,8 +76,8 @@ There is exactly one revision round, and the list is frozen after it — so trea
 
 Then reconcile that fresh model against what came before:
 
-- **Re-examine the whole task**, not only the flagged threats.
-- **Keep tags stable** for any threat that carries over — a threat that is still the same threat keeps its tag from the previous round (never renumber), so the critic can line its feedback up against it. Genuinely new threats take the next free tag. A dropped threat's tag is retired — gaps in the sequence are expected and correct; never reuse a tag or renumber to close a gap. The risk-scorer compacts the sequence at freeze, so a gap costs nothing and renumbering mid-loop only breaks the critic's references.
+- **Re-examine the whole task**, treating the flagged threats as one input among several.
+- **Keep tags stable** for any threat that carries over — a threat that is still the same threat keeps its tag from the previous round (never renumber), so the critic can line its feedback up against it. Genuinely new threats take the next free tag. A dropped threat's tag is retired — gaps in the sequence are expected and correct; never reuse a tag or renumber to close a gap. The risk-scorer compacts the sequence at freeze, so stable tags are what matter mid-loop: they keep the critic's references landing.
 - **Account for every critique item** — fold the valid ones into the fresh model; for any you reject, say so and why.
 
 Close with a short **Reconciling the critique** section so the critic can confirm its points were handled at a glance:
