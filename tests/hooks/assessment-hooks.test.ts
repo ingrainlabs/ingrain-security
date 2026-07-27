@@ -80,7 +80,7 @@ Deno.test("ensure-assessment-dir: creates the folder, README and .gitignore", as
     // SessionStart stdout is injected as context; this hook has nothing to add.
     assertEquals(res.stdout, "");
 
-    const base = `${dir}/ingrain-security`;
+    const base = `${dir}/.ingrain-security`;
     assertEquals(await exists(`${base}/README.md`), true);
     assertEquals(await exists(`${base}/.gitignore`), true);
     assertStringIncludes(await Deno.readTextFile(`${base}/README.md`), "Threat assessments");
@@ -94,7 +94,7 @@ Deno.test("ensure-assessment-dir: creates the folder, README and .gitignore", as
 
 Deno.test("ensure-assessment-dir: is idempotent and never clobbers an edited README", async () => {
   await withProject(async (dir) => {
-    const base = `${dir}/ingrain-security`;
+    const base = `${dir}/.ingrain-security`;
     await Deno.mkdir(base, { recursive: true });
     await Deno.writeTextFile(`${base}/README.md`, "user edited");
 
@@ -108,7 +108,7 @@ Deno.test("ensure-assessment-dir: falls back to $PWD when CLAUDE_PROJECT_DIR is 
   await withProject(async (dir) => {
     const res = await runHook("ensure-assessment-dir", { cwd: dir });
     assertEquals(res.code, 0);
-    assertEquals(await exists(`${dir}/ingrain-security`), true);
+    assertEquals(await exists(`${dir}/.ingrain-security`), true);
   });
 });
 
@@ -119,7 +119,7 @@ Deno.test("ensure-assessment-dir: handles a non-canonical project dir", async ()
     // breaks path building).
     const res = await runHook("ensure-assessment-dir", { projectDir: `${dir}/.` });
     assertEquals(res.code, 0);
-    assertEquals(await exists(`${dir}/ingrain-security`), true);
+    assertEquals(await exists(`${dir}/.ingrain-security`), true);
   });
 });
 
@@ -127,7 +127,7 @@ Deno.test("ensure-assessment-dir: host=codex resolves the project root from cwd"
   await withProject(async (dir) => {
     const res = await runHook("ensure-assessment-dir", { hostArg: "codex", cwd: dir });
     assertEquals(res.code, 0);
-    assertEquals(await exists(`${dir}/ingrain-security`), true);
+    assertEquals(await exists(`${dir}/.ingrain-security`), true);
   });
 });
 
@@ -143,8 +143,8 @@ Deno.test("ensure-assessment-dir: host=codex ignores a leaked CLAUDE_PROJECT_DIR
         cwd: realDir,
       });
       assertEquals(res.code, 0);
-      assertEquals(await exists(`${realDir}/ingrain-security`), true);
-      assertEquals(await exists(`${leakedDir}/ingrain-security`), false);
+      assertEquals(await exists(`${realDir}/.ingrain-security`), true);
+      assertEquals(await exists(`${leakedDir}/.ingrain-security`), false);
     });
   });
 });

@@ -31,6 +31,7 @@ You are a Professional Security Analyst reviewing a colleague's proposed mitigat
 ## Inputs
 
 - The **threat(s)** in scope (tagged `T1`, `T2`, …) and the **mitigations** proposed for them, from the `## Mitigations` table (each with Description / Yield / Effort / Threat tags / **Rule refs**). A mitigation is either a **threat mitigation** (carries ≥1 threat tag) or a **general implementation instruction** for the whole task (Threat tags `—`).
+  Both tag sets are **priority positions, not identities**: threats are ordered by descending risk (`T1` is the most critical) and mitigations by descending priority, so a mitigation's `M<n>` can move between rounds as the set changes. Key every feedback item to the tag as it appears in the table you were handed, and don't ask for a renumbering — the generator re-derives it on every write.
 - The **org rules** the generator retrieved, from the transient `## Org rules` section — the **Rules retrieved** summary, the per-mitigation citations (keyed by mitigation tag, each `title` (`id`)), and any **Applicable rules**. (These may be empty if the generator recorded graceful degradation — the `ingrain` CLI being absent or unconfigured is not itself a defect to penalize.)
 
 ## Task
