@@ -43,6 +43,7 @@ static/   offline lint of worker-reference frontmatter + advisory ROLE + skill/h
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)
 shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
 <<<<<<< HEAD
@@ -73,6 +74,8 @@ agents/   agents.test.ts — table-driven live tests, one case per worker (dispa
 =======
 =======
 scripts/  validate-assessment.test.ts — runs the schema validator under bash over valid and one-defect-per-case fixtures (no model calls)
+=======
+>>>>>>> 5d622fa (Improve speed of skill (#21))
 hooks/    assessment-hooks.test.ts · assessment-path.test.ts · rules-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts · assessment-write-lib.test.ts · project-root-lib.test.ts — run the hook/path scripts and their shared libs under bash against a throwaway project (no model calls)
 shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
 >>>>>>> eb81502 (Skill speed: skills (#17))
@@ -116,12 +119,8 @@ This is always on for the live tiers — Deno streams each test's output live (w
   target named in `tool_input.file_path`) and `hooks/codex/allow-assessment-write`
   (**PermissionRequest**, targets read out of an `apply_patch` patch): the assessment file must be
   auto-approved, while every other path — and every malformed, multi-file or decoy payload — must
-  fall back to the user's normal permission prompt. The command-side twins get the same treatment in
-  `allow-script-run.test.ts` / `codex-allow-script-run.test.ts` — a bare run of one of the four
-  bundled read-only scripts must be auto-approved, while anything that could carry a second command
-  (chaining, substitution, redirection, an interpreter flag, a script outside the plugin) must fall
-  back to the prompt. Needs `bash` + coreutils (macOS/Linux); the Windows `cd && pwd` normalization
-  can't be exercised on Unix and stays a manual check.
+  fall back to the user's normal permission prompt. Needs `bash` + coreutils (macOS/Linux); the
+  Windows `cd && pwd` normalization can't be exercised on Unix and stays a manual check.
 - **shell/** — runs the real `shellcheck` binary once per shell script tracked by git. Discovery is
   **shebang-based, not a `*.sh` glob**: the hooks are deliberately extensionless (see
   `hooks/run-hook.cmd`), so a glob would silently lint the three release scripts and skip every
