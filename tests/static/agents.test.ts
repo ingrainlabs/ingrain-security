@@ -11,10 +11,11 @@
  * file, carries a recommended model, and an anti-trigger description so it isn't
  * fired directly outside the orchestrator.
  *
- * The mitigation-generator is the one worker granted a read-only `ingrain` CLI
- * lookup, and its ROLE is worded for that exception. Its phrasing is pinned in
- * ROLE_OVERRIDES rather than by loosening the shared assertion, so the strict
- * clause stays mandatory for every other worker.
+ * The rule-expander is the one worker granted a read-only `ingrain` CLI lookup —
+ * the second retrieval pass, keyed on the proposed mitigations — and its ROLE is
+ * worded for that exception. Its phrasing is pinned in ROLE_OVERRIDES rather than
+ * by loosening the shared assertion, so the strict clause stays mandatory for
+ * every other worker, the mitigation-generator now included.
  */
 
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
@@ -100,8 +101,8 @@ for (const name of WORKERS) {
     // The rule-expander is the one worker with a read-only CLI exception: it runs
     // `ingrain context security_rules` for the second retrieval pass, but still edits
     // nothing. Guard that the exception is documented in its ROLE header.
-    if (name === "ingrain-mitigation-generator") {
-      await t.step("mitigation-generator documents the read-only ingrain CLI exception", () => {
+    if (name === "ingrain-rule-expander") {
+      await t.step("rule-expander documents the read-only ingrain CLI exception", () => {
         assertStringIncludes(prose, "ingrain context security_rules");
         assertStringIncludes(prose.toLowerCase(), "exception");
       });

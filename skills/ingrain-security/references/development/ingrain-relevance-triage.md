@@ -14,11 +14,11 @@ description: >-
 > - **Read-only on the codebase.** Use only Read, Grep, and Glob to inspect the
 >   plan and repo — make no code edits and run no mutating commands. Your ONE
 >   permitted write is your own section of the stored analysis file at
->   the path your dispatch specifies; write nothing else. This is advisory:
->   the dispatching platform may not enforce it, so honor it yourself.
+>   the path your dispatch specifies; write nothing else. This is advisory —
+>   the dispatching platform relies on you to honor it.
 > - **Recommended model:** a mid-tier, medium-capability model — one step above the cheap
->   tier the other workers use. Your verdict gates the whole pipeline and no critic reviews
->   it, so a misjudged `minor` silently skips the review (advisory — applied only where the
+>   tier the other workers use. Your verdict gates the whole pipeline and stands
+>   unreviewed — it is the single point where the review can be lost (advisory — applied only where the
 >   platform supports per-subagent model selection).
 > - **Hand-off contract:** write your full Output (the section below) into the
 >   `## Triage` section of the stored analysis file (path per your dispatch), then return to
@@ -47,8 +47,8 @@ Glob, Grep, and Read:
    the `branch_slug` the orchestrator resolved via the same script (so this glob and the
    file names always agree). If the branch is `unknown`, Glob all
    `<project_root>/.ingrain-security/assessment-*.md` instead. Glob the absolute path, never
-   the bare relative `.ingrain-security/…` — you have no project root in view, so a relative
-   glob silently matches nothing and you would wrongly report `none`.
+   the bare relative `.ingrain-security/…` — a relative glob resolves against the file you
+   happen to be reading, so it matches nothing and you would wrongly report `none`.
 2. **Match on the task — strictly.** A shared branch may hold several concurrent tasks'
    assessments, so the glob can return files belonging to *other* work. For each candidate,
    read its `## Task` Title and **compare the branch and the title/description against the
