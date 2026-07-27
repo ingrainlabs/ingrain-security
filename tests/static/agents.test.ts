@@ -3,17 +3,13 @@
  * network — pure file reads.
  *
  * Workers are reference files under the single ingrain-security skill now
- * (skills/ingrain-security/references/development/<name>.md), so a worker's write
- * target is advisory prose in the ROLE header rather than a platform-enforced
- * `tools:` frontmatter list. These checks guard that advisory contract: every
- * worker still names its sole write target — its own section of the stored
- * analysis file — carries a recommended model, and has an anti-trigger description
- * so it isn't fired directly outside the orchestrator.
- *
- * Workers DO write (the assessment file is their hand-off medium), so the ROLE
- * header must not call itself read-only: a "read-only … whole toolset" clause next
- * to a write contract is the exact contradiction that stalled workers mid-dispatch.
- * The inverse assertion below is what keeps it from creeping back.
+ * (skills/ingrain-security/references/development/<name>.md), so the read-only guarantee is
+ * advisory prose in the ROLE header rather than a platform-enforced `tools:`
+ * frontmatter list. These checks guard that advisory contract: every worker
+ * still declares itself read-only on the codebase (Read/Grep/Glob, no code
+ * edits) with its sole write being its own section of the stored assessment
+ * file, carries a recommended model, and an anti-trigger description so it isn't
+ * fired directly outside the orchestrator.
  */
 
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
@@ -70,11 +66,14 @@ for (const name of WORKERS) {
       assertStringIncludes(description.toLowerCase(), "reachable solely through a dispatch");
     });
 
-    await t.step("ROLE header names the worker's write target", () => {
+    await t.step("ROLE header declares codebase read-only with the allowed tools", () => {
+      assertStringIncludes(body.toLowerCase(), "read-only");
+      assertStringIncludes(body, "Read, Grep, and Glob");
+      assertStringIncludes(body.toLowerCase(), "make no code edits");
       // The sole permitted write is the worker's own section of the stored analysis
       // file, located by the path the dispatch specifies (per-run, not a fixed literal).
-      assertStringIncludes(prose, "stored analysis file");
-      assertStringIncludes(prose, STANDARD_ROLE.writeTarget);
+      assertStringIncludes(body, "stored analysis file");
+      assertStringIncludes(body, "path your dispatch specifies");
     });
 
     await t.step("ROLE header does not call the worker read-only", () => {

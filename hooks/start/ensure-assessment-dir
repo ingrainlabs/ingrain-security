@@ -17,19 +17,32 @@
 
 set -uo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# Project-root resolution and the .gitignore seed are shared with the PreToolUse hook
-# and with scripts/assessment-path, alongside which the lib lives. A missing lib is a
-# silent no-op: this hook must never abort the user's session.
-# shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
-. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null || exit 0
+# Resolve the user's PROJECT root — NOT the plugin root — as a normalized
+# forward-slash path (works uniformly on unix and, under Git Bash / MSYS, on
+# Windows). The host is passed as $1 by each hook.json ("claude" | "codex"):
+#   - codex: Codex exports no project-dir variable and run-hook.cmd does not
+#     change cwd, so the current directory is authoritative. We resolve from $PWD
+#     alone and deliberately IGNORE CLAUDE_PROJECT_DIR even if it leaked into the
+#     environment (e.g. a shell that also ran Claude Code) — honoring a stray
+#     Claude var would seed the folder in the wrong project.
+#   - claude (default): Claude Code exports CLAUDE_PROJECT_DIR (absolute project
+#     path); $PWD backs it up.
+#
+# The `cd && pwd` idiom (same as session-start) normalizes the value so mkdir,
+# symlink tests and the printf writes work under Git Bash on Windows, where
+# CLAUDE_PROJECT_DIR is a native backslash path that MSYS does not convert for env
+# vars. Echoes empty on failure — callers no-op rather than risk writing to the
+# filesystem root (there is no `set -e` to abort us).
+resolve_project_root() {
+    if [ "${1:-}" = "codex" ]; then
+        cd "$PWD" 2>/dev/null && pwd
+    else
+        cd "${CLAUDE_PROJECT_DIR:-$PWD}" 2>/dev/null && pwd
+    fi
+}
 
 # Seed README.md on first creation only — never clobber a user-edited one.
 # printf (not a heredoc) — documented bash 5.3 heredoc hang.
-#
-# The body is literal markdown: its backticks must reach the file verbatim, so the
-# single quotes are deliberate and nothing here is meant to expand.
-# shellcheck disable=SC2016
 seed_readme() {
     local readme="$1/README.md"
     [ -f "${readme}" ] && return 0
@@ -51,11 +64,25 @@ seed_readme() {
         > "${readme}" 2>/dev/null || true
 }
 
+# Idempotently ensure the self-ignoring .gitignore (M5) so a routine `git add -A`
+# cannot sweep up the sensitive assessments. "Ensure present" (not "only if new")
+# so a folder created by an earlier version is retrofitted.
+seed_gitignore() {
+    local ignore="$1/.gitignore"
+    [ -f "${ignore}" ] && return 0
+    printf '%s\n' \
+        '# Assessments here can contain analysis of a private codebase, so they' \
+        '# are ignored by default. Share one explicitly with: git add -f <file>' \
+        '*' \
+        '!.gitignore' \
+        > "${ignore}" 2>/dev/null || true
+}
+
 main() {
     local host="${1:-}" project_root assessment_dir
     project_root="$(resolve_project_root "${host}")"
     [ -n "${project_root}" ] || return 0
-    assessment_dir="${project_root}/.ingrain-security"
+    assessment_dir="${project_root}/ingrain-security"
 
     # Never follow a pre-placed symlink at the target — a crafted repo could point
     # it outside the tree. Silent no-op; this hook must not abort the session (M4).

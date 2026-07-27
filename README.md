@@ -129,22 +129,12 @@ If a task has no assessment (or no adopted mitigations), there is nothing to ver
 
 ### Artifacts
 
-- A single **assessment file** written into the `.ingrain-security/` folder at your
-  project root — `.ingrain-security/assessment-<branch>-<task>.md` (branch- and
+- A single **assessment file** written into the `ingrain-security/` folder at your
+  project root — `ingrain-security/assessment-<branch>-<task>.md` (branch- and
   task-keyed, minted by the `scripts/assessment-path` script). It is the workers'
   shared hand-off medium *and* its own persisted record — written in place, no temp
   copy — and is git-ignored by default (share one with `git add -f <file>`).
 - The selected findings, **folded into your plan**.
-
-Writes to that one file are approved automatically — by a `PreToolUse` hook on Claude
-Code and a `PermissionRequest` hook on Codex — so a review does not interrupt you with a
-permission prompt on every edit. The grant is deliberately narrow: `assessment*.md`
-files sitting directly in the project's `.ingrain-security/` folder, reached by a real path
-rather than a symlink. On Codex, where an edit is an `apply_patch`, the patch may add or
-update exactly those files. Everything else — including the folder's own
-`README.md` — still goes through your normal permission prompt, and the hook's only power
-is to *skip* a prompt: an edit you asked for always goes through. Codex asks you to review and trust the
-hook once, via `/hooks`.
 
 ## Installation
 
@@ -160,9 +150,6 @@ codex plugin marketplace add ingrainlabs/ingrain-security
 
 Installs are pinned to the `v<version>` git **tag**, not the default branch — you
 only ever receive tagged releases.
-
-Full setup — including the `ingrain` CLI binary, API token, and configuration — is
-documented at **[Getting started](https://docs.ingrainlabs.dev/getting-started/)**.
 
 ## Usage
 
@@ -203,29 +190,7 @@ the skill manually.
 **What the review writes.** The review's only writes are the assessment file and the
 findings folded into your plan.
 
-**Sandboxing & network access.** The review's only outbound network calls are the
-read-only `ingrain context security_rules` lookups of its two rule-retrieval passes —
-one per distinct question it needs org guidance on — which fetch your org's security rules
-(via `INGRAIN_SYNC_URL` + API token). Grant that one command once and the lookups run
-unprompted for good:
-
-```jsonc
-// Claude Code — /permissions, or .claude/settings.json
-{ "permissions": { "allow": ["Bash(ingrain context:*)"] } }
-```
-
-```python
-# Codex — ~/.codex/rules/default.rules
-prefix_rule(
-    pattern = ["ingrain", "context"],
-    decision = "allow",
-    justification = "read-only org security-rule lookups for ingrain-security",
-)
-```
-
-Allowing permissions, you don't have to accept them every time. 
-
-**The assessment folder is git-ignored.** `.ingrain-security/` is ignored
+**The assessment folder is git-ignored.** `ingrain-security/` is ignored
 by default. To share a snapshot, force-add it: `git add -f <file>`.
 
 ## For contributors

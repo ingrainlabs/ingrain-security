@@ -138,20 +138,13 @@ per-run and the worker has no other way to learn it:
 
 ```
 Read references/development/<name>.md and follow it as your system prompt.
-Your ONE permitted write is your own section of the stored analysis file for this run at
-<the minted assessment_abs — the ABSOLUTE path, pasted in full> (section: <## Section for this worker>),
-written to the field card that file already carries under your section: one field per line,
-in the order it lists, with its exact values; a field your stage does not own reads —.
-Write that section in ONE call — a single Write or Edit carrying every entry. Where you are
-filling fields into entries that already exist, it is one Edit per ENTRY, replacing that
-entry's contiguous block of field lines; never one Edit per field.
-The card is the write contract — read references/formatting/assessment-file.md
-only if you need what a field MEANS.
-Write to that exact absolute path, character for character as pasted
-above — it is already resolved against the repo root, whose .ingrain-security/ folder
-already exists.
-Scope tightly: include exactly the findings that would change how this specific
-change is reviewed or implemented.
+You do no code or repo edits — use only Read/Grep/Glob on the codebase. Your ONE
+permitted write is your own section of the stored analysis file for this run at
+<the run's assessment file — e.g. ingrain-security/assessment-<branch-slug>-<task-slug>.md> (section: <## Section for this worker>),
+written to the schema in references/assessment-file.md — use exactly its fields and
+enum values.
+Scope tightly: include only findings genuinely relevant to THIS plan — if an item
+would not change how this specific change is reviewed or implemented, omit it.
 INPUT:
 <the finished, detailed implementation plan; plus POINTERS to the sections this
 worker must read — e.g. "read <the run's assessment file> § Threats and
@@ -183,11 +176,7 @@ slice at Gate 1, the bounded `## Mitigations` slice at Gate 2, and the finished 
 Each sits upstream of everything that consumes the section, so a malformed entry is cheapest to
 repair there: re-dispatch the worker that produced it with the problem quoted back.
 
-## How to ask the user
-
-Gate 1 and Gate 2 are **per-finding selection gates** — the user includes or excludes each finding
-individually and may select any subset, **including none**. Always in **two distinct steps, in
-this order**:
+## Model tiers
 
 1. **Display the findings as a Markdown table** — one row per finding, columns per the gate step.
    The table is where the detail lives, so the user compares every finding in one place before
@@ -216,13 +205,44 @@ checklist** at the end of this file.
      and every empty section, so fill the `## Task` fields in place rather than writing the page
      over. The worker's `## Triage` section is already in it.
 
-1. **Threats** — dispatch `ingrain-threat-generator` at the plan **and the `## Triage` section**
-   (Surfaces seed the search; extend beyond them). **If triage returned a Prior analysis pointer**,
-   also point it at that snapshot's `## Threats` and `## Mitigations` so it **seeds from the prior
-   analysis**, re-derived against the current plan. It writes one `### T<n>` entry per threat into
-   `## Threats` and returns a pointer. Ids are assigned in discovery order and are **provisional**
-   — stable through the critique so its feedback keys line up, then re-tagged into risk order at
-   Step 3.
+1. **Display the information first.** Before asking anything, present the full
+   findings to the user as a **Markdown table** — one row per finding, with the
+   columns the gate step specifies. The table is where the detail lives, so the
+   user can read and compare every finding in one place before deciding.
+   **Displaying the table is mandatory in every mode and on every host** — plan
+   mode, ad-hoc, windowed or fallback selection alike. It is rendered as
+   **visible output in the conversation**, never only written into the plan or
+   assessment file, and never skipped as "extra output": printing it is a
+   read-only display action that no mode forbids. To build it, **read the
+   bounded gate slice of the assessment file** (`## Threats` at Gate 1,
+   `## Mitigations` at Gate 2) — this read is **required**, and it is exactly
+   the read the context-window discipline permits. If the slice is empty or
+   missing, stop and re-dispatch the worker that owns it rather than skipping
+   the table or rendering it empty. In the
+   same message, **name the plan file** these decisions feed into (in plan mode,
+   the active plan-file path, e.g. `.${coding_agent_root}/plans/<name>.md`; ad-hoc, the inline
+   plan you are building — see **The plan file**), so the user sees where the
+   selected findings will land, **and name the run's assessment file** (its
+   `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) so the user knows the full
+   analysis backing the table lives there. These are a **mention only** — nothing is
+   written to the plan file at the gates; the write happens at finalize.
+2. **Then present the selection windows.** Only after the table is displayed,
+   present the findings as **multiple single-choice windows — one window per
+   finding** — each a single **include/exclude** decision labeled by its tag +
+   short title (e.g. `T1 — unauthenticated token refresh`). One window, one
+   finding, one binary choice keeps every decision isolated and deliberate, so
+   findings never blur together the way they do in a single multi-toggle list.
+   Mark findings the `ingrain-risk-scorer` scored **high or critical** as
+   recommended. Where the host caps how many windows it can show at once,
+   present them in **consecutive batches in table order** — tags ascend as
+   priority descends, so this is `T1, T2, …` (and `M1, M2, …`), most important
+   first — and merge the choices. Because each window is its own include/exclude
+   decision, **selecting none is always reachable** — the user simply excludes
+   every window. This is a generic primitive; do not assume any one platform's
+   tool. See `references/platform-dispatch.md` for the per-platform mapping.
+   **Never collapse the gate into a single yes/no over the whole set, and never
+   fold all findings into one combined list** — one window per finding, and the
+   user decides each one.
 
 2. **Critique the threats** *(single round)*.
 
@@ -240,23 +260,20 @@ checklist** at the end of this file.
    **the id is the priority** and is permanent: every stage that shows threats shows them in
    **id order** — the ids are the sort.
 
-4. **Gate 1 — the user selects which threats to address.** Follow **How to ask the user**; the user
-   must understand each threat without re-reading the plan. In order:
+The review persists its analysis to a **single file written directly into
+`ingrain-security/`** at the project root — it is both the living working copy the workers
+write during the run and its persisted record, so there is **no separate temp file and no
+finalize copy**. **Do not hand-build its path.** Mint it once, at the start of the review,
+by running the bundled **`scripts/assessment-path`** script and reuse its output
+everywhere. Your SessionStart context carries the concrete, ready-to-run command (plugin
+root and host already substituted); it takes the form:
 
     bash <plugin>/skills/ingrain-security/scripts/assessment-path <host> mint --title "<task title>"
 
-The script returns a JSON object. Use its **`assessment_abs`** — the **absolute** path —
-verbatim as the file path for every worker dispatch, every Write/Edit, and at finalize, and
-obey the `instruction` field it carries. The relative `assessment_path` is a **display form**
-only: put it in prose, tables and plan-file links, never in a write target. This distinction
-is the whole guard against a stray `.ingrain-security/` folder being created next to whatever
-file an agent is editing — a relative path is resolved by whoever receives it, and a worker
-subagent has no way to know the project root. The script resolves the root from the git repo,
-creates the one folder, and hands you the finished absolute path; there is nothing to rebuild.
+The script returns a JSON object — use its **`assessment_path`** verbatim as the file path
+for every worker dispatch and at finalize. The path is deterministic in the branch + task:
 
-The path is deterministic in the branch + task:
-
-    <project_root>/.ingrain-security/assessment-<branch-slug>-<task-slug>.md
+    ingrain-security/assessment-<branch-slug>-<task-slug>.md
 
 so it doubles as the task's identity — re-reviewing the **same task on the same branch**
 resolves to the **same file** (the run resumes/updates it in place; `file_exists: true`
@@ -288,7 +305,7 @@ selection `selected`/`excluded`/`undecided`) uses exactly the values it lists.
 
 The review folds its results into **the plan file** — the implementation plan the
 coding agent edits and executes downstream. This is **distinct from the assessment
-file**: the assessment file (`.ingrain-security/assessment-<branch-slug>-<task-slug>.md`) is the security-analysis
+file**: the assessment file (`ingrain-security/assessment-<branch-slug>-<task-slug>.md`) is the security-analysis
 artifact the workers write; the plan file is the implementation plan the selected
 threats and adopted mitigations become part of.
 
@@ -328,16 +345,15 @@ flowchart TD
 ```
 
 Throughout the flow, each worker writes its own section of **the run's assessment
-file** (the `assessment_abs` you minted) and you pass the next worker a pointer to the
+file** (the `assessment_path` you minted) and you pass the next worker a pointer to the
 sections it needs — the file is the shared state, so your own context stays lean.
 
 ## Steps — in strict order
 
 0. **Triage** — dispatch the `ingrain-relevance-triage` worker with the plan, **plus the
    resolved `<branch-slug>` (or "unknown") and the task title**. Instruct it to first
-   **check for a prior analysis** of this task in the assessment folder — pass it the
-   **absolute** folder, `<project_root>/.ingrain-security/`, from the mint JSON, so its
-   Glob cannot drift (matching on branch + task title — a shared branch may
+   **check for a prior analysis** of this task in the assessment folder
+   `ingrain-security/` (matching on branch + task title — a shared branch may
    hold other concurrent tasks' assessments, so a loose match returns `none`) before it
    classifies — per `references/ingrain-relevance-triage.md`. If it finds a prior snapshot whose
    `## Threats` are non-empty, it returns a **Prior analysis** pointer (path + threat
@@ -346,23 +362,36 @@ sections it needs — the file is the shared state, so your own context stays le
      and **stop here**. Do not dispatch any other worker; there is nothing to fold
      into the plan — carry on building it.
    - If the verdict is `major`: keep its **Surfaces** notes — you forward them to
-     the generator in Step 1 — and continue to run the full cycle.
-1. **Threats** — dispatch the `ingrain-threat-generator` worker with the plan **and the
-   triage Surfaces notes** (its starting points, not a ceiling) → threat list (`T1…`).
-2. **Critique threats** *(loop, max 3)* — dispatch the `ingrain-threat-critic` worker. On
-   `needs-revision`, re-dispatch `ingrain-threat-generator` with the prior list + critique
-   and repeat. Then **freeze** the threats.
-3. **Risk score** — dispatch the `ingrain-risk-scorer` worker with the frozen threats →
-   per-threat 0–100 (likelihood × impact) plus an overall plan score and criticality.
+     the generator in Step 1 — and continue to run the full cycle. **Create or open the
+     assessment file** at the minted `assessment_path` (see **The assessment file**;
+     `file_exists: true` means you are resuming this task's prior analysis) with its title +
+     banner and the `## Task` section; the triage worker's `## Triage` section
+     (verdict + Surfaces) is now in it. This is the hand-off medium for every step
+     that follows — its schema and template live in `references/assessment-file.md`.
+1. **Threats** — dispatch the `ingrain-threat-generator` worker, pointing it at the plan
+   **and the `## Triage` section** (Surfaces are starting points, not a ceiling).
+   **If triage returned a Prior analysis pointer**, also point the generator at that prior
+   snapshot's `## Threats` (and `## Mitigations`) so it **seeds from the prior analysis**
+   rather than starting from scratch — re-derive and refresh against the current plan, do
+   not blindly copy. It writes
+   the threat rows (descriptive columns, `T1…`; most tasks warrant 3–6 rows — a target, not a hard cap) into the `## Threats` table per the
+   `references/assessment-file.md` schema and returns a pointer.
+2. **Critique threats** *(loop, max 3)* — dispatch the `ingrain-threat-critic` worker,
+   pointing it at the `## Threats` section. On `needs-revision`, re-dispatch
+   `ingrain-threat-generator` with a pointer to `## Threats` + `## Threat critique` and
+   repeat. Then **freeze** the threats (the frozen list lives in the `## Threats` section).
+3. **Risk score** — dispatch the `ingrain-risk-scorer` worker, pointing it at the frozen
+   `## Threats` section. It fills each row's scoring columns (Justification, Impact,
+   Likelihood, Risk score 0–100, Criticality) and writes the plan-level residual risk into
+   `## Risk score` — per the `references/assessment-file.md` schema.
 4. **Ask user — select which threats to address (Gate 1).** Follow the two-step
    display-then-ask pattern (see **How to ask the user**). The user is deciding
    per threat whether it is worth acting on, so they must understand each
    threat without re-reading the plan.
 
    **First, display the scored threats as a Markdown table in the conversation** —
-   always, in every mode (plan mode included) — one row per threat, **in tag order
-   (`T1` first)**, which the risk-scorer has already made highest-risk-first, with these
-   columns:
+   always, in every mode (plan mode included) — one row per threat,
+   ordered by risk score (highest first), with these columns:
 
    | Column | Contents |
    |--------|----------|
@@ -372,10 +401,14 @@ sections it needs — the file is the shared state, so your own context stays le
    | **Why it matters** | the consequence if realized, grounded in the scorer's impact and score |
    | **Local impact in the plan** | which specific part of *this* change the threat lands on |
 
-   Every cell traces back to an entry a worker wrote. Flag high/critical rows (e.g. `⚑ high · 78`)
-   so the table and the windows tell the same story. In the same message, **name the run's
-   assessment file** (its relative `assessment_path`) and **the plan file** these decisions feed
-   into — a **mention only**; the plan-file write happens at finalize.
+   Keep the table faithful to the frozen threats and scores — don't invent,
+   soften, or re-score. Flag rows whose risk criticality is high or critical (e.g.
+   `⚑ high · 78` in the Risk column) — these are the ones you mark recommended
+   in the selection windows, so the table and the windows tell the same story.
+   In the same message, **name the run's assessment file** (its
+   `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) so the user can open the full
+   analysis behind the table, alongside the plan file mention (see **How to ask
+   the user**).
 
    - **1–N selected** → only those proceed to Step 5. Name the excluded in one line
      ("T02, T05 excluded — risk accepted").
@@ -396,41 +429,40 @@ sections it needs — the file is the shared state, so your own context stays le
    → `references/lib/ingrain-cli.md` owns the probe, the query and the failure taxonomy;
    `references/formatting/rules-file.md` owns the sidecar's schema.
 
-   - **Sandbox or permission denial** → you are in the main session, so the host's native "allow
-     this command?" prompt reaches the user. **Recoverable:** re-run so it surfaces, and carry on
-     without rules once they decline.
-   - **Genuine unavailability** — binary absent, unconfigured, or no matches — degrades gracefully:
-     sidecar unwritten, one line on why, carry on. The mitigations then stand on the workers' own
-     analysis.
+   To build the table, read only the bounded `## Threats` slice of the assessment
+   file — not the whole running analysis. This read is **required**, not a
+   context-discipline violation. Every table cell and every window label comes
+   from that slice; if the slice is empty or its scoring columns are unfilled,
+   stop and re-dispatch the `ingrain-risk-scorer` (or the `ingrain-threat-generator` if the
+   rows themselves are missing) rather than skipping the table or rendering it
+   empty. **After the user decides, record each
+   threat's `Selection`** in the `## Threats` table (include → `selected`, exclude →
+   `excluded`; `undecided` only if the user is explicitly unsure), per the
+   `references/assessment-file.md` schema.
 
-6. **Mitigate** — dispatch `ingrain-mitigation-generator` with the **user-selected threats only**
-   (excluded threats are out of scope), `assessment_abs`, and `rules_abs` — pointing it at the
-   sidecar's `## Retrieved rules` so it grounds its proposals in established org practice. It
-   proposes both **threat mitigations** and **general implementation instructions** for the full
-   scoped task; both belong in the plan. It writes the mitigation rows and the sidecar's
-   `## Per-mitigation mapping`, working from the rules already on disk — it has no CLI of its own.
+   - **1–N selected** — incorporate the selected threats into the plan; only
+     they proceed to mitigation. Name the excluded ones in one line (e.g. "T2,
+     T5 excluded — risk accepted").
+   - **None selected** — incorporate no mitigations, skip Steps 5–7, state "no threats
+     selected — review closed" and close with a one-line verdict naming the
+     threats as accepted risk. Still **fold the assessment link + maintenance
+     instruction into the plan** (the `## Threats` section, with every threat marked
+     `excluded`, is the preserved context) and **delete the `## Threat critique`
+     section** (iteration scratch). The assessment file already lives at its
+     `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path — no snapshot copy is
+     needed — so just finalize it in place, then continue building the plan.
+5. **Mitigate** — dispatch the `ingrain-mitigation-generator` worker with the
+   user-selected threats — only those; excluded threats are out of scope. It writes the
+   mitigations into the `## Mitigations` section and returns a pointer.
+6. **Critique mitigations** *(loop, max 3)* — dispatch the `ingrain-mitigation-critic`
+   worker, pointing it at `## Mitigations`; re-dispatch `ingrain-mitigation-generator` on
+   `needs-revision`. Then **freeze** the mitigations.
+7. **Ask user — select which mitigations to adopt (Gate 2).** Follow the
+   two-step display-then-ask pattern (see **How to ask the user**).
 
-7. **Critique mitigations** *(single round)* — dispatch `ingrain-mitigation-critic` at
-   `## Mitigations` **and the `rules-<…>.md` sidecar**, so it can judge the mitigations against the
-   rules they cite *and* against the retrieved rules they leave unapplied. A retrieved rule that no
-   mitigation applies is exactly the gap this critic reports.
-   - `needs-revision` → re-dispatch `ingrain-mitigation-generator` **once**, then **freeze**.
-   - `approved` → **freeze** the mitigations.
-   - Either way, surface anything the critique left unresolved.
-
-8. **Gate 2 — the user selects which mitigations to adopt.** Follow **How to ask the user**. In
-   order:
-
-   1. **Read** the bounded `## Mitigations` slice, and the `rules-<…>.md` sidecar to resolve rule
-      titles. **Run the three-check on the slice**; a wrong enum or a missing field line goes back
-      to `ingrain-mitigation-generator` before you display the table.
-   2. **Display** the frozen mitigations as a Markdown table, **ordered by the lowest threat id
-      each covers** — ids are in risk order, so that is the highest risk score it addresses —
-      general instructions last.
-   3. **Present** one single-choice window per mitigation, labeled by short title + the threat
-      id(s) it addresses (or `general`).
-   4. **Record** each mitigation's `Selection` in `## Mitigations` (adopt → `selected`, decline →
-      `excluded`).
+   **First, display the frozen mitigations as a Markdown table in the
+   conversation** — always, in every mode (plan mode included) — one row per
+   mitigation, with these columns:
 
    | Column | Contents |
    |--------|----------|
@@ -441,9 +473,16 @@ sections it needs — the file is the shared state, so your own context stays le
    | **Effort** | how much work it takes to implement |
    | **Follows rules** | the **title(s)** of the org rule(s) it follows, resolved from that mitigation's entry in the sidecar (e.g. `Authenticated service calls`); `—` for a pure threat mitigation |
 
-   For each id in a mitigation's **Rule refs**, take the title from its `### <id> — <title>` entry
-   in the sidecar. **Print rule titles** — the ids are machine-facing and stay in the file. Where an
-   id has no matching sidecar entry (or no sidecar exists), print the rule count (e.g. `2 org rules`).
+   Keep the table faithful to the frozen mitigations — don't invent or re-scope.
+   In the same message, **name the run's assessment file** (its
+   `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path) so the user can open the full
+   analysis behind the table, alongside the plan file mention (see **How to ask
+   the user**).
+
+   To build the table, read the bounded `## Mitigations` slice of the assessment
+   file — not the whole running analysis. Every table cell and every window label
+   comes from that slice; if the slice is empty or missing, stop and re-dispatch
+   the `ingrain-mitigation-generator` rather than rendering an empty table.
 
    - **1–N selected** → incorporate exactly those. If the selection leaves a `selected` threat with
      no covering mitigation, **say so in the closing verdict**.
@@ -453,14 +492,26 @@ sections it needs — the file is the shared state, so your own context stays le
 
 ## The plan file
 
-The review folds its results into **the plan file** — the implementation plan the coding agent
-edits and executes downstream. This is **distinct from the assessment file**: the assessment file
-is the security-analysis artifact the workers write; the plan file is where the selected threats
-and adopted mitigations land.
+   **Finalize the assessment file in place:** record each mitigation's `Selection` in the
+   `## Mitigations` table (adopt → `selected`, decline → `excluded`), and fill
+   `## Coverage / open items` with any `selected` threat left without a `selected`
+   covering mitigation — per the `references/assessment-file.md` schema. Then
+   **delete the `## Threat critique` and `## Mitigation critique` sections** (heading
+   and body) — they are iteration scratch; the finalized file carries only end
+   results and matches the schema template. The file already lives at its
+   `ingrain-security/assessment-<branch-slug>-<task-slug>.md` path, so there is **no snapshot
+   to copy** — finalizing it *is* persisting it.
 
-In **plan mode** it is a concrete on-disk file (e.g. `.${coding_agent_root}/plans/<name>.md`) whose
-path you already hold, since it is the file you are editing — **name it** when you reference it.
-In **ad-hoc mode** it is the inline plan you are building in the conversation.
+   Then **write the results into the plan file** (see **The plan file**) — the
+   implementation plan the coding agent edits and executes. Incorporate the selected
+   threats and adopted mitigations, and fold in two supporting things: (1) a link to
+   the run's assessment file (`ingrain-security/assessment-<branch-slug>-<task-slug>.md`, the
+   living record the maintenance instruction tracks), which is git-ignored by default
+   (share it with `git add -f <file>`); and (2) the
+   maintenance instruction — tell the implementing agent to keep that file in sync as
+   the implementation changes across iteration loops. In plan mode, **name the plan
+   file you write to** (e.g. `.${coding_agent_root}/plans/<name>.md`); ad-hoc, this is the inline
+   plan you are building.
 
 ## Finalize
 
@@ -510,38 +561,52 @@ this section is a pointer, and the procedure is in that file.
 
 ## Rules that are easy to miss
 
-Environment-specific facts that defy a reasonable assumption. The flow above is the procedure;
-these are what it cannot infer.
-
-| Situation | Do this |
-|-----------|---------|
-| `.ingrain-security/` appears to be missing | Re-run the mint and use the path it returns. The folder self-ignores, so `git status` stays silent about it — "missing" means the path resolved elsewhere. |
-| Naming the assessment file to a worker | Pass the absolute `assessment_abs`. A worker has no project root in view, so a relative path resolves against the file it was reading and creates a stray folder there. |
-| The minted file looks empty but `file_exists` is `false` | Correct — the mint seeds a skeleton and `file_exists` reports written content, not presence. Fill it in place. |
-| Deciding the phase on a clean tree | Route on `delta_empty`, never `git status`: a fully committed implementation still belongs to Testing. |
-| Writing on Codex | Approval is granted per **patch** — one touching the assessment *and* another file prompts as a whole. Keep assessment edits in their own patch. |
-| A write to `.ingrain-security/` is held in plan mode | Ask the user to allow writes to that folder — one line on which file and why — then retry the same write. The folder is the run's artifact store, separate from the plan file. |
-| Minting in a later session | Use the recorded Title **verbatim**. The mint is keyed on branch + title, so a paraphrase mints a different file and silently loses the task. |
-| A worker's section looks correct | Three-check it against its field card at the next gate anyway — an enum typo stays invisible until it breaks in a later session. |
-| About to open the schema reference mid-run | Only for what a field *means*. The card under the section is the whole of the shape; re-reading the reference to recover it is the cost this skill exists to avoid. |
-| A **session rule says** to call the subagent tool once the user has requested it | A permission gate over a mechanism the host already has. Ask the user to allow the subagent flow before your first dispatch — → `references/development/dispatch.md` § When a session rule gates subagents behind user request. The sequential fallback is for a host whose only mode is the main session. |
-| The `ingrain` fetch was sandbox-blocked | Step 5 runs in the main session — re-run and let the host's native prompt reach the user. Continue without rules only once they decline. |
+| Thought | Reality |
+|---------|---------|
+| "This change is obviously trivial, skip triage" | Triage decides minor/major, not you. Run it. |
+| "The plan's done — I'll present it and run security after" | The review is the final planning step: run it on the finished plan, before you present it or write code, and fold the results in. |
+| "I'll run the review on a rough sketch to save a step" | Run it on the comprehensive, detailed plan — vague input yields vague threats. Finish the plan first. |
+| "The review found things, but I'll keep them out of the plan" | The selected threats and adopted mitigations belong in the plan you present — incorporate them, don't sideline them. |
+| "Let me score risk before the threats are settled" | Never score before threats are frozen. |
+| "I'll write mitigations even though the user selected zero threats" | Zero threats selected at Gate 1 ends the review — nothing proceeds to mitigation. |
+| "I'll make the gate one yes/no over the whole set" | Each gate is a per-finding selection — one single-choice include/exclude window per finding; the user decides each individually (zero is allowed). |
+| "The user excluded T2, but it's important — I'll mitigate it anyway" | Excluded findings are out of scope. Record them as accepted risk and move on. |
+| "The critic flagged issues but it's good enough" | Re-run the generator with the feedback (up to 3 rounds). |
+| "This loop could keep improving forever" | Cap each critic loop at 3 rounds; surface what's unresolved. |
+| "I'll just answer the worker's job myself instead of dispatching" | Each worker runs in its own subagent — dispatch it, don't inline it. |
+| "I'll paste the prior worker's output into the next dispatch" | Hand off by pointer — tell the next worker which section of the assessment file to read; don't thread full content through your context. |
+| "I'll read the whole assessment file to keep track" | Don't. Hold only the compact statuses; read only the bounded gate slices. Reading the full running analysis defeats the context-window discipline. |
+| "I'll put all the detail in the window options and skip the table" | Display the findings as a table first, then present the single-choice windows — never the windows alone. |
+| "I'm in plan mode / keeping output lean, so I'll skip printing the gate table" | The gate table is mandatory visible output in every mode. Read the bounded slice of the assessment file — that read is the one the context-window discipline permits — and print the table before any window. |
 
 ## Development — checklist
 
-The procedure is **Development — the flow**; this is the tracker. Tick only what is actually done.
-Work top to bottom, one step at a time, in the order listed.
-**The field cards seeded in `assessment_abs` are the write contract — yours and every worker's.
-The three-check runs at both gates and at finalize, on the reads those steps already make;
-never on a fresh read of `references/formatting/assessment-file.md`.**
-
-- [ ] 0. Triage dispatched — bias to `major` when uncertain; `minor` → stop, `major` → open the assessment file
-- [ ] 1. Threats generated into `## Threats`, seeded from any prior analysis
-- [ ] 2. Threat critique dispatched — one revision at most, then threats frozen
-- [ ] 3. Risk scored — five scoring fields per threat plus the plan-level residual; threats re-tagged into risk order (`T01` = highest)
-- [ ] 4. Gate 1 — slice three-checked, table displayed FIRST, then one window per threat; `Selection` recorded (zero selected ends the review)
-- [ ] 5. Org rules retrieved by YOU (keys on the selected threats ONLY) — no worker; sidecar written, or none/skipped; blocks mitigation generation
-- [ ] 6. Mitigations generated for the selected threats ONLY, grounded in the sidecar; generator ran without a shell of its own
-- [ ] 7. Single mitigation critique pass done — approved, or one revision applied; mitigations frozen
-- [ ] 8. Gate 2 — slice three-checked, table displayed FIRST, then one window per mitigation; `Selection` recorded
-- [ ] Finalize — `Latest stage: development` set, critique sections deleted, sidecar + cards kept, file three-checked, plan file links it + Maintenance
+- **The final planning step, not a coding step.** This runs *after your
+  implementation plan is comprehensive and detailed but before you present it or
+  write code* — it takes the finished plan as input and folds security back into
+  it. Its products are content folded into the plan you produce plus the local
+  assessment artifact; it writes no code.
+- **Read-only on the codebase; two outputs.** Workers make **no code or repo
+  edits** — Read/Grep/Glob on the codebase only — and their sole write is their own
+  section of the stored analysis file (the `assessment_path` the orchestrator minted).
+  Restate that constraint in every dispatch, since without tool-level enforcement it
+  is advisory. The process produces exactly two things: **the assessment file** (the
+  hand-off medium the workers write, section by section, and you finalize) and
+  **the user-selected finding set folded into the plan** at Gate 1 and Gate 2 (the
+  plan file when in plan mode), which also links the assessment file and instructs
+  the implementing agent to maintain it. Each gate incorporates exactly the selected
+  subset — never an unselected or unreviewed finding. Zero selections at Gate 1 end
+  the review; zero selections at Gate 2 incorporate nothing.
+- **Hand off by pointer; keep your context lean.** Move data between workers by
+  pointing them at sections of the assessment file — never by pasting a prior
+  worker's full output into the next dispatch — and do not read the full running
+  analysis into your own context. Read only compact statuses and the bounded gate
+  slices. See **The assessment file** and **How to dispatch a worker**.
+- **Triage first.** Run the full cycle only when `ingrain-relevance-triage` returns
+  `major`; bias to `major` when uncertain.
+- **No skipping / no resequencing the pipeline.** Never score before threats are frozen,
+  never mitigate before Gate 1, never present mitigations before they are frozen. (This is
+  about the order of the *stages* — the `ingrain-risk-scorer` re-tagging the threats into
+  risk order is part of its job, not a violation of it.)
+- **Bounded loops.** Cap each critic loop at 3 rounds; surface anything left
+  unresolved rather than looping forever or hiding it.
