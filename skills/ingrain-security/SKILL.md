@@ -247,20 +247,130 @@ Each step is one dispatch; you hold the state between them. The tracker for thes
    The user is deciding per threat whether it is worth acting on, so they must understand each
    threat without re-reading the plan. In order:
 
-   1. **Read** the bounded `## Threats` slice — this read is **required**, and it is exactly
-      the read the context-window discipline permits. If the slice is empty or its scoring
-      columns are unfilled, stop and re-dispatch `ingrain-risk-scorer` (or
-      `ingrain-threat-generator` if the rows themselves are missing) rather than skipping the
-      table or rendering it empty.
-   2. **Display** the scored threats as a Markdown table in the conversation, **in tag order
-      (`T1` first)**, with the columns below.
-   3. **Present** one single-choice window per threat; mark high/critical recommended.
-   4. **Record** each threat's `Selection` in `## Threats` (include → `selected`, exclude →
-      `excluded`; `undecided` only if the user is explicitly unsure).
+    bash <plugin>/skills/ingrain-security/scripts/assessment-path <host> mint --title "<task title>"
+
+The script returns a JSON object. Use its **`assessment_abs`** — the **absolute** path —
+verbatim as the file path for every worker dispatch, every Write/Edit, and at finalize, and
+obey the `instruction` field it carries. The relative `assessment_path` is a **display form**
+only: put it in prose, tables and plan-file links, never in a write target. This distinction
+is the whole guard against a stray `.ingrain-security/` folder being created next to whatever
+file an agent is editing — a relative path is resolved by whoever receives it, and a worker
+subagent has no way to know the project root. The script resolves the root from the git repo,
+creates the one folder, and hands you the finished absolute path; there is nothing to rebuild.
+
+The path is deterministic in the branch + task:
+
+    <project_root>/.ingrain-security/assessment-<branch-slug>-<task-slug>.md
+
+so it doubles as the task's identity — re-reviewing the **same task on the same branch**
+resolves to the **same file** (the run resumes/updates it in place; `file_exists: true`
+signals this), while a different task or branch gets its own file. This task-slug keying is
+**by design how two concurrent tasks on one branch stay isolated**: distinct titles mint
+distinct files, so parallel reviews never write over each other — the separation is
+structural, not left to a worker's judgement. The `assessment-` prefix
+always leads; any unresolvable segment is dropped (no branch → `assessment-<task-slug>.md`;
+no title → `assessment-<branch-slug>.md`; both → `assessment.md`). The file is
+**git-ignored** (the folder self-ignores), so it stays uncommitted. It is a
+**living document** and the **hand-off medium** between workers:
+each worker writes its own named section, the orchestrator frames and finalizes it, and the
+plan you produce links it and carries the **Maintenance** instruction for the implementing
+agent.
+
+**The script resolves the current branch once** and returns it as `branch_slug` (with a
+`branch_known` flag). Under the hood it uses `git branch --show-current` (fallback
+`git rev-parse --abbrev-ref HEAD`, never `.git/HEAD`), lowercased and reduced to
+`[a-z0-9-]`; a detached HEAD or non-git checkout yields an **unknown** branch, which drops
+the `<branch-slug>-` segment and tells triage the branch is unknown (see Step 0). Running
+the script is the orchestrator's one shell call.
+
+Its **section layout and content template are defined in
+`references/assessment-file.md`** — follow that reference exactly, so every enumerated
+field (`impact`, `likelihood`, `criticality`, `yield`, `effort`, and the Gate
+selection `selected`/`excluded`/`undecided`) uses exactly the values it lists.
+
+## The plan file
+
+The review folds its results into **the plan file** — the implementation plan the
+coding agent edits and executes downstream. This is **distinct from the assessment
+file**: the assessment file (`.ingrain-security/assessment-<branch-slug>-<task-slug>.md`) is the security-analysis
+artifact the workers write; the plan file is the implementation plan the selected
+threats and adopted mitigations become part of.
+
+In **plan mode** it is a concrete on-disk file (e.g. `.${coding_agent_root}/plans/<name>.md`); you
+already hold its path, since it is the file you are editing — **name it** when you
+reference it. In **ad-hoc mode** there is no file — the plan file is "the inline plan
+you are building" in the conversation. Reference the plan file at both gate displays
+(mention only — see **How to ask the user**) and write the results into it at finalize.
+
+## Flow
+
+```mermaid
+flowchart TD
+    planning([Plan is comprehensive & detailed — final planning step]) --> triage[ingrain-relevance-triage]
+    triage --> majorQ{major?}
+    majorQ -->|minor| stop([Stop — nothing to fold in; keep planning])
+    majorQ -->|major| threatGen[ingrain-threat-generator]
+
+    threatGen --> threatCritic[ingrain-threat-critic]
+    threatCritic --> threatsOk{threats ok?}
+    threatsOk -->|needs-revision max 3| threatGen
+    threatsOk -->|approved| freezeThreats[Freeze threats]
+
+    freezeThreats --> riskScorer[ingrain-risk-scorer]
+    riskScorer --> gate1{Gate 1: select threats 0–N}
+    gate1 -->|none selected| done([Fold results into the plan; keep planning])
+    gate1 -->|1+ selected| mitGen[ingrain-mitigation-generator<br/>+ retrieve org rules via ingrain CLI]
+
+    mitGen --> mitCritic[ingrain-mitigation-critic]
+    mitCritic --> mitsOk{mitigations ok?}
+    mitsOk -->|needs-revision max 3| mitGen
+    mitsOk -->|approved| freezeMits[Freeze mitigations]
+
+    freezeMits --> gate2{Gate 2: select mitigations 0–N}
+    gate2 -->|1+ selected → incorporate| done
+    gate2 -->|none selected| done
+```
+
+Throughout the flow, each worker writes its own section of **the run's assessment
+file** (the `assessment_abs` you minted) and you pass the next worker a pointer to the
+sections it needs — the file is the shared state, so your own context stays lean.
+
+## Steps — in strict order
+
+0. **Triage** — dispatch the `ingrain-relevance-triage` worker with the plan, **plus the
+   resolved `<branch-slug>` (or "unknown") and the task title**. Instruct it to first
+   **check for a prior analysis** of this task in the assessment folder — pass it the
+   **absolute** folder, `<project_root>/.ingrain-security/`, from the mint JSON, so its
+   Glob cannot drift (matching on branch + task title — a shared branch may
+   hold other concurrent tasks' assessments, so a loose match returns `none`) before it
+   classifies — per `references/ingrain-relevance-triage.md`. If it finds a prior snapshot whose
+   `## Threats` are non-empty, it returns a **Prior analysis** pointer (path + threat
+   count) alongside its verdict; keep that pointer to forward to the generator in Step 1.
+   - If the verdict is `minor`: state "no security review needed — minor change"
+     and **stop here**. Do not dispatch any other worker; there is nothing to fold
+     into the plan — carry on building it.
+   - If the verdict is `major`: keep its **Surfaces** notes — you forward them to
+     the generator in Step 1 — and continue to run the full cycle.
+1. **Threats** — dispatch the `ingrain-threat-generator` worker with the plan **and the
+   triage Surfaces notes** (its starting points, not a ceiling) → threat list (`T1…`).
+2. **Critique threats** *(loop, max 3)* — dispatch the `ingrain-threat-critic` worker. On
+   `needs-revision`, re-dispatch `ingrain-threat-generator` with the prior list + critique
+   and repeat. Then **freeze** the threats.
+3. **Risk score** — dispatch the `ingrain-risk-scorer` worker with the frozen threats →
+   per-threat 0–100 (likelihood × impact) plus an overall plan score and criticality.
+4. **Ask user — select which threats to address (Gate 1).** Follow the two-step
+   display-then-ask pattern (see **How to ask the user**). The user is deciding
+   per threat whether it is worth acting on, so they must understand each
+   threat without re-reading the plan.
+
+   **First, display the scored threats as a Markdown table in the conversation** —
+   always, in every mode (plan mode included) — one row per threat, **in tag order
+   (`T1` first)**, which the risk-scorer has already made highest-risk-first, with these
+   columns:
 
    | Column | Contents |
    |--------|----------|
-   | **Threat** | tag + short title (e.g. `T1 — unauthenticated token refresh`) |
+   | **Threat** | tag + short title (e.g. `T3 — unauthenticated token refresh`) |
    | **Risk** | risk criticality + 0–100 score (e.g. `high · 78`) |
    | **What can go wrong** | the concrete failure, drawn from the threat's Vector/Description and stated in this change's terms |
    | **Why it matters** | the consequence if realized, grounded in the scorer's impact and score (what an attacker gains, what data or guarantee is lost) |
