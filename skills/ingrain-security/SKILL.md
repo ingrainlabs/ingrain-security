@@ -216,8 +216,9 @@ checklist** at the end of this file.
    (Surfaces seed the search; extend beyond them). **If triage returned a Prior analysis pointer**,
    also point it at that snapshot's `## Threats` and `## Mitigations` so it **seeds from the prior
    analysis**, re-derived against the current plan. It writes one `### T<n>` entry per threat into
-   `## Threats` and returns a pointer. Ids are assigned in discovery order and are **permanent**;
-   Step 3 sets priority by scoring, not by renumbering.
+   `## Threats` and returns a pointer. Ids are assigned in discovery order and are **provisional**
+   — stable through the critique so its feedback keys line up, then re-tagged into risk order at
+   Step 3.
 
 2. **Critique the threats** *(single round)*.
 
@@ -228,9 +229,12 @@ checklist** at the end of this file.
    - Either way, surface anything the critique left unresolved.
 
 3. **Risk score** — dispatch `ingrain-risk-scorer` at the frozen `## Threats`. It fills each
-   entry's five scoring field lines and writes the plan-level residual into `## Risk score`, moving
-   and renumbering nothing. From here **priority is the risk score**: every stage that shows
-   threats sorts by it descending, breaking ties by impact, then likelihood, then id.
+   entry's five scoring field lines, writes the plan-level residual into `## Risk score`, and
+   **re-tags the threats into descending-risk order** — reordering the entries and reassigning ids
+   contiguously from `T01`, the most dangerous threat. It is the last stage that can do so safely:
+   threat ids pick up their first references at Step 6, when mitigations name them. From here
+   **the id is the priority** and is permanent: every stage that shows threats shows them in
+   **id order** — the ids are the sort.
 
 4. **Gate 1 — the user selects which threats to address.** Follow **How to ask the user**; the user
    must understand each threat without re-reading the plan. In order:
@@ -240,8 +244,9 @@ checklist** at the end of this file.
       If the slice is empty or its scoring fields still read `—`, re-dispatch `ingrain-risk-scorer`
       (or `ingrain-threat-generator` where the entries themselves are missing). A wrong enum or a
       missing field line goes back the same way, to the worker that owns that field.
-   2. **Display** the scored threats as a Markdown table, **sorted by risk score descending**
-      (ties: impact, then likelihood, then id) — the ids will not be in order.
+   2. **Display** the scored threats as a Markdown table **in id order — `T01` first**, which the
+      scorer already re-tagged into descending risk. Take the ids as the order, and confirm the
+      risk scores descend down them; where a score rises, Step 3 goes back for the re-tag.
    3. **Present** one single-choice window per threat; mark high/critical recommended.
    4. **Record** each threat's `Selection` in `## Threats` (include → `selected`, exclude →
       `excluded`; `undecided` only if the user is explicitly unsure) — a mistyped `Selection` here
@@ -307,8 +312,9 @@ checklist** at the end of this file.
    1. **Read** the bounded `## Mitigations` slice, and the `rules-<…>.md` sidecar to resolve rule
       titles. **Run the three-check on the slice**; a wrong enum or a missing field line goes back
       to `ingrain-mitigation-generator` before you display the table.
-   2. **Display** the frozen mitigations as a Markdown table, **ordered by the highest risk score
-      among the threats each covers**, general instructions last.
+   2. **Display** the frozen mitigations as a Markdown table, **ordered by the lowest threat id
+      each covers** — ids are in risk order, so that is the highest risk score it addresses —
+      general instructions last.
    3. **Present** one single-choice window per mitigation, labeled by short title + the threat
       id(s) it addresses (or `general`).
    4. **Record** each mitigation's `Selection` in `## Mitigations` (adopt → `selected`, decline →
@@ -420,7 +426,7 @@ never on a fresh read of `references/formatting/assessment-file.md`.**
 - [ ] 0. Triage dispatched — bias to `major` when uncertain; `minor` → stop, `major` → open the assessment file
 - [ ] 1. Threats generated into `## Threats`, seeded from any prior analysis
 - [ ] 2. Threat critique dispatched — one revision at most, then threats frozen
-- [ ] 3. Risk scored — five scoring fields per threat plus the plan-level residual; ids untouched
+- [ ] 3. Risk scored — five scoring fields per threat plus the plan-level residual; threats re-tagged into risk order (`T01` = highest)
 - [ ] 4. Gate 1 — slice three-checked, table displayed FIRST, then one window per threat; `Selection` recorded (zero selected ends the review)
 - [ ] 5. Org rules retrieved by YOU (keys on the selected threats ONLY) — no worker; sidecar written, or none/skipped; blocks mitigation generation
 - [ ] 6. Mitigations generated for the selected threats ONLY, grounded in the sidecar; generator ran without a shell of its own

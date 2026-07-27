@@ -31,6 +31,7 @@ const PROJECT_ROOT_LIB = `${ROOT}skills/ingrain-security/scripts/lib/project-roo
 const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
 const MINT_LIB = `${ROOT}skills/ingrain-security/scripts/lib/mint-path.sh`;
 const TEMPLATE_LIB = `${ROOT}skills/ingrain-security/scripts/lib/artifact-template.sh`;
+const SCORER_REF = `${ROOT}skills/ingrain-security/references/development/ingrain-risk-scorer.md`;
 
 const WORKERS = [
   "ingrain-relevance-triage",
@@ -180,6 +181,60 @@ Deno.test("field cards: the skeleton renders one under every value-bearing secti
   // Permanent, not scratch: finalize deletes the critique sections and keeps these, because the
   // implementing agent and the Testing pass run in later sessions with no reference in context.
   assertStringIncludes(sh.toLowerCase(), "permanent");
+});
+
+/**
+ * Collapse every run of whitespace to one space so a phrase can be asserted as the reader
+ * sees it — these docs are hand-wrapped, and matching raw text would tie the assertion to
+ * the current line breaks.
+ */
+const flatten = (md: string): string => md.replace(/\s+/g, " ");
+
+/**
+ * The threat ids ARE the priority: the risk scorer re-tags the frozen list into descending-risk
+ * order, so `T01` is the most dangerous threat and every display just walks the ids.
+ *
+ * This guard exists because the docs and the live tests already drifted apart once, in exactly
+ * this spot — `assertRiskDescendsByTag` in tests/lib/matchers.ts asserted re-tagging while the
+ * skill told the scorer never to renumber, so a scorer obeying its instructions failed the
+ * agent test. Nothing but a static check keeps prose in sync with a live assertion.
+ */
+Deno.test("threat ids: the docs instruct re-tagging into risk order", async (t) => {
+  const scorer = flatten(await Deno.readTextFile(SCORER_REF));
+  const md = flatten(await Deno.readTextFile(SKILL));
+
+  await t.step("the scorer is told to re-tag, and what the resulting order means", () => {
+    assertStringIncludes(scorer, "Re-tag the list into risk order");
+    assertStringIncludes(scorer, "`T01` is the most dangerous threat");
+  });
+
+  await t.step("the scorer carries no leftover prohibition on renumbering", () => {
+    // The old contract's exact wording. Reintroducing it puts the scorer back in conflict
+    // with tests/agents/agents.test.ts, which fails a scorer that leaves the tags alone.
+    for (const stale of [/do not renumber/i, /nothing to reorder/i, /scores in place/i]) {
+      assertEquals(
+        stale.test(scorer),
+        false,
+        `ingrain-risk-scorer.md must not tell the scorer to leave ids alone (matched ${stale})`,
+      );
+    }
+  });
+
+  await t.step("Gate 1 displays threats in id order, not by re-sorting", () => {
+    assertStringIncludes(md, "**in id order — `T01` first**");
+    assertEquals(
+      /the ids will not be in order/i.test(md),
+      false,
+      "SKILL.md must not tell the reader the Gate 1 ids are out of order — the scorer re-tagged them",
+    );
+  });
+
+  await t.step("the schema and its field card both carry the rule", async () => {
+    // assessment-file.md owns what the id MEANS, the card is what a writer actually reads;
+    // the two must not drift (assessment-file.md -> "Where the shape lives").
+    assertStringIncludes(flatten(await Deno.readTextFile(ASSESSMENT_REF)), "re-tags the list");
+    assertStringIncludes(flatten(await Deno.readTextFile(TEMPLATE_LIB)), "re-tags them once");
+  });
 });
 
 Deno.test("field cards: SKILL.md sends writers to the card, not to the schema", async () => {

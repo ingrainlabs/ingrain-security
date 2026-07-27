@@ -141,7 +141,7 @@ Robustness: —
 
 | Field | Constraint |
 |-------|------------|
-| **id** (in the heading) | `T<n>`, zero-padded (`T01`) — unique within the file, assigned once and **never changed** |
+| **id** (in the heading) | `T<n>`, zero-padded (`T01`) — unique within the file; assigned in discovery order by the generator, **reassigned once** by the risk scorer into descending-risk order, and fixed from that point on |
 | **title** (in the heading) | string, after the ` — ` |
 | **Asset** | string |
 | **Vector** | string |
@@ -166,15 +166,23 @@ so this schema doubles as a reasoning schema: writing the justification *before*
 numerical (Risk score) and qualitative (Impact, Likelihood, Criticality) scores lets the
 reasoning come first and drive the scores.
 
-**The id is permanent; priority is derived.** An id is assigned at creation, in discovery
-order, and never changes — not when a threat is dropped, not when the scores change. Gaps are
-expected and legal: a retired `T02` leaves `T01` and `T03` pointing exactly where they did,
-so every mitigation's **Threats** reference stays correct without re-derivation.
+**The id carries the priority.** Before scoring, an id is a provisional discovery-order label:
+the generator assigns `T01`, `T02`, … as it finds threats, and those labels stay stable across
+the critique and the single revision round so the critic's `[T<n>]` feedback keys line up.
+Gaps from dropped threats are legal at that stage.
 
-Priority is **not stored**. Anywhere threats are shown in priority order — the Gate 1 table,
-a worker's report — sort by **Risk score descending**, breaking ties by impact
-(critical > high > medium > low), then likelihood (very high > high > medium > low), then id
-ascending. Document order carries no meaning.
+The `ingrain-risk-scorer` then **re-tags the list exactly once**. It sorts by **Risk score
+descending**, breaking ties by impact (critical > high > medium > low), then likelihood
+(very high > high > medium > low), then the pre-scoring id ascending — a deterministic total
+order, so two runs over the same scores produce the same ids. It reassigns ids contiguously
+from `T01`, closing any gaps, and writes the entries in that order. `T01` is the most
+dangerous threat.
+
+**After scoring the id is permanent.** It is what every mitigation's **Threats** field
+references, and mitigations are written after scoring, so every reference points at a final id.
+
+**Document order is id order is risk order.** Anywhere threats are shown — the Gate 1 table, a
+worker's report, the verification tables — display them in **id order, `T01` first**.
 
 **Gate 1 → Selection.** When the user decides at Gate 1, record each threat's
 **Selection**: include → `selected`, exclude → `excluded`. Use
@@ -342,8 +350,9 @@ Robustness: strong
 Update this file whenever the implementation diverges from the analysis — a new
 surface, a threat's acceptance changes, or a mitigation is added, dropped, or
 altered. Keep the Selection fields and coverage honest against the code you write,
-and keep every enumerated field within its allowed values. Ids are permanent: add a new
-threat with the next free `T<n>` and never renumber the existing ones.
+and keep every enumerated field within its allowed values. The scoring pass already re-tagged
+the threats into risk order, so ids are permanent from here: add a new threat with the next
+free `T<n>` and keep the existing ones as they are.
 
 To locate this file, re-run the `assessment-path` mint command from your
 INGRAIN-ASSESSMENT-PATHS session context and write to the absolute `assessment_abs`

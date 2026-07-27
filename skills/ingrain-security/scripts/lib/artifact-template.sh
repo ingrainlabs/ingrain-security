@@ -98,7 +98,9 @@ Surfaces:
      Impact (critical|high|medium|low), Likelihood (very high|high|medium|low),
      Risk score (0-100), Criticality (low|medium|high|critical),
      Selection (selected|excluded|undecided), Robustness (weak|adequate|strong).
-     A field whose stage has not run yet reads \"—\". Ids are permanent. -->
+     A field whose stage has not run yet reads \"—\". Ids start in discovery order; the
+     risk scorer re-tags them once into descending-risk order (T01 = highest risk) and
+     they are permanent after that. Entries sit in id order. -->
 
 ## Risk score
 <!-- Score: 0-100. Criticality: low|medium|high|critical. The plan-level residual risk. -->
@@ -120,8 +122,9 @@ Update this file whenever the implementation diverges from the analysis — a ne
 surface, a threat's acceptance changes, or a mitigation is added, dropped, or
 altered. Keep the Selection fields and coverage honest against the code you write,
 and keep every enumerated field within the values its section's field card names —
-the comment under each heading. Ids are permanent: add a new threat with the next
-free \`T<n>\` and never renumber the existing ones.
+the comment under each heading. The scoring pass already re-tagged the threats into
+risk order, so ids are permanent from here: add a new threat with the next free
+\`T<n>\` and keep the existing ones as they are.
 
 To locate this file, re-run the \`assessment-path\` mint command from your
 INGRAIN-ASSESSMENT-PATHS session context and write to the absolute \`assessment_abs\`

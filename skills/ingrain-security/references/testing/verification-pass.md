@@ -199,7 +199,7 @@ The verifier's contract differs from a Development worker's, so state it inline:
   org rules it needs are already on disk in the sidecar.
 - **Fan out.** Each per-threat verifier is independent, so on a host with a subagent primitive
   dispatch them **together**. On the sequential fallback, run them in the same
-  session one at a time, in descending risk order.
+  session one at a time, in id order — `T01` first, which is descending risk order.
 
 Dispatch every verifier with the same shape. **Hand off by pointer:** point the verifier at its
 threat entry and its covering mitigation entries **and, when the sidecar exists, the rule(s) for those
@@ -355,8 +355,8 @@ Report the concluded results to the coding agent as **visible Markdown output in
 conversation**. Lead with the threats — they are what the phase measured — then the
 mitigations.
 
-**Threat robustness**, one row per selected threat, **sorted by risk score descending** (the ids
-will not be in order, and that is correct):
+**Threat robustness**, one row per selected threat, **in id order — `T01` first**, which the
+risk-scorer already re-tagged into descending risk (the selection may leave gaps; keep the order):
 
 | Column | Contents |
 |--------|----------|
@@ -367,8 +367,8 @@ will not be in order, and that is correct):
 | **Evidence** | where in the diff the threat is closed (or left open) — `file:line`, or `—` |
 | **Residual path** | for `weak`: **the concrete route by which the threat can still be realized**, and the change that would close it. This is the actionable half of the report — name the concrete route an attacker still takes, e.g. "an unauthenticated caller still reaches `/refresh` via X". `—` otherwise |
 
-**Mitigation contribution**, one row per adopted mitigation, ordered by the highest risk score
-among the threats each covers: id + title, **Robustness**, the threat ids it covers (or
+**Mitigation contribution**, one row per adopted mitigation, ordered by the lowest threat id
+each covers — the highest risk it addresses: id + title, **Robustness**, the threat ids it covers (or
 `general`), and one line on what it does or fails to do. General implementation instructions
 appear here with `general` in place of threat ids.
 
