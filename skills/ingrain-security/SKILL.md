@@ -39,7 +39,7 @@ code. **Testing — verification** (`references/testing/verification-pass.md`) r
 plan produced. Decide which from repo state, before anything else.
 
 **If the user named a phase, that is the answer.** "Verify the mitigations" → **Testing**.
-"Review this plan" → **Development**. Skip the table.
+"Review this plan" → **Development**. Skip the cases below.
 
 Otherwise **issue all three bundled scripts in ONE block** — read-only, deterministic and mutually
 independent, so together they cost a single round-trip. Your SessionStart context carries each one
@@ -62,29 +62,33 @@ below re-mints anything. Obey each script's `instruction` field.
 - **`delta_empty: false`** means commits since the fork point, an uncommitted change, or both.
   → `references/lib/branch-diff.md` owns the refs and why this, not `git status`, is the signal.
 
-If `file_exists: true`, read the bounded `## Mitigations` slice of that file. Then:
+If `file_exists: true`, read the bounded `## Mitigations` slice of that file. Then take the **first
+matching case**:
 
-| `file_exists` | `selected` mitigation rows | branch delta | Phase |
-|---|---|---|---|
-| `false` | — | anything | **Development** — no assessment for this task, so it starts at triage |
-| `true` | none | anything | **Development** — resume this task's analysis in place |
-| `true` | 1+ | empty (`delta_empty: true`) | **Development** — the plan was reviewed; implementation is still ahead |
-| `true` | 1+ | non-empty (`delta_empty: false`) | **Testing** — read `references/testing/verification-pass.md` NOW |
+1. **`file_exists: false`** → **Development.** No assessment for this task; start at triage.
+2. **`file_exists: true`, no `selected` mitigation rows** → **Development.** Resume this task's
+   analysis in place.
+3. **`file_exists: true`, 1+ `selected` rows, `delta_empty: true`** → **Development.** The plan was
+   reviewed; the implementation is still ahead.
+4. **`file_exists: true`, 1+ `selected` rows, `delta_empty: false`** → **Testing.** Read
+   `references/testing/verification-pass.md` NOW.
 
-**Testing requires all three: an assessment for THIS task, adopted mitigations in it, and a
-non-empty branch delta.** Anything else is Development. Three cases look like Testing and are not:
+**Case 4 is the only Testing route, and it needs all three signals at once: this task's assessment,
+adopted mitigations in it, a non-empty branch delta. Cases 1–3 are all Development.**
 
-- **A branch delta alone routes to Development.** A fresh task on a branch already carrying
-  unrelated commits or WIP mints a fresh path → `file_exists: false` → row 1. The mint is keyed on
-  branch **+ task title**, which is what binds an assessment to one task — so take `file_exists` at
-  its word rather than globbing the folder, which surfaces some other task's file.
-- **`Latest stage: testing` records that a verification ran**, not that the task is closed. A
-  branch delta grown since is **Testing again** — re-test every selected threat, overwriting
+How to classify three less-obvious repo states. Verdict first, then why:
+- **A branch delta with no assessment for this task → Development, case 1.** A fresh task on a
+  branch already carrying unrelated commits or WIP mints a fresh path, so `file_exists: false`; a
+  delta alone is never a Testing signal. The mint is keyed on branch **+ task title**, binding an
+  assessment to one task — so take `file_exists` at its word rather than globbing the folder, which
+  surfaces another task's file.
+- **`Latest stage: testing`, delta grown since → Testing again, case 4.** It records that a
+  verification ran, not that the task is closed: re-test every selected threat, overwriting
   `Robustness` and `Justification`.
-- **A `minor` triage lands on row 2** — no mitigations to verify. An explicit request sends you to
-  Testing, which stops at "no adopted mitigations to verify"; otherwise row 2 resumes Development
-  and triage re-confirms `minor`. Either way the run ends at triage, which is right for a minor
-  change.
+- **A `minor` triage → Development, case 2** — nothing was adopted, so nothing to verify.
+  An explicit request sends you to Testing, which stops at "no adopted mitigations to verify";
+  otherwise case 2 resumes Development and triage re-confirms `minor`. Either way the run ends at
+  triage, which is right for a minor change.
 
 Announce the phase you picked in your opening line, so a misroute costs the user one turn.
 
