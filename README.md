@@ -190,6 +190,13 @@ the skill manually.
 **What the review writes.** The review's only writes are the assessment file and the
 findings folded into your plan.
 
+**Sandboxing & network access.** The review makes one outbound network call — the
+mitigation generator's read-only `ingrain context security_rules` lookup, which fetches
+your org's security rules (via `INGRAIN_SYNC_URL` + API token). If you run your coding
+agent under a sandbox that restricts network or command execution, **allow that
+`ingrain context` CLI run** so org-rule retrieval works. Without it the review still
+completes — it just degrades gracefully and proposes mitigations without your org's rules.
+
 **The assessment folder is git-ignored.** `ingrain-security/` is ignored
 by default. To share a snapshot, force-add it: `git add -f <file>`.
 

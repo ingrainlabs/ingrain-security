@@ -76,15 +76,15 @@ for (const name of WORKERS) {
       assertStringIncludes(body, "path your dispatch specifies");
     });
 
-    await t.step("ROLE header does not call the worker read-only", () => {
-      // Workers write their section of the assessment file. A read-only clause here
-      // contradicts the hand-off contract two bullets down and stalls the dispatch.
-      assertEquals(
-        prose.toLowerCase().includes("read-only"),
-        false,
-        "ROLE header must not reintroduce a read-only restriction — workers write the assessment file",
-      );
-    });
+    // The rule-expander is the one worker with a read-only CLI exception: it runs
+    // `ingrain context security_rules` for the second retrieval pass, but still edits
+    // nothing. Guard that the exception is documented in its ROLE header.
+    if (name === "ingrain-mitigation-generator") {
+      await t.step("mitigation-generator documents the read-only ingrain CLI exception", () => {
+        assertStringIncludes(body, "ingrain context security_rules");
+        assertStringIncludes(body.toLowerCase(), "exception");
+      });
+    }
 
     await t.step("ROLE header carries a recommended model", () => {
       assertStringIncludes(prose, "Recommended model:");

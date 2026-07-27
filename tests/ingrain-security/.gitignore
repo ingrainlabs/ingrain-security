@@ -1,4 +1,3 @@
 # Assessments here can contain analysis of a private codebase, so they
 # are ignored by default. Share one explicitly with: git add -f <file>
 *
-!.gitignore

@@ -84,7 +84,11 @@ Deno.test("ensure-assessment-dir: creates the folder, README and .gitignore", as
     assertEquals(await exists(`${base}/README.md`), true);
     assertEquals(await exists(`${base}/.gitignore`), true);
     assertStringIncludes(await Deno.readTextFile(`${base}/README.md`), "Threat assessments");
-    assertStringIncludes(await Deno.readTextFile(`${base}/.gitignore`), "!.gitignore");
+
+    // A bare `*` with no negation: the folder is ignored in full, .gitignore included.
+    const gitignore = await Deno.readTextFile(`${base}/.gitignore`);
+    assertStringIncludes(gitignore, "*");
+    assertEquals(gitignore.includes("!.gitignore"), false);
   });
 });
 
