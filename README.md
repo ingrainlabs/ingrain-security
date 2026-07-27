@@ -4,8 +4,7 @@
 
 A Claude Code / Codex plugin. Once your implementation plan is comprehensive and
 detailed — but *before* any code is written or the plan is presented — Ingrain
-Security threat-models the plan and folds the results back into it. It is
-**read-only on your codebase**: it never edits code.
+Security threat-models the plan and folds the results back into it.
 
 - Repository: <https://github.com/ingrainlabs/ingrain-security>
 - License: MIT
@@ -28,21 +27,18 @@ the short version:
 - **Triage first.** Only "major" (security-relevant) changes get the full review;
   "minor" changes stop immediately with nothing to fold in.
 - **The review loop:** threats → 0–100 risk score → **Gate 1** (you pick which
-  threats to address, 0–N) → org rules → mitigations → rule expansion → **Gate 2**
+  threats to address, 0–N) → org rules → mitigations → **Gate 2**
   (you pick which mitigations to adopt, 0–N). Threat and mitigation drafts each pass
   through a critic with up to 3 revision rounds.
-- **Org rules in two passes.** Your org's security rules are retrieved twice: once
-  from the selected threats, before any mitigation exists, and once more by
-  `ingrain-rule-expander` afterwards — keyed on the mitigations actually proposed, so
-  the search can ask what those concrete mechanisms imply. Both passes land in a rules
-  sidecar next to the assessment.
-- **Read-only workers.** The orchestrator dispatches seven worker roles as fresh
+- **Org rules.** Your org's security rules are retrieved once, from the plan and the
+  selected threats, before any mitigation exists. They land in a rules sidecar next to
+  the assessment, which the mitigation generator and critic both read.
+- **Worker roles.** The orchestrator dispatches six worker roles as fresh
   subagents — `ingrain-relevance-triage`, `ingrain-threat-generator`,
   `ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-mitigation-generator`,
-  `ingrain-rule-expander`, `ingrain-mitigation-critic` (defined under
+  `ingrain-mitigation-critic` (defined under
   [`skills/ingrain-security/references/development/`](skills/ingrain-security/references/development/)).
-  Each uses only Read/Grep/Glob on your codebase; its sole write is its own section
-  of the assessment file.
+  Each worker's sole write is its own section of the assessment file.
 - **Two selection gates are yours.** At Gate 1 and Gate 2 you decide, per finding,
   what gets addressed. Selecting none is always allowed.
 - **Then the code gets tested against the threats.** Once the plan is implemented, the
@@ -142,12 +138,12 @@ If a task has no assessment (or no adopted mitigations), there is nothing to ver
 
 Writes to that one file are approved automatically — by a `PreToolUse` hook on Claude
 Code and a `PermissionRequest` hook on Codex — so a review does not interrupt you with a
-permission prompt on every edit. The grant is deliberately narrow: only `assessment*.md`
-files sitting directly in the project's `.ingrain-security/` folder, and never through a
-symlink. On Codex, where an edit is an `apply_patch`, the patch must touch nothing but
-those files and may only add or update them. Everything else — including the folder's own
-`README.md` — still goes through your normal permission prompt, and the hook can only
-*skip* a prompt, never block an edit you asked for. Codex asks you to review and trust the
+permission prompt on every edit. The grant is deliberately narrow: `assessment*.md`
+files sitting directly in the project's `.ingrain-security/` folder, reached by a real path
+rather than a symlink. On Codex, where an edit is an `apply_patch`, the patch may add or
+update exactly those files. Everything else — including the folder's own
+`README.md` — still goes through your normal permission prompt, and the hook's only power
+is to *skip* a prompt: an edit you asked for always goes through. Codex asks you to review and trust the
 hook once, via `/hooks`.
 
 ## Installation
@@ -184,8 +180,14 @@ documented at **[Getting started](https://docs.ingrainlabs.dev/getting-started/)
 
 | Platform | Requirement |
 |----------|-------------|
-| macOS / Linux | System `bash` + coreutils — nothing extra to install. |
+| macOS / Linux | System `bash` + coreutils — already present. |
 | **Windows** | **[Git for Windows](https://git-scm.com/download/win) is required.** |
+
+| Tool | Needed for | If missing |
+|------|-----------|------------|
+| `bash` | every hook and skill script | on Windows, the automatic review won't fire (see below) |
+| [`jq`](https://jqlang.github.io/jq/) | the two permission hooks that read the tool payload | a permission prompt on every assessment write and script run |
+| `git` | resolving the repo root and the branch delta to review | the review still runs, scoped to the working tree instead of the branch |
 
 **Why Git for Windows.** The plugin's hooks are bash scripts run through
 [`hooks/run-hook.cmd`](hooks/run-hook.cmd), a cmd/bash polyglot wrapper. On Windows
@@ -198,16 +200,30 @@ the plugin still installs, but loses the SessionStart context injection and the
 assessment-folder seeding, so the automatic review won't fire. You can still invoke
 the skill manually.
 
-**Read-only guarantee.** The workers never edit code. The only writes the review
-makes are the assessment file and the findings folded into your plan.
+**What the review writes.** The review's only writes are the assessment file and the
+findings folded into your plan.
 
 **Sandboxing & network access.** The review's only outbound network calls are the
 read-only `ingrain context security_rules` lookups of its two rule-retrieval passes —
 one per distinct question it needs org guidance on — which fetch your org's security rules
-(via `INGRAIN_SYNC_URL` + API token). If you run your coding agent under a sandbox
-that restricts network or command execution, **allow those `ingrain context` CLI
-runs** so org-rule retrieval works. Without it the review still
-completes — it just degrades gracefully and proposes mitigations without your org's rules.
+(via `INGRAIN_SYNC_URL` + API token). Grant that one command once and the lookups run
+unprompted for good:
+
+```jsonc
+// Claude Code — /permissions, or .claude/settings.json
+{ "permissions": { "allow": ["Bash(ingrain context:*)"] } }
+```
+
+```python
+# Codex — ~/.codex/rules/default.rules
+prefix_rule(
+    pattern = ["ingrain", "context"],
+    decision = "allow",
+    justification = "read-only org security-rule lookups for ingrain-security",
+)
+```
+
+Allowing permissions, you don't have to accept them every time. 
 
 **The assessment folder is git-ignored.** `.ingrain-security/` is ignored
 by default. To share a snapshot, force-add it: `git add -f <file>`.

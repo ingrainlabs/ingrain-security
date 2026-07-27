@@ -86,10 +86,10 @@ Deno.test("SKILL.md: routes to a phase from repo state, then points at the refer
 
 Deno.test("SKILL.md: the SUBAGENT-STOP block covers the Testing read and both phases", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // The Testing worker reads the injected SKILL.md, sees a non-empty branch delta, and must not
-  // recurse into the orchestration it is part of.
+  // The Testing worker reads the injected SKILL.md and sees a non-empty branch delta — the
+  // block places the orchestration, both phases of it, with the session that dispatched it.
   assertStringIncludes(md, "ingrain-threat-verifier), do the one job you were given");
-  assertStringIncludes(md, "neither Development nor Testing");
+  assertStringIncludes(md, "Development and Testing alike");
 });
 
 Deno.test("verification-pass.md: dispatches the read-only verifier via its reference file", async () => {
@@ -102,7 +102,7 @@ Deno.test("verification-pass.md: dispatches the read-only verifier via its refer
   // Now a sibling reference in the same skill — no cross-skill path survives the merge.
   assertStringIncludes(md, "references/development/dispatch.md");
   // The verifier's own contract is stated here, not reached for across the phase boundary.
-  assertStringIncludes(md, "It writes nothing at all");
+  assertStringIncludes(md, "Its whole output is what it returns");
   assertEquals(md.includes("../ingrain-security/"), false, "cross-skill paths must be collapsed");
   // The prompt the orchestrator actually pastes hands the verifier both minted paths — the
   // mitigation to verify and the org rules behind it. Assert on the fenced block alone: the
@@ -133,12 +133,25 @@ Deno.test("verification-pass.md: writes to the absolute assessment_abs, minted n
   assertStringIncludes(md, ".ingrain-security/assessment-<branch-slug>-<task-slug>.md");
 });
 
-Deno.test("verification-pass.md: guards title drift, never falls back to Development", async () => {
+Deno.test("verification-pass.md: validates its one write against the schema, strictly", async () => {
+  const md = await Deno.readTextFile(VERIFY);
+  // Testing writes the assessment once, and that write is a FINISHED file — so it runs the
+  // validator without --lenient. Losing this leaves the last write of the whole lifecycle
+  // unchecked, in the session that hands the file to everyone downstream.
+  assertStringIncludes(md, "scripts/validate-assessment");
+  assertStringIncludes(md, "no `--lenient`");
+  // The contract itself belongs to the schema reference; this file points at it.
+  assertStringIncludes(md, "references/formatting/assessment-file.md");
+  // And the checklist tracks it, like every other step-6 obligation.
+  assertStringIncludes(md, "validated clean by `scripts/validate-assessment` with NO `--lenient`");
+});
+
+Deno.test("verification-pass.md: guards title drift, stays in the Testing phase", async () => {
   const md = await Deno.readTextFile(VERIFY);
   // A drifted --title mints a different path; falling through to Development would re-run the
   // whole planning review on already-written code. This is the merge's sharpest edge.
   assertStringIncludes(md, "verbatim");
-  assertStringIncludes(md, "Do **not** fall through to Development.");
+  assertStringIncludes(md, "Testing is the phase you stay in.");
 });
 
 Deno.test("verification-pass.md: verifies the branch diff since the fork point and reuses the assessment schema", async () => {
@@ -174,8 +187,8 @@ Deno.test("verification-pass.md: marks the assessment checked (Robustness + Late
     "the old verdict enum must be gone",
   );
   assertEquals(md.includes("**`Verified`**"), false, "the Verified column is renamed");
-  // The rules sidecar is a persistent planning artifact — Testing must not delete it.
-  assertStringIncludes(md, "do not modify or delete it");
+  // The rules sidecar is a persistent planning artifact — Testing leaves it as it found it.
+  assertStringIncludes(md, "persistent planning artifact — **leave it exactly as you found");
 });
 
 Deno.test("verification-pass.md: reads org rules from the rules-*.md sidecar, no CLI", async () => {
@@ -188,8 +201,8 @@ Deno.test("verification-pass.md: reads org rules from the rules-*.md sidecar, no
   assertStringIncludes(md, "file_exists");
   assertStringIncludes(md, "Rule refs");
   // No CLI anywhere in the verification pass.
-  assertEquals(md.includes("ingrain context"), false, "Testing must not query the CLI");
-  assertEquals(md.includes("ingrain --version"), false, "Testing must not probe the CLI");
+  assertEquals(md.includes("ingrain context"), false, "Testing never queries the CLI");
+  assertEquals(md.includes("ingrain --version"), false, "Testing never probes the CLI");
 });
 
 Deno.test("verification-pass.md: announces itself and reports to the coding agent (no user gates)", async () => {
@@ -201,15 +214,17 @@ Deno.test("verifier ref: INTERNAL worker, read-only with a narrow read-only-git 
   const md = await Deno.readTextFile(VERIFIER_REF);
   const fm = parseFrontmatter(md);
   assertEquals(fm.name, "ingrain-threat-verifier");
-  // Marked internal so it does not self-trigger.
-  assertStringIncludes(md, "do NOT invoke");
+  // Marked internal so it does not self-trigger: the description says the only way in is a
+  // dispatch from the orchestrator.
+  assertStringIncludes(String(fm.description), "reachable solely through a dispatch");
   assertStringIncludes(md.toLowerCase(), "internal worker");
-  // Read-only on the codebase, with read-only git to obtain the diff, and writes nothing.
+  // Read-only on the codebase, with read-only git to obtain the diff, and its whole output is
+  // the verdict it returns.
   assertStringIncludes(md.toLowerCase(), "read-only");
-  // The verifier is HANDED the ref by the orchestrator — it never re-derives it, and must not
-  // fall back to HEAD, which would hide the committed implementation.
+  // The verifier is HANDED the ref by the orchestrator and diffs against that exact string —
+  // the merge-base, which is what exposes the committed implementation.
   assertStringIncludes(md, "git diff <diff_ref>");
-  assertStringIncludes(md, "do not substitute `HEAD` for it");
+  assertStringIncludes(md, "Use the `diff_ref` exactly as the");
   // Grades on the Robustness ladder, and leads with the JUSTIFICATION — not the level. The
   // order is the point: a level written first is one the justification then argues for.
   for (const v of ["`weak`", "`adequate`", "`strong`"]) assertStringIncludes(md, v);
@@ -250,22 +265,22 @@ Deno.test("verifier ref: reads its rule descriptions from the sidecar, runs no C
   assertEquals(md.includes("ingrain context"), false, "verifier must not run the CLI");
 });
 
-Deno.test("assessment-file.md: defines the Justification + Robustness columns", async () => {
+Deno.test("assessment-file.md: defines the Justification + Robustness fields", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
-  // The two columns and the enum.
+  // The two fields and the enum.
   assertStringIncludes(md, "**Robustness**");
   assertStringIncludes(md, "**Justification**");
   for (const v of ["`weak`", "`adequate`", "`strong`"]) assertStringIncludes(md, v);
-  assertEquals(md.includes("**Verified**"), false, "the Verified column is renamed");
-  // One concept, one name. `Robustness` names the same measure in both tables: the threat
-  // column is the primary result, the mitigation column carries it across (weakest governs).
+  assertEquals(md.includes("**Verified**"), false, "the Verified field is renamed");
+  // One concept, one name. `Robustness` names the same measure in both sections: the threat
+  // field is the primary result, the mitigation field carries it across (weakest governs).
   assertEquals(md.includes("Verification level"), false, "one name for the concept: Robustness");
   // It is the Testing verification pass that fills them, after the code is written.
   assertStringIncludes(md, "Testing");
   assertStringIncludes(md, "Latest stage: testing");
-  // One string pins all three at once: the rename, the addition, and the ordering —
+  // One string pins the ordering the template teaches: within a mitigation entry,
   // Justification sits immediately BEFORE the level so reasoning drives the conclusion.
-  assertStringIncludes(md, "| Selection | Justification | Robustness |");
+  assertStringIncludes(md, "Selection: selected\nJustification: …\nRobustness: adequate");
   assertStringIncludes(md, "Justification leads the Robustness on purpose");
   // Both Justifications in the file (Threats + Mitigations) carry the same 256-char cap.
   assertEquals(
@@ -286,9 +301,11 @@ Deno.test("rules-file.md: defines the persistent org-rules sidecar schema", asyn
   // Its sections: retrieved rules (id/title/body) + per-mitigation mapping.
   assertStringIncludes(md, "## Retrieved rules");
   assertStringIncludes(md, "## Per-mitigation mapping");
-  // It persists past finalize, and exists exactly when a pass retrieved rules.
+  // It persists past finalize. The minter seeds an empty skeleton, so it is the CONTENT
+  // that is conditional — the file carries rules exactly when a pass retrieved them.
   assertStringIncludes(md.toLowerCase(), "persist");
-  assertStringIncludes(md, "Created when org rules are retrieved");
+  assertStringIncludes(md, "Filled when org rules are retrieved");
+  assertStringIncludes(md, "skeleton");
 });
 
 /**

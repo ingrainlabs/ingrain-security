@@ -11,9 +11,9 @@ capture and the reporting caveats.
 
 ## Resolving the fork point
 
-**Do not hand-roll this**, and **never hardcode a trunk name.** Branches are routinely cut
-from other feature branches, release branches, and long-lived integration branches, so the
-parent is whatever branch this one was actually cut from. Sharing one resolver is what keeps
+**Resolve this with the shared script, and let it discover the trunk.** Branches are routinely
+cut from other feature branches, release branches, and long-lived integration branches, so the
+parent is whatever branch this one was actually cut from — which is what the script works out. Sharing one resolver is what keeps
 Phase select and the review agreed on what is under test.
 
 The bundled **`scripts/branch-diff`** script resolves it: it takes every other local and remote
@@ -40,9 +40,9 @@ It emits one JSON object. Take these fields and obey its `instruction`:
 | `reason` | which fallback case applies (see the caller's reporting rules) |
 | `shallow` | set when `merge-base` failed on a shallow clone |
 
-**`diff_ref` is the run's fixed basis.** Resolve it once, pass it verbatim to every dispatch,
-and **never re-derive it mid-run or substitute `HEAD` for it** — `HEAD` shows only uncommitted
-work and would hide the committed implementation under review.
+**`diff_ref` is the run's fixed basis.** Resolve it once and pass **that exact string** to every
+dispatch for the rest of the run — it is the merge-base, so it exposes the committed
+implementation under review, where `HEAD` would show only uncommitted work.
 
 The script is deterministic, so a caller already holding its JSON from earlier in the turn
 should reuse that rather than paying for it twice.
