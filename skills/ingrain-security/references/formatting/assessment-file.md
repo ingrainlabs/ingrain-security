@@ -7,21 +7,15 @@ shape.
 
 ## Nature
 
-- **Path.** A single file written directly into `.ingrain-security/` at the project
+- **Path.** A single file written directly into `ingrain-security/` at the project
   root — it is **both** the living working copy the workers write during the run **and**
-  its persisted record, so finalizing it in place is the whole of persisting it. The
-  orchestrator mints it: it runs the `scripts/assessment-path` script
-  (`mint` subcommand) once at review start and reuses its **`assessment_abs`** — the
-  absolute path — as the write target throughout; the relative `assessment_path` is a
-  display form for prose and links only. **Every write goes to the absolute path** — a
-  relative path is resolved by whoever receives it, and a worker subagent resolves
-  `.ingrain-security/…` against whatever file it happens to be reading, creating a stray
-  folder there. The name is deterministic in the branch + task:
-  `<project_root>/.ingrain-security/assessment-<branch-slug>-<task-slug>.md`. The script
-  resolves `<project_root>` from the git repo root — so it may be run from any
-  subdirectory — resolves
-  `<branch-slug>` from the current git branch (`git branch --show-current`, which stays
-  correct in a worktree or submodule), lowercased and reduced to `[a-z0-9-]`,
+  its persisted record, so there is no separate temp file and no finalize copy. The
+  orchestrator does not hand-build it: it runs the `scripts/assessment-path` script
+  (`mint` subcommand) once at review start and reuses its `assessment_path` throughout —
+  see SKILL.md → **The assessment file**. The name is deterministic in the branch + task:
+  `ingrain-security/assessment-<branch-slug>-<task-slug>.md`. The script resolves
+  `<branch-slug>` from the current git branch (`git branch --show-current`, not
+  `.git/HEAD`, unreliable in a worktree/submodule), lowercased and reduced to `[a-z0-9-]`,
   and derives `<task-slug>` from the `## Task` Title by the same rule. Because the name
   *is* the task identity, re-reviewing the **same task on the same branch** resolves to the
   **same file** (the run resumes/updates it in place; `file_exists: true` signals this),
@@ -31,18 +25,10 @@ shape.
   it. Any unresolvable segment is dropped
   (branch unknown → `assessment-<task-slug>.md`; no usable title →
   `assessment-<branch-slug>.md`; both absent → `assessment.md`), and the `assessment-`
-  prefix always leads. The folder is **self-ignoring** (an inner `.gitignore` of a bare `*`,
-  seeded by the `ensure-assessment-dir` hook and re-ensured by the script), so the whole
-  folder — the ignore file included — stays out of `git status`; sharing a file is an
-  explicit `git add -f <file>` opt-in.
-- **Pre-approved.** An `allow-assessment-write` hook auto-approves writes to this file on
-  both hosts — `PreToolUse` on Claude Code, `PermissionRequest` on Codex — so expect **no
-  permission prompt** when writing it. The grant covers only `assessment*.md` directly
-  inside `.ingrain-security/` — which is exactly `assessment_abs`, and one more reason to
-  write there and nowhere else. Any other path you write still prompts the user and stalls
-  the run. On Codex the approval is granted per **patch**: a patch that touches the
-  assessment *and* any other file prompts as a whole, so keep assessment edits in their own
-  patch.
+  prefix always leads. The folder is **self-ignoring** (an inner `.gitignore` of `*` +
+  `!.gitignore`, seeded by the `ensure-assessment-dir` hook and re-ensured by the script),
+  so the file does not appear in `git status`; sharing it is an explicit
+  `git add -f <file>` opt-in.
 - **Hand-off medium.** Workers write their sections and return to the orchestrator
   only a branch keyword plus a one-line pointer. The orchestrator owns the
   title/banner and the finalize; it moves data between workers by pointer and does
@@ -52,10 +38,10 @@ shape.
   |---------|-----------|
   | `## Task` | orchestrator (framing) |
   | `## Triage` | `ingrain-relevance-triage` |
-  | `## Threats` | `ingrain-threat-generator` (descriptive columns, working tags) → `ingrain-risk-scorer` (scoring columns, then re-tags the rows into risk order) → orchestrator (Selection at Gate 1) → the Testing verification pass (Robustness at the Testing phase) — **filled in stages** |
+  | `## Threats` | `ingrain-threat-generator` (descriptive columns) → `ingrain-risk-scorer` (scoring columns) → orchestrator (Selection at Gate 1) — **filled in stages** |
   | `## Threat critique` | `ingrain-threat-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Risk score` | `ingrain-risk-scorer` (plan-level residual) |
-  | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Selection at Gate 2) → the Testing verification pass (Justification + Robustness at the Testing phase) |
+  | `## Mitigations` | `ingrain-mitigation-generator` → orchestrator (Selection at Gate 2) |
   | `## Mitigation critique` | `ingrain-mitigation-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Coverage / open items` | orchestrator (Development finalize) |
   | `## Maintenance` | orchestrator (finalize) |
@@ -66,11 +52,11 @@ shape.
   the compact **Rule refs** ids (in `## Mitigations`) as the link into that sidecar.
 - **Living document.** Rewrite the relevant section at each commit point so the file
   always mirrors the current frozen state — critic-loop revisions and re-selection
-  overwrite the prior contents of that section. The two critique sections
-  (`## Threat critique`, `## Mitigation critique`) are iteration scratch, and the
-  orchestrator **deletes both at finalize** — so the finalized file holds end results alone,
-  which is why the template below omits them. (The retrieved org rules are persistent: they
-  live in the `rules-<…>.md` sidecar and survive finalize.)
+  overwrite the prior contents of that section. The critique sections are iteration
+  scratch, not results: once their loop is done they are dead weight, and the
+  orchestrator **deletes both critique sections at finalize** — the finalized file
+  contains only end results. This is why the template below has
+  no critique sections.
 
 ## Sections and fields
 
@@ -89,8 +75,8 @@ must use **exactly one** of the listed values (lower-case, verbatim).
 - **Security relevant** — `true` | `false`.
 - **Surfaces** — bullet list (present when `major`).
 - **Prior analysis** — optional; a pointer to a prior analysis file found for this
-  task (its `.ingrain-security/…` path and threat count, e.g.
-  `.ingrain-security/assessment-<…>.md — 4 threats`), or `none`. Set by
+  task (its `ingrain-security/…` path and threat count, e.g.
+  `ingrain-security/assessment-<…>.md — 4 threats`), or `none`. Set by
   `ingrain-relevance-triage` when it finds a threats-bearing prior analysis of the same
   task (branch + title); the generator seeds from it.
 
@@ -100,7 +86,7 @@ One row per threat, with these columns:
 
 | Column | Constraint |
 |--------|------------|
-| **Tag** | `T<n>` (e.g. `T1`) — contiguous from `T1`, no gaps, **ordered by descending risk score**: `T1` is the most critical threat |
+| **Tag** | `T<n>` (e.g. `T1`) |
 | **Title** | string |
 | **Asset** | string |
 | **Vector** | string |
@@ -119,16 +105,6 @@ left-to-right, so this table doubles as a reasoning schema: writing the justific
 *before* the numerical (Risk score) and qualitative (Impact, Likelihood, Criticality)
 scores lets the reasoning come first and drive the scores. 
 
-**The tag is a priority position.** Rows are stored in tag order and risk
-descends down them, so a reader follows the threats from `T1` — the most critical — down to
-the least. The `ingrain-threat-generator` assigns tags in discovery order; the
-`ingrain-risk-scorer` establishes this invariant at freeze, sorting the scored
-threats by risk and reassigning every tag (see `references/development/ingrain-risk-scorer.md` →
-**Order the tags**).
-Ordering is guaranteed in the finalized file; mid-loop, tags are the generator's working
-labels and may have gaps. A re-review re-scores the task and so may re-tag it: a tag is
-meaningful within the file it lives in.
-
 **Gate 1 → Selection.** When the user decides at Gate 1, record each threat's
 **Selection**: include → `selected`, exclude → `excluded`. Use
 `undecided` only if the user is explicitly unsure. Before Gate 1 the column is empty.
@@ -139,69 +115,27 @@ meaningful within the file it lives in.
 
 ### `## Mitigations` — a Markdown table, one row per mitigation, with these columns:
 
-A mitigation is either a **threat mitigation** (carries ≥1 threat tag) or a **general
-implementation instruction** for the full scoped task (no threat tag). Both belong in
-this table.
-
 | Column | Constraint |
 |--------|------------|
-| **Tag** | `M<n>` (e.g. `M1`) — contiguous from `M1`, no gaps, **ordered by descending priority**. Assigned by the `ingrain-mitigation-generator`, which re-derives them on every write (see `references/development/ingrain-mitigation-generator.md` → **Order the tags**). |
+| **Tag** | `M<n>` (e.g. `M1`) |
 | **Title** | string |
 | **Description** | string |
 | **Yield** | `high` \| `medium` \| `low` |
 | **Effort** | `high` \| `medium` \| `low` |
-| **Threat tags** | `0..N` threat tags (e.g. `T1, T3`); `—` when the mitigation is a general implementation instruction not tied to a specific threat |
-| **Rule refs** | the org rule id(s) the mitigation follows, `0..N` comma-separated (e.g. `r-auth-01, r-log-03`); `—` when it follows no org rule (a pure threat mitigation). One mitigation may follow multiple rules. Ids are machine-facing — stored here, **never rendered to the user** (Gate 2 shows rule titles instead). Each id is the link into the persistent `rules-<…>.md` sidecar, where the rule's title and full body live (see `references/formatting/rules-file.md`). |
+| **Threat tags** | **≥ 1** threat tag (e.g. `T1, T3`) |
 | **Selection** | `selected` \| `excluded` \| `undecided` (optional until Gate 2) |
 | **Justification** | string, **≤ 256 characters** — the reasoning behind this row's **Robustness**, concluded by the Testing orchestrator from the verifier's read. **Must not be set before that verification runs** — `—` until then, and for any row not `selected`. |
 | **Robustness** | `weak` \| `adequate` \| `strong` — this mitigation's contribution to closing the threats it covers, **derived from their `## Threats` → `Robustness`**: covering one threat, it takes that threat's value; covering several that differ, **the weakest governs**. A general implementation instruction (no threat tag) takes its value from whether the instruction was followed. The same measure as the threat column, projected onto the mitigation row — not a second axis; normative definitions: `references/testing/verification-pass.md` → **Robustness levels**. **Must not be set before that verification runs** — `—` until then, and for any row not `selected`. |
 
-**Follows org rules is derived from Rule refs.** A mitigation with ≥1 **Rule ref**
-follows org rules; an empty **Rule refs** (`—`) means a pure threat mitigation. Surface
-this as a computed indicator (e.g. at Gate 2), keeping it out of the stored table: the
-indicator is the rule **title(s)**, resolved at display time by looking each **Rule ref**
-id up in the `rules-<…>.md` sidecar (its `## Retrieved rules` entries /
-`## Per-mitigation mapping`). The sidecar owns the titles; this table owns the ids.
-
 **Gate 2 → Selection.** Record each mitigation's **Selection**:
 adopt → `selected`, decline → `excluded`; `undecided` only if the user is unsure.
 
-**Justification leads the Robustness on purpose** — the same reasoning schema
-`## Threats` uses for its scores (above): filling the row left-to-right forces the reasoning to
-come first and drive the conclusion. The 256-character cap on both justifications is part of
-that forcing — it keeps the justification to the reasoning that produced the value.
-
-**Who fills the verification columns.** The Testing verification pass
-(`references/testing/verification-pass.md`) writes all three: `## Threats` → **Robustness** from its
-negative testing of each selected threat, then `## Mitigations` → **Justification** and
-**Robustness**, the latter derived from the threats each mitigation covers. Rows that
-are not `selected` stay `—`. Writing them, alongside setting `## Task` →
-`Latest stage: testing`, is what marks the assessment checked; the plan review leaves them
-at `—` for Testing to fill.
-
-**The threat column is the primary result.** `## Threats` → `Robustness` records what was
-actually tested — whether the threat survives the change. The `## Mitigations` column of the
-same name is derived bookkeeping on top of it: one measure, carried onto the rows that
-produced it, so a mitigation's Robustness always tracks the threats it covers.
-
 ### `## Coverage / open items`
 - Any threat whose **Selection** is `selected` that has no mitigation with
-  **Selection** `selected` covering it (via its **Threat tags**). Only **threat
-  mitigations** (those carrying threat tags) count toward covering a threat; general
-  implementation instructions apply to the scoped task as a whole.
-- This is a **structural** join computed at the Development finalize: it records that a
-  mitigation was adopted for the threat. Efficacy lives in `## Threats` → **Robustness**,
-  written later by Testing. A threat can be "covered" here and `weak` there. This section is
-  written once, at the Development finalize.
+  **Selection** `selected` covering it (via its **Threat tags**).
 
 ### `## Maintenance (for the implementing agent)`
 - Instruction to keep the file in sync as the implementation evolves.
-- **How that agent locates this file.** It runs in a later session and has no minted path
-  in context, so it must **re-run** the `assessment-path` mint command from its
-  `INGRAIN-ASSESSMENT-PATHS` session context and write to the `assessment_abs` it
-  returns. Re-minting is deterministic in branch + title, so it resolves to this same
-  file. It must never resolve a relative `.ingrain-security/…` string against the file it
-  is editing, and must never create the folder. 
 
 ## Template
 
@@ -220,7 +154,7 @@ Verdict: <minor|major>
 Security relevant: <true|false>
 Surfaces:
 - …
-Prior analysis: <.ingrain-security/assessment-<…>.md — N threats | none>
+Prior analysis: <ingrain-security/assessment-<…>.md — N threats | none>
 
 ## Threats
 | Tag | Title | Asset | Vector | Description | Assumptions | Justification | Impact | Likelihood | Risk score | Criticality | Selection | Robustness |
@@ -233,11 +167,9 @@ Score: <0–100>
 Criticality: <low|medium|high|critical>
 
 ## Mitigations
-| Tag | Title | Description | Yield | Effort | Threat tags | Rule refs | Selection | Justification | Robustness |
-|-----|-------|-------------|-------|--------|-------------|-----------|-----------|---------------|--------------------|
-| M1  | …     | …           | high  | medium | T1          | r-auth-01 | selected  | …             | adequate           |
-| M2  | …     | …           | medium| low    | —           | r-log-03  | selected  | …             | strong             |
-| M3  | …     | …           | low   | low    | T2          | —         | excluded  | —             | —                  |
+| Tag | Title | Description | Yield | Effort | Threat tags | Selection |
+|-----|-------|-------------|-------|--------|-------------|------------|
+| M1  | …     | …           | high  | medium | T1          | selected   |
 
 ## Coverage / open items
 - <any selected threat with no selected mitigation covering it>
@@ -247,13 +179,4 @@ Update this file whenever the implementation diverges from the analysis — a ne
 surface, a threat's acceptance changes, or a mitigation is added, dropped, or
 altered. Keep the Selection columns and coverage honest against the code you write,
 and keep every enumerated field within its allowed values.
-
-To locate this file, re-run the `assessment-path` mint command from your
-INGRAIN-ASSESSMENT-PATHS session context and write to the absolute `assessment_abs`
-it returns — it resolves back to this same file. Do not resolve a relative path
-against the file you are editing, and do not create an `.ingrain-security/` folder.
-
-Org rules for this task (if any were retrieved) live in the linked sidecar
-.ingrain-security/rules-<branch-slug>-<task-slug>.md — re-mint it with the `rules-path`
-command; it is persistent and maintained there.
 ```

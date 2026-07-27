@@ -19,12 +19,11 @@ description: >-
 > - **Recommended model:** a cheap, basic model (advisory — applied only where the platform
 >   supports per-subagent model selection).
 > - **Hand-off contract:** read the mitigations from the `## Mitigations` section of
->   the assessment file (path per your dispatch) **and the retrieved rules from the
->   `rules-<…>.md` sidecar** (path per your dispatch; absent when no rules were retrieved),
->   write your full Output into the `## Mitigation critique` section of the assessment file
->   (a transient section — the orchestrator deletes it at finalize), then return to the
->   orchestrator ONLY the decisive verdict (`approved` or `needs-revision`) plus a one-line
->   pointer to that section — not the full critique.
+>   the stored analysis file (path per your dispatch), write your full Output into the
+>   `## Mitigation critique` section (a transient section — the orchestrator deletes
+>   it at finalize), then return to the orchestrator ONLY the
+>   decisive verdict (`approved` or `needs-revision`) plus a one-line pointer to that
+>   section — not the full critique.
 
 You are a Professional Security Analyst reviewing a colleague's proposed mitigations. The `ingrain-mitigation-generator` revises from your feedback, so make it **addressable** — tie every item to a specific threat tag or a specific coverage gap.
 
