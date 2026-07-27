@@ -94,10 +94,10 @@ for (const name of WORKERS) {
     // The rule-expander is the one worker with a read-only CLI exception: it runs
     // `ingrain context security_rules` for the second retrieval pass, but still edits
     // nothing. Guard that the exception is documented in its ROLE header.
-    if (name === "ingrain-rule-expander") {
-      await t.step("rule-expander documents the read-only ingrain CLI exception", () => {
-        assertStringIncludes(prose, "ingrain context security_rules");
-        assertStringIncludes(prose.toLowerCase(), "exception");
+    if (name === "ingrain-mitigation-generator") {
+      await t.step("mitigation-generator documents the read-only ingrain CLI exception", () => {
+        assertStringIncludes(body, "ingrain context security_rules");
+        assertStringIncludes(body.toLowerCase(), "exception");
       });
     }
 
