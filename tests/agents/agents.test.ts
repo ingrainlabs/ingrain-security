@@ -1,9 +1,10 @@
 /**
  * Live per-worker tests, table-driven. Each case dispatches one worker the way
- * the orchestrator does — its SKILL.md body as the system prompt, restricted to
- * the read-only tools — and asserts the output's *shape* (a verdict keyword, a
- * 0-100 score, risk descending by tag, required fields). Assertions are loose
- * because live model output varies.
+ * the orchestrator does — its SKILL.md body as the system prompt, plus a freshly
+ * minted assessment file as its write target — and asserts the output's *shape*
+ * (a verdict keyword, a 0-100 score, risk descending by tag, required fields)
+ * over the worker's return AND the file it wrote. Assertions are loose because
+ * live model output varies.
  *
  * The cases live in a single CASES table — mirroring the WORKERS loop in
  * static/agents.test.ts — so adding or tuning a worker test is a one-row change.
@@ -16,7 +17,12 @@ import {
   assertHasScore0to100,
   assertRiskDescendsByTag,
 } from "../lib/matchers.ts";
-import { AGENT_TIMEOUT_MS, TRIAGE_TIMEOUT_MS, workerDispatchPrompt } from "../lib/claudeRunner.ts";
+import {
+  AGENT_TIMEOUT_MS,
+  mintAssessment,
+  TRIAGE_TIMEOUT_MS,
+  workerDispatchPrompt,
+} from "../lib/claudeRunner.ts";
 import type { RunResult } from "../lib/types.ts";
 import { runChecked } from "../lib/reporter.ts";
 import {
@@ -28,8 +34,12 @@ import {
   THREAT_AND_MITIGATIONS,
 } from "../lib/sampleInputs.ts";
 
-/** Read-only tools every worker is dispatched with. */
-const READ_ONLY_TOOLS = ["Read", "Grep", "Glob"];
+/**
+ * Tools every worker is dispatched with. Workers write their section of the assessment
+ * file, so Write/Edit are part of the real dispatch and have to be part of this one too —
+ * without them a worker cannot complete its hand-off contract.
+ */
+const WORKER_TOOLS = ["Read", "Grep", "Glob", "Write", "Edit"];
 
 interface AgentCase {
   /** Worker skill to dispatch (skills/<worker>/SKILL.md). */
@@ -127,12 +137,32 @@ const CASES: AgentCase[] = [
 
 for (const c of CASES) {
   Deno.test(c.label, async () => {
-    const prompt = await workerDispatchPrompt(c.worker, c.input);
-    await runChecked(
-      c.label,
-      prompt,
-      { allowedTools: READ_ONLY_TOOLS, timeoutMs: c.timeoutMs },
-      c.check,
-    );
+    const projectDir = await Deno.makeTempDir();
+    try {
+      const { assessmentAbs } = await mintAssessment(projectDir, c.label);
+      const seeded = await Deno.readTextFile(assessmentAbs);
+      const prompt = await workerDispatchPrompt(c.worker, c.input, assessmentAbs);
+
+      await runChecked(
+        c.label,
+        prompt,
+        { allowedTools: WORKER_TOOLS, timeoutMs: c.timeoutMs },
+        async (r) => {
+          const written = await Deno.readTextFile(assessmentAbs);
+          // The regression this whole tier guards: a worker that answers inline and leaves
+          // the assessment file untouched has not done its job, however good its prose.
+          assertEquals(
+            written === seeded,
+            false,
+            "worker left the seeded assessment file untouched — it must write its section",
+          );
+          // A compliant worker returns only a headline plus a pointer and puts the substance
+          // on disk, so the shape assertions run over the return AND the file together.
+          c.check({ ...r, text: `${r.text}\n${written}` });
+        },
+      );
+    } finally {
+      await Deno.remove(projectDir, { recursive: true });
+    }
   });
 }

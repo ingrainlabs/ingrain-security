@@ -1,11 +1,11 @@
 # Tests
 
 Test suite for the `ingrain-security` plugin — the `ingrain-security` orchestrator skill and its
-read-only worker roles: seven in Development, plus Testing's `ingrain-threat-verifier`. Built on
-Deno's test runner; it drives the `claude` CLI in headless mode and can exercise each worker in
-isolation by dispatching it the way the orchestrator does (its
-`skills/ingrain-security/references/development/<name>.md` body as the system prompt, restricted to
-read-only tools).
+worker roles: six in Development, plus Testing's `ingrain-threat-verifier`. Built on Deno's test
+runner; it drives the `claude` CLI in headless mode and can exercise each worker in isolation by
+dispatching it the way the orchestrator does (its
+`skills/ingrain-security/references/development/<name>.md` body as the system prompt, plus the
+assessment file it writes its section into).
 
 ## Reference layout
 
@@ -14,7 +14,7 @@ from its path:
 
 | Folder                    | Holds                                                                      |
 | ------------------------- | -------------------------------------------------------------------------- |
-| `references/development/` | The seven Development worker roles, `ingrain-<role>.md`, and `dispatch.md` |
+| `references/development/` | The six Development worker roles, `ingrain-<role>.md`, and `dispatch.md`   |
 | `references/testing/`     | `verification-pass.md` (the Testing flow) and `ingrain-threat-verifier.md` |
 | `references/lib/`         | `ingrain-cli.md`, `branch-diff.md` — phase-neutral utilities               |
 | `references/formatting/`  | `assessment-file.md`, `rules-file.md` — file schemas, read by both phases  |
@@ -40,6 +40,10 @@ lib/      claudeRunner.ts (spawn helper) · matchers.ts (assertions) · sampleIn
 static/   offline lint of worker-reference frontmatter + advisory ROLE + skill/hook structure (no model calls)
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
 hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)
 shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
 <<<<<<< HEAD
@@ -50,10 +54,32 @@ hooks/    assessment-hooks.test.ts — runs the assessment hook scripts under ba
 hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)
 shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
 >>>>>>> b794e31 (tmp logic fix  (#12))
+=======
+=======
+>>>>>>> 362fd03 (fix rebase 5)
+hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)
+shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
+=======
+hooks/    assessment-hooks.test.ts — runs the assessment hook scripts under bash against a throwaway project (no model calls)
+>>>>>>> e98327b (Add temp file write (#6))
+<<<<<<< HEAD
+>>>>>>> 4134693 (fix rebase 2)
+=======
+=======
+hooks/    assessment-hooks.test.ts · assessment-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts — run the hook/path scripts under bash against a throwaway project (no model calls)
+shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
+>>>>>>> b794e31 (tmp logic fix  (#12))
+>>>>>>> 362fd03 (fix rebase 5)
 agents/   agents.test.ts — table-driven live tests, one case per worker (dispatched via its reference file)
 =======
+=======
+scripts/  validate-assessment.test.ts — runs the schema validator under bash over valid and one-defect-per-case fixtures (no model calls)
+=======
+>>>>>>> 5d622fa (Improve speed of skill (#21))
+hooks/    assessment-hooks.test.ts · assessment-path.test.ts · rules-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts · assessment-write-lib.test.ts · project-root-lib.test.ts — run the hook/path scripts and their shared libs under bash against a throwaway project (no model calls)
+shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
+>>>>>>> eb81502 (Skill speed: skills (#17))
 agents/   agents.test.ts — table-driven live tests, one case per worker scenario (dispatched via its reference file)
->>>>>>> eb54a90 (Test skill  (#14))
 skill/    trigger.test.ts (review starts / minor stops) · orchestration.test.ts (gated)
 ```
 
@@ -79,9 +105,11 @@ This is always on for the live tiers — Deno streams each test's output live (w
 ## How the tests work
 
 - **static/** — pure file reads. Asserts each worker reference file's frontmatter (name,
-  anti-trigger description) and the advisory **read-only** ROLE header (`Read, Grep, Glob` only, no
-  edits, recommended model), plus the orchestrator's step ordering, announce/stop phrases, the
-  read-reference dispatch mechanism, and a valid SessionStart hook.
+  anti-trigger description) and its advisory ROLE header — the named **write target** and the
+  recommended model, plus the inverse guard that no worker calls itself read-only (workers write the
+  assessment file; a read-only clause there contradicts their hand-off contract). Also the
+  orchestrator's step ordering, announce/stop phrases, the read-reference dispatch mechanism, and a
+  valid SessionStart hook.
 - **hooks/** — offline, no model calls, but unlike `static/` it **executes** the
   `hooks/start/ensure-assessment-dir` SessionStart hook under `bash` against a `Deno.makeTempDir()`
   project, asserting the durable folder/README/`.gitignore` are seeded and the `CLAUDE_PROJECT_DIR`
@@ -104,11 +132,13 @@ This is always on for the live tiers — Deno streams each test's output live (w
   scripts from its own workflow step rather than through this tier — see **CI** below.
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
   `skills/ingrain-security/references/development/<name>.md` body as the system prompt with
-  `--allowed-tools Read,Grep,Glob`. The test asserts the output's _shape_ (a verdict keyword, a
-  0–100 score, risk descending by threat tag, required fields). Assertions are loose because live
-  output varies. The table has seven cases over six workers (`ingrain-relevance-triage` runs twice,
-  on a major and a minor plan); `ingrain-rule-expander` has no live case and is covered by `static/`
-  only.
+  `--allowed-tools Read,Grep,Glob,Write,Edit`. Each case mints a real assessment file in a throwaway
+  project dir (via the bundled `scripts/assessment-path`) and hands the worker that absolute path as
+  its write target, then asserts the worker actually modified the seeded file and checks the
+  output's _shape_ (a verdict keyword, a 0–100 score, risk descending by threat tag, required
+  fields) over the return and the file together. Assertions are loose because live output varies.
+  The table has seven cases over six workers (`ingrain-relevance-triage` runs twice, on a major and
+  a minor plan).
 - **skill/** — a full session (skill + agents + hook). `trigger.test.ts` checks a security-relevant
   plan starts the review and a trivial one stops at triage. `orchestration.test.ts`
   (integration-gated) checks the workers fire in order through risk scoring and the run halts at
@@ -123,6 +153,10 @@ which only `agents/` and `skill/` reach; `static/` and `hooks/` never do.
 **No agent** — deterministic, no auth, no network, sub-second:
 
 ```bash
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 362fd03 (fix rebase 5)
 deno task test:offline       # the default tier — static + hooks + shell
 deno task test:static        # just the offline lint of the skill/worker/hook files
 deno task test:hooks         # just the hook + path scripts, executed under bash
@@ -134,8 +168,24 @@ deno task ci                 # what CI runs: lint + fmt:check + test:offline
 **Needs an agent** — spawns `claude`, requires auth, costs model calls, can flake:
 
 ```bash
+<<<<<<< HEAD
+<<<<<<< HEAD
 deno task test:agent         # 7 live worker cases (6 workers; triage runs twice) + the 2 skill trigger tests
 deno task test:integration   # everything, incl. the full orchestration cycle (slow)
+=======
+deno task test:static        # offline, deterministic, ~0.3s — no auth needed
+deno task test:hooks         # offline, runs the assessment hook scripts under bash — no auth needed
+deno task test               # static + 6 live agents + skill trigger (default tier)
+deno task test:agents        # just the 6 live per-agent tests
+deno task test:integration   # everything, incl. full orchestration (slow)
+>>>>>>> 4134693 (fix rebase 2)
+=======
+deno task test:agent         # 6 per-worker tests + the 2 skill trigger tests
+=======
+deno task test:agent         # 7 live worker cases (6 workers; triage runs twice) + the 2 skill trigger tests
+>>>>>>> ee798c2 (fix rebase 6)
+deno task test:integration   # everything, incl. the full orchestration cycle (slow)
+>>>>>>> 362fd03 (fix rebase 5)
 
 # one worker only:
 deno test --allow-run=claude --allow-read --allow-env agents/ --filter ingrain-relevance-triage
@@ -209,6 +259,11 @@ earlier mode's transcript in its own subdir.
 
 ## Tiers & rough cost
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> ee798c2 (fix rebase 6)
 | Command                  | Needs an agent? | Model calls             | Time      | Auth |
 | ------------------------ | --------------- | ----------------------- | --------- | ---- |
 | `test:static`            | no              | 0                       | < 1s      | no   |
@@ -219,6 +274,29 @@ earlier mode's transcript in its own subdir.
 | `ci` (+ lint, fmt:check) | no              | 0                       | a few s   | no   |
 | `test:agent`             | yes             | ~9 (7 worker cases + 2) | a few min | yes  |
 | `test:integration`       | yes             | + full cycle to Gate 1  | 5–20 min  | yes  |
+<<<<<<< HEAD
+=======
+| Command            | Model calls            | Time      | Auth |
+| ------------------ | ---------------------- | --------- | ---- |
+| `test:static`      | 0                      | < 1s      | no   |
+| `test:hooks`       | 0                      | < 1s      | no   |
+| `test`             | ~8 (6 agents + 2)      | a few min | yes  |
+| `test:integration` | + full cycle to Gate 1 | 5–20 min  | yes  |
+>>>>>>> 4134693 (fix rebase 2)
+=======
+| Command                  | Needs an agent? | Model calls            | Time      | Auth |
+| ------------------------ | --------------- | ---------------------- | --------- | ---- |
+| `test:static`            | no              | 0                      | < 1s      | no   |
+| `test:hooks`             | no              | 0                      | < 1s      | no   |
+| `test:shell`             | no              | 0                      | < 1s      | no   |
+| `test:ts`                | no              | 0                      | < 1s      | no   |
+| `test:offline`           | no              | 0                      | < 1s      | no   |
+| `ci` (+ lint, fmt:check) | no              | 0                      | a few s   | no   |
+| `test:agent`             | yes             | ~8 (6 workers + 2)     | a few min | yes  |
+| `test:integration`       | yes             | + full cycle to Gate 1 | 5–20 min  | yes  |
+>>>>>>> 362fd03 (fix rebase 5)
+=======
+>>>>>>> ee798c2 (fix rebase 6)
 
 ## Notes
 
