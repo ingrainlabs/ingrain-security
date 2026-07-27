@@ -135,25 +135,17 @@ Deno.test("verification-pass.md: writes to the absolute assessment_abs, minted n
   assertStringIncludes(md, "references/formatting/assessment-file.md");
 });
 
-/**
- * Testing writes the assessment exactly once, in a later session that holds none of the plan
- * review's context — so it is the pass with the most to lose from a mandatory 345-line schema
- * read, and the last chance to catch a malformed entry before the file is inherited. Both
- * halves are pinned: it writes FROM the field cards, and it three-checks against them on the
- * one read it already makes.
- */
-Deno.test("verification-pass.md: writes from the field cards and three-checks its one write", async () => {
+Deno.test("verification-pass.md: validates its one write against the schema, strictly", async () => {
   const md = await Deno.readTextFile(VERIFY);
-  assertStringIncludes(md, "field card");
-  // The reference is demoted to a meaning lookup, exactly as in the Development spine.
-  assertStringIncludes(md, "open it for what a field *means*");
-  // One write, one read, one check — named, not "against the schema".
-  assertStringIncludes(md, "three-check");
-  assertStringIncludes(md, "never against a fresh read of the schema");
+  // Testing writes the assessment once, and that write is a FINISHED file — so it runs the
+  // validator without --lenient. Losing this leaves the last write of the whole lifecycle
+  // unchecked, in the session that hands the file to everyone downstream.
+  assertStringIncludes(md, "scripts/validate-assessment");
+  assertStringIncludes(md, "no `--lenient`");
+  // The contract itself belongs to the schema reference; this file points at it.
+  assertStringIncludes(md, "references/formatting/assessment-file.md");
   // And the checklist tracks it, like every other step-6 obligation.
-  assertStringIncludes(md, "three-checked against the field cards");
-  // What the Robustness levels MEAN stays this file's own — the card carries only the words.
-  assertStringIncludes(md, "**Robustness levels**");
+  assertStringIncludes(md, "validated clean by `scripts/validate-assessment` with NO `--lenient`");
 });
 
 Deno.test("verification-pass.md: guards title drift, stays in the Testing phase", async () => {

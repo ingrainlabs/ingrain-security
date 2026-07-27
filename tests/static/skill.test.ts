@@ -340,6 +340,36 @@ Deno.test("ownership: SKILL.md does not restate what assessment-file.md owns", a
   }
 });
 
+/**
+ * The validator wiring. `scripts/validate-assessment` checks a written assessment file
+ * against the schema its reference file specifies, and the rule is that it runs after EVERY
+ * write — so `assessment-file.md` owns the contract (modes, exit codes, the retry bound) and
+ * SKILL.md carries only the when. A skill that stops naming it silently goes back to writing
+ * unchecked files, which is the regression these fence.
+ */
+Deno.test("validation: assessment-file.md owns the after-every-write contract", async () => {
+  const md = await Deno.readTextFile(ASSESSMENT_REF);
+  assertStringIncludes(md, "scripts/validate-assessment");
+  // Both modes, and which one belongs to a finished file.
+  assertStringIncludes(md, "--lenient");
+  assertStringIncludes(md.toLowerCase(), "finalize");
+  // The failure contract: bounded retries, and never a silent hand-off.
+  assertStringIncludes(md.toLowerCase(), "at most twice");
+});
+
+Deno.test("validation: SKILL.md runs it after every write and strictly at finalize", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  assertStringIncludes(md, "scripts/validate-assessment");
+  assertStringIncludes(md, "--lenient");
+  // The spine points at the owner rather than restating the contract.
+  assertStringIncludes(md, "references/formatting/assessment-file.md");
+  // The workers hold no shell, so the orchestrator validates what they wrote on return.
+  assertStringIncludes(md.toLowerCase(), "validate on every return");
+  // Finalize is the strict run, and the checklist tracks it.
+  assertStringIncludes(md, "validate it strictly — no `--lenient`");
+  assertStringIncludes(md, "assessment validated strictly");
+});
+
 Deno.test("ownership: dispatch.md § Selection windows stays mechanism-only", async () => {
   const md = await Deno.readTextFile(DISPATCH_REF);
   // The gate PROCEDURE (display the table first, then ask) is SKILL.md's; this file maps the
@@ -401,8 +431,7 @@ Deno.test("ingrain-cli.md: documents the ingrain rule-retrieval CLI", async () =
 
 Deno.test("SKILL.md: the orchestrator's own step retrieves rules", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // Step 5 is the orchestrator's retrieval pass, run in session — not a dispatch. It runs after
-  // Gate 1, so it keys on the user-selected threats only, and blocks mitigation generation.
+  // Step 5 is the orchestrator's retrieval pass, run in session — not a dispatch.
   // It points at the CLI reference rather than restating the command.
   assertStringIncludes(md, "references/lib/ingrain-cli.md");
 });

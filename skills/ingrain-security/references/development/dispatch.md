@@ -11,50 +11,6 @@ section of the stored analysis file at the path this dispatch names."
 Your own writes as orchestrator — finalizing the assessment file, and the two plan-file writes at
 Gate 1 and Gate 2 — happen strictly between worker steps, once the worker has returned.
 
-## This skill is built for an agent-based host
-
-**Every Development worker and every Testing verifier runs as a fresh subagent — that is the
-designed mode.** It gives each worker clean context and its own **Recommended model** tier, and it
-keeps the orchestrator holding just compact statuses and pointers (SKILL.md § Context-window
-discipline). Run the six Development workers and the per-threat verifiers as subagents wherever the
-host allows.
-
-The sequential in-context fallback below is a **degraded mode**: one shared context across every
-worker, and the session model throughout. Reserve it for a host whose only mode is the main
-session.
-
-## Independent calls go out in one block
-
-Anything with no data dependency on anything else in flight is issued **together, in a single
-block** — not one per turn. Each extra turn is a round-trip the run pays for and nothing gains.
-This covers:
-
-- **The three bundled scripts at Phase select** — `assessment-path mint`, `rules-path mint` and
-  `branch-diff` are read-only and deterministic, and none reads another's output. One block, and
-  the values are reused for the whole run; no later step re-mints.
-- **The Testing verifiers** — one per selected threat, mutually independent (see
-  `references/testing/verification-pass.md` § How to dispatch a verifier).
-
-The converse still holds: a step that consumes the previous worker's section waits for it. The
-pipeline order in SKILL.md's flow is a real data dependency, not a formality.
-
-## Writing the assessment file
-
-**Every change to it goes through the Edit or Write tool** — the orchestrator's and every worker's
-alike. `allow-assessment-write` pre-approves both for this path, so the change lands with no
-permission prompt and the user still sees the before/after. The shell has a different job: it runs
-this plugin's read-only scripts and the `ingrain` CLI, and never edits the assessment file.
-
-Every field is its own line, but **a write is one call**. A worker writes its whole section in a
-single Write or Edit, and a stage filling fields into entries that already exist makes **one Edit
-per entry** — replacing that entry's contiguous block of field lines, never one Edit per field. A
-block Edit shows the same before/after a per-line one would, so the reviewable change costs one
-call rather than one per line.
-
-**The file tells you its own shape.** The mint seeds a **field card** under every section, and that
-card is the write contract — write from it. `references/formatting/assessment-file.md` is for what
-a field *means*, not for learning its shape.
-
 ## Host with a subagent / task primitive
 
 Use the host's subagent / task primitive, passing the dispatch prompt and telling
@@ -62,47 +18,13 @@ the subagent to read the worker reference file from `references/development/<nam
 worker per call and read the returned text. Where the host supports a per-subagent
 model, set the worker's recommended tier; otherwise ignore it (advisory).
 
-## When a session rule gates subagents behind user request
-
-A **session rule says** the subagent tool is yours to call once the user has requested it — the
-wording you will see is *"unless the user requested it."* Read that as a **permission gate over a
-mechanism the host already has**: the rule names the condition that opens it, so the work is to
-obtain that request. The sequential fallback below covers a different case — a host whose only mode
-is the main session.
-
-**Ask the user to allow the subagent flow, before the first dispatch of the run** — Development
-Step 0's triage, or Testing's verifier fan-out. Ask once, up front: one answer covers the whole run,
-where a mid-flow ask splits it across two modes. State the rule and the trade-off in one short
-message, then put the choice to the user with the host's question or selection primitive (plain
-text elsewhere), **allow as the recommended option**:
-
-> Worth noting: the rule says "unless the user requested it." If you'd prefer the review run with
-> real subagent isolation — which is what the skill was designed for, and gives each worker clean
-> context and its own recommended model tier — you can just say so, and that counts as the request.
-
-- **Allowed** → **the gate is open for this run.** Switch to **Host with a subagent / task
-  primitive** above and dispatch every worker there, model tier included. The answer covers the
-  whole run — carry it through to the last step.
-- **Declined, or the user prefers to get going** → run the **Sequential in-context fallback** below,
-  and say which mode you are in, in one line, so the shared context stays visible to the user.
-
-Where the user has **already** asked for subagents — in the invoking prompt, or anywhere earlier in
-the session — that *is* the request: dispatch straight away.
-
-Should the run reach a later step in-context and the user then ask for subagents, switch from that
-step onward. Work already completed stands — its section is written to the assessment file, and the
-next worker reads it there like any other.
-
 ## Sequential in-context fallback
 
-Where the host's **only** mode is the main session — a permission gate belongs to the section above
-— run each worker **sequentially in the main session**: read the worker's reference file,
-follow it on the current INPUT, capture the output, then move to the next step. This mode shares
-one context across every worker, so:
+Where the host lacks a subagent mechanism, run each worker **sequentially in the main
+session**: read the worker's reference file, follow it on the current INPUT, capture the output,
+then move to the next step. This mode shares one context across every worker, so:
 
 - Run one worker step at a time, in the order the checklist lists them, letting each finish before the next begins.
-- The **Recommended model** line in each worker's reference file applies where per-worker models
-  exist; here every worker runs on the session model.
 
 ## Org-rules retrieval and the CLI
 

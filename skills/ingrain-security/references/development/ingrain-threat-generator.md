@@ -2,7 +2,7 @@
 name: ingrain-threat-generator
 description: >-
   INTERNAL worker of the ingrain-security review pipeline — reachable solely
-  through a dispatch from the ingrain-security orchestrator. Produces a scoped threat list under discovery-order ids
+  through a dispatch from the ingrain-security orchestrator. Produces a scoped threat list under permanent ids
   (T01, T02, …) for a plan.
 ---
 
@@ -18,13 +18,12 @@ description: >-
 >   found it.
 > - **Recommended model:** a cheap, basic model (advisory — applied only where the platform
 >   supports per-subagent model selection).
-> - **Hand-off contract:** write the threat rows into the `## Threats` table of
->   the stored analysis file (path per your dispatch), filling the descriptive columns (Tag,
->   Title, Asset, Vector, Description, Assumptions) per the schema in
->   `references/formatting/assessment-file.md` — the risk-scorer fills the scoring columns and
->   re-tags the rows into risk order, and the orchestrator fills Selection later; most
->   tasks warrant 3–6 rows — keep it
->   short and scoped (treat the count as a target). Then return to the
+> - **Hand-off contract:** write one `### T<n> — <title>` entry per threat into the
+>   `## Threats` section of the stored analysis file (path per your dispatch), filling the
+>   descriptive fields (Asset, Vector, Description, Assumptions) per the schema in
+>   `references/formatting/assessment-file.md` and leaving every scoring field as `—` — the
+>   risk-scorer fills those, and the orchestrator fills Selection later; most tasks warrant
+>   3–6 threats — keep it short and scoped. Then return to the
 >   orchestrator ONLY a one-line headline (e.g. the threat count) plus a pointer to
 >   that section — not the full list.
 
@@ -45,7 +44,7 @@ Apply a hard drop test to every candidate: if a threat wouldn't change how this 
 
 A list of threats, each with an id so the critic can point at it.
 
-**Ids are provisional.** Assign them in discovery order — `T01`, `T02`, … — and keep them stable through your own revision round, so the critic's `[T<n>]` feedback keys line up against the same threats. Gaps are legal at this stage: a dropped threat's id is simply left out. Leave priority to the `ingrain-risk-scorer` — it holds the scores. It re-tags the whole list once, into descending-risk order, and closes the gaps; the ids become permanent there.
+**Ids are permanent.** Assign them in discovery order — `T01`, `T02`, … — and never change one afterwards. Nothing downstream renumbers them: the risk-scorer scores in place, and priority is derived from the scores at display time rather than stored. Gaps are legal and expected, so a dropped threat's id is simply retired.
 
 Write every scoring field as `—`. Impact, Likelihood, Risk score and Criticality belong to the `ingrain-risk-scorer`, Selection to the orchestrator at Gate 1, and Robustness to the Testing pass — each edits the line you leave for it.
 
@@ -77,7 +76,7 @@ There is exactly one revision round, and the list is frozen after it — so trea
 Then reconcile that fresh model against what came before:
 
 - **Re-examine the whole task**, treating the flagged threats as one input among several.
-- **Keep tags stable** for any threat that carries over — a threat that is still the same threat keeps its tag from the previous round (never renumber), so the critic can line its feedback up against it. Genuinely new threats take the next free tag. A dropped threat's tag is retired — gaps in the sequence are expected and correct; never reuse a tag or renumber to close a gap. The risk-scorer compacts the sequence at freeze, so stable tags are what matter mid-loop: they keep the critic's references landing.
+- **Keep ids stable** for any threat that carries over — a threat that is still the same threat keeps the id it had in the first pass, so the critic's feedback lines up against it. Genuinely new threats take the next free id. A dropped threat's id is retired and stays retired, so gaps in the sequence are expected and correct — nothing downstream compacts them, and every reference to the ids around it keeps pointing where it did.
 - **Account for every critique item** — fold the valid ones into the fresh model; for any you reject, say so and why.
 
 Close with a short **Reconciling the critique** section so the critic can confirm its points were handled at a glance:

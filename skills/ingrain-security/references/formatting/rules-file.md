@@ -26,10 +26,7 @@ and the selected threats before mitigations exist. Follow this structure exactly
 - **Filled when org rules are retrieved.** Minting **seeds the file with its empty skeleton**
   (`## Retrieved rules`, `## Per-mitigation mapping`, both empty), so a retrieval pass fills
   the sections in place rather than building the page; an existing file is always filled as it
-  stands. Each heading carries a **field card** rendering the shape to write under it — same
-  mechanism, same anti-drift rule and same permanence as the assessment's, which
-  `assessment-file.md` → **The field cards carry the shape** owns. A shape changed here is
-  changed in `scripts/lib/artifact-template.sh` in the same edit.
+  stands.
   Its **content** is conditional: it carries rules exactly when the retrieval pass got them
   back from the `ingrain` CLI, and stays an empty skeleton where nothing came back.
   Because the file is seeded, **the presence of the file says nothing** — read the mint JSON
@@ -88,7 +85,7 @@ still see them. Omit the section if there are none.
 
 | Stage | Actor | Action |
 |-------|-------|--------|
-| Plan · Retrieve rules (step 2) | orchestrator | Creates the file and writes `## Retrieved rules` / `## Applicable rules` from the CLI pass (only if rules came back) |
+| Plan · Retrieve rules (step 5) | orchestrator | Creates the file and writes `## Retrieved rules` / `## Applicable rules` from the CLI pass (only if rules came back) |
 | Plan · Mitigate (step 6) | `ingrain-mitigation-generator` | Reads `## Retrieved rules`; writes **only** `## Per-mitigation mapping`, rewriting it each revision round to stay in sync with `## Mitigations` |
 | Plan · Critique (step 7) | `ingrain-mitigation-critic` | Reads it by pointer to judge how faithfully mitigations follow the cited rules, and which retrieved rules go unapplied |
 | Plan · Gate 2 (step 8) | orchestrator | Reads `## Per-mitigation mapping` + `## Retrieved rules` to resolve each **Rule ref** id → title for the "Follows rules" display |

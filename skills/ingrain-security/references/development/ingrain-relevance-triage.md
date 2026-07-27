@@ -10,11 +10,11 @@ description: >-
 > system prompt, act on the INPUT you were given, and return; the orchestrator drives
 > the review loop and dispatches every other worker.
 >
-> - **Read-only on the codebase.** Use only Read, Grep, and Glob to inspect the
->   plan and repo — make no code edits and run no mutating commands. Your ONE
->   permitted write is your own section of the stored analysis file at
->   the path your dispatch specifies; write nothing else. This is advisory —
->   the dispatching platform relies on you to honor it.
+> - **Write only where your dispatch points you.** Everything you put on disk goes into
+>   your own section of the stored analysis file at the path your dispatch specifies —
+>   that section is the entirety of what you write. Inspect the plan and repo with Read,
+>   Grep, and Glob, and leave the rest of that file — and the repo's own code — as you
+>   found it.
 > - **Recommended model:** a mid-tier, medium-capability model — one step above the cheap
 >   tier the other workers use. Your verdict gates the whole pipeline and stands
 >   unreviewed — it is the single point where the review can be lost (advisory — applied only where the
@@ -44,9 +44,9 @@ the pipeline builds on prior work. Locate it with Glob, Grep, and Read:
    `<project_root>/.ingrain-security/assessment-<branch-slug>-*.md`, where `<branch-slug>` is
    the `branch_slug` the orchestrator resolved via the same script (so this glob and the
    file names always agree). If the branch is `unknown`, Glob all
-   `<project_root>/.ingrain-security/assessment-*.md` instead. Glob the absolute path, never
-   the bare relative `.ingrain-security/…` — a relative glob resolves against the file you
-   happen to be reading, so it matches nothing and you would wrongly report `none`.
+   `<project_root>/.ingrain-security/assessment-*.md` instead. Glob the absolute path — a bare
+   relative `.ingrain-security/…` glob resolves against whatever file you happen to be reading,
+   so it matches nothing and would have you report `none` for a task that has prior analysis.
 2. **Match on the task — strictly.** A shared branch may hold several concurrent tasks'
    assessments, so the glob can return files belonging to *other* work. For each candidate,
    read its `## Task` Title and **compare the branch and the title/description against the
