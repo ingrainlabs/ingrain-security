@@ -36,15 +36,24 @@ shape.
   folder — the ignore file included — stays out of `git status`; sharing a file is an
   explicit `git add -f <file>` opt-in.
 - **Seeded with a skeleton.** The same mint **writes this file's empty skeleton** when it does
-  not exist yet — every heading in schema order and the field labels of the fixed sections,
-  as **structure only**: every value left empty, every entry left to the writer. `## Threats` and
-  `## Mitigations` are seeded as bare headings, and the worker that fills each writes its
-  `### <id> — <title>` entries beneath.
+  not exist yet — every heading in schema order, a **field card** under each, and the field
+  labels of the fixed sections, as **structure only**: every value left empty, every entry left
+  to the writer. `## Threats` and `## Mitigations` are seeded as heading + card, and the worker
+  that fills each writes its `### <id> — <title>` entries beneath.
   So every writer starts from a ready-made page:
   **fill the sections in place** rather than re-creating the page — an existing file is always
-  filled as it stands. The skeleton is deliberately valid under `validate-assessment --lenient`
-  and invalid strictly, which is what marks an unfilled skeleton apart from a finished
-  assessment.
+  filled as it stands. An unfilled skeleton is recognisable on sight: the headings are all
+  there, every value beneath them is still empty.
+- **The field cards carry the shape; this file carries the meaning.** A card is an HTML comment
+  under a section heading naming that section's fields, their order and their exact enumerated
+  values — rendered from the spec below by `scripts/lib/artifact-template.sh`. It is where
+  writers get the shape, because it arrives with the file they must open to write at all, where
+  recovering the same shape from this reference costs a full read of it. **This file stays
+  normative**: it owns what each field *means*, the reasoning schemas, id permanence and the
+  lifecycle, and a writer opens it when meaning is what it is missing. The two must not drift —
+  **a field or an allowed value changed here is changed in the card in the same edit.** The
+  cards are **permanent**: finalize deletes the scratch sections and keeps them, because the
+  implementing agent and the Testing pass run in later sessions with no reference in context.
   Because of the seeding, **`file_exists` reports written content, not the file's
   presence**: an untouched skeleton reads as `false`, exactly like no file at all, which is
   what keeps it usable as the Phase-select and resume signal. Two further fields say which
@@ -132,7 +141,7 @@ Robustness: —
 
 | Field | Constraint |
 |-------|------------|
-| **id** (in the heading) | `T<n>`, zero-padded (`T01`) — unique within the file, assigned once and **never changed** |
+| **id** (in the heading) | `T<n>`, zero-padded (`T01`) — unique within the file; assigned in discovery order by the generator, **reassigned once** by the risk scorer into descending-risk order, and fixed from that point on |
 | **title** (in the heading) | string, after the ` — ` |
 | **Asset** | string |
 | **Vector** | string |
@@ -148,7 +157,8 @@ Robustness: —
 
 **One field per line is what makes this file cheap to maintain.** Every stage after the
 generator fills a field the stage before it left `—` — the risk scorer, Gate 1, the
-verification pass — and each of those is an Edit of one short line. Write the fields in the
+verification pass — and each of those touches a contiguous run of lines inside an entry, so a
+stage costs **one Edit per entry**, not one per field. Write the fields in the
 order above; a field the stage that owns it has not run yet reads `—`.
 
 **Justification leads the scoring fields on purpose.** The scorer fills an entry top-down,
@@ -156,15 +166,23 @@ so this schema doubles as a reasoning schema: writing the justification *before*
 numerical (Risk score) and qualitative (Impact, Likelihood, Criticality) scores lets the
 reasoning come first and drive the scores.
 
-**The id is permanent; priority is derived.** An id is assigned at creation, in discovery
-order, and never changes — not when a threat is dropped, not when the scores change. Gaps are
-expected and legal: a retired `T02` leaves `T01` and `T03` pointing exactly where they did,
-so every mitigation's **Threats** reference stays correct without re-derivation.
+**The id carries the priority.** Before scoring, an id is a provisional discovery-order label:
+the generator assigns `T01`, `T02`, … as it finds threats, and those labels stay stable across
+the critique and the single revision round so the critic's `[T<n>]` feedback keys line up.
+Gaps from dropped threats are legal at that stage.
 
-Priority is **not stored**. Anywhere threats are shown in priority order — the Gate 1 table,
-a worker's report — sort by **Risk score descending**, breaking ties by impact
-(critical > high > medium > low), then likelihood (very high > high > medium > low), then id
-ascending. Document order carries no meaning.
+The `ingrain-risk-scorer` then **re-tags the list exactly once**. It sorts by **Risk score
+descending**, breaking ties by impact (critical > high > medium > low), then likelihood
+(very high > high > medium > low), then the pre-scoring id ascending — a deterministic total
+order, so two runs over the same scores produce the same ids. It reassigns ids contiguously
+from `T01`, closing any gaps, and writes the entries in that order. `T01` is the most
+dangerous threat.
+
+**After scoring the id is permanent.** It is what every mitigation's **Threats** field
+references, and mitigations are written after scoring, so every reference points at a final id.
+
+**Document order is id order is risk order.** Anywhere threats are shown — the Gate 1 table, a
+worker's report, the verification tables — display them in **id order, `T01` first**.
 
 **Gate 1 → Selection.** When the user decides at Gate 1, record each threat's
 **Selection**: include → `selected`, exclude → `excluded`. Use
@@ -252,55 +270,6 @@ produced it, so a mitigation's Robustness always tracks the threats it covers.
   file — and the mint is what resolves the path and ensures the folder, so `assessment_abs`
   arrives ready to write to. 
 
-## Validation — run it after every write
-
-**Every time this file is written, it is checked with the bundled
-`scripts/validate-assessment` script.** No exceptions: after the orchestrator opens it, after
-each worker returns from writing its section, after a gate's `Selection` is recorded, and at
-finalize. The next reader is a different agent in a different context — a malformed entry is
-invisible until it breaks there, and by then the run that produced it is over.
-
-**The orchestrator runs it, including for the workers.** A worker carries Read, Grep, Glob,
-Edit and Write — enough to inspect the repo and to write its own section with Edit or Write —
-but no shell, so it writes its section and returns; the orchestrator validates that write
-before dispatching the next one, and re-dispatches the worker with the violations quoted back
-if something is wrong.
-
-Run it on the **same absolute path you just wrote to** (`assessment_abs`); the ready-to-run
-command, with the plugin root already substituted, is in your `INGRAIN-ASSESSMENT-PATHS`
-session context:
-
-    bash <plugin>/skills/ingrain-security/scripts/validate-assessment <assessment_abs> [--lenient]
-
-**Pre-approved, like the writes.** An `allow-script-run` hook auto-approves this command on
-both hosts, so expect **no permission prompt** — run it as often as the rule below says. The
-grant covers a *bare* run of the plugin's own read-only scripts and nothing more: append
-anything to the command (a `;`, a pipe, a redirect) and it prompts again. **Run it exactly as
-printed above — nothing appended.** In particular do not chain an `echo` of the exit status:
-the verdict is already on stdout (below), so the suffix buys nothing and costs the
-pre-approval.
-
-**Two modes, one rule.** Pass **`--lenient` while the run is in progress** — mid-run this
-file is incomplete by design (at Step 0 it holds only `## Task` and `## Triage`), and
-lenient waives exactly the checks that cannot hold yet: a section not written, an entry's
-field absent or still `—` because the stage that owns it has not run. Everything already
-filled in is still checked in full — a wrong `Impact` is a violation in either mode.
-**Drop the flag at finalize**, where every field must be filled.
-
-**Read the result off stdout.** It prints one JSON object there — `"valid"` is the verdict and
-`"error_count"` the tally — and each violation on stderr as `<path>:<line>: <message>`, the
-line and the field named, so the fix is local. That JSON is the whole answer; nothing else
-needs to be observed. (It also exits `0` valid · `1` schema violations · `2` usage error, for
-the hooks and tests that consume it non-interactively.)
-
-**On `"valid":false`: fix exactly the violations it names, then re-run — at most twice.** Fix by
-correcting what you wrote, so the file earns the pass on its content. If it still fails
-after the second attempt, **say so in one line naming the remaining violations** and carry
-on — two attempts is the bound, and saying it out loud is what the check exists to secure.
-**Make every correction with the Edit or Write tool, on `assessment_abs`** — the
-`allow-assessment-write` hook pre-approves those tools for this file on both hosts, so the
-fix lands with no permission prompt.
-
 ## Template
 
 ```markdown
@@ -381,8 +350,9 @@ Robustness: strong
 Update this file whenever the implementation diverges from the analysis — a new
 surface, a threat's acceptance changes, or a mitigation is added, dropped, or
 altered. Keep the Selection fields and coverage honest against the code you write,
-and keep every enumerated field within its allowed values. Ids are permanent: add a new
-threat with the next free `T<n>` and never renumber the existing ones.
+and keep every enumerated field within its allowed values. The scoring pass already re-tagged
+the threats into risk order, so ids are permanent from here: add a new threat with the next
+free `T<n>` and keep the existing ones as they are.
 
 To locate this file, re-run the `assessment-path` mint command from your
 INGRAIN-ASSESSMENT-PATHS session context and write to the absolute `assessment_abs`

@@ -30,6 +30,8 @@ const ENSURE_DIR = `${ROOT}hooks/start/ensure-assessment-dir`;
 const PROJECT_ROOT_LIB = `${ROOT}skills/ingrain-security/scripts/lib/project-root.sh`;
 const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
 const MINT_LIB = `${ROOT}skills/ingrain-security/scripts/lib/mint-path.sh`;
+const TEMPLATE_LIB = `${ROOT}skills/ingrain-security/scripts/lib/artifact-template.sh`;
+const SCORER_REF = `${ROOT}skills/ingrain-security/references/development/ingrain-risk-scorer.md`;
 
 const WORKERS = [
   "ingrain-relevance-triage",
@@ -146,6 +148,143 @@ Deno.test("SKILL.md: mints the assessment path and defers its schema to the refe
   assertStringIncludes(md, "assessment_path");
 });
 
+/**
+ * The field cards. The skeleton the minter seeds carries a comment under every heading naming
+ * that section's fields, their order and their exact values — so a writer takes the shape from
+ * the file it must open anyway, instead of paying a full read of the 345-line schema reference.
+ * That saving is the whole point of the design, and it survives only while three things hold:
+ * the template renders the cards, the skill points writers at them, and the reference stays the
+ * owner of what a field MEANS. Losing any one of them puts the mandatory read straight back.
+ */
+Deno.test("field cards: the skeleton renders one under every value-bearing section", async () => {
+  const sh = await Deno.readTextFile(TEMPLATE_LIB);
+  // Every section a writer fills carries a card. Task/Triage/Risk score already showed their
+  // labels; these two showed nothing at all before the cards, and hold every enum.
+  assertStringIncludes(sh, "## Threats\n<!--");
+  assertStringIncludes(sh, "## Mitigations\n<!--");
+  // The enumerated values live IN the card — that is what removes the reference read.
+  for (
+    const v of [
+      "critical|high|medium|low", // Impact
+      "very high|high|medium|low", // Likelihood
+      "selected|excluded|undecided", // Selection
+      "weak|adequate|strong", // Robustness
+      "development|testing", // Latest stage
+      "minor|major", // Triage verdict
+    ]
+  ) {
+    assertStringIncludes(sh, v);
+  }
+  // The sidecar's two sections are carded too — the mitigation generator writes both files.
+  assertStringIncludes(sh, "## Retrieved rules\n<!--");
+  assertStringIncludes(sh, "## Per-mitigation mapping\n<!--");
+  // Permanent, not scratch: finalize deletes the critique sections and keeps these, because the
+  // implementing agent and the Testing pass run in later sessions with no reference in context.
+  assertStringIncludes(sh.toLowerCase(), "permanent");
+});
+
+/**
+ * Collapse every run of whitespace to one space so a phrase can be asserted as the reader
+ * sees it — these docs are hand-wrapped, and matching raw text would tie the assertion to
+ * the current line breaks.
+ */
+const flatten = (md: string): string => md.replace(/\s+/g, " ");
+
+/**
+ * The threat ids ARE the priority: the risk scorer re-tags the frozen list into descending-risk
+ * order, so `T01` is the most dangerous threat and every display just walks the ids.
+ *
+ * This guard exists because the docs and the live tests already drifted apart once, in exactly
+ * this spot — `assertRiskDescendsByTag` in tests/lib/matchers.ts asserted re-tagging while the
+ * skill told the scorer never to renumber, so a scorer obeying its instructions failed the
+ * agent test. Nothing but a static check keeps prose in sync with a live assertion.
+ */
+Deno.test("threat ids: the docs instruct re-tagging into risk order", async (t) => {
+  const scorer = flatten(await Deno.readTextFile(SCORER_REF));
+  const md = flatten(await Deno.readTextFile(SKILL));
+
+  await t.step("the scorer is told to re-tag, and what the resulting order means", () => {
+    assertStringIncludes(scorer, "Re-tag the list into risk order");
+    assertStringIncludes(scorer, "`T01` is the most dangerous threat");
+  });
+
+  await t.step("the scorer carries no leftover prohibition on renumbering", () => {
+    // The old contract's exact wording. Reintroducing it puts the scorer back in conflict
+    // with tests/agents/agents.test.ts, which fails a scorer that leaves the tags alone.
+    for (const stale of [/do not renumber/i, /nothing to reorder/i, /scores in place/i]) {
+      assertEquals(
+        stale.test(scorer),
+        false,
+        `ingrain-risk-scorer.md must not tell the scorer to leave ids alone (matched ${stale})`,
+      );
+    }
+  });
+
+  await t.step("Gate 1 displays threats in id order, not by re-sorting", () => {
+    assertStringIncludes(md, "**in id order — `T01` first**");
+    assertEquals(
+      /the ids will not be in order/i.test(md),
+      false,
+      "SKILL.md must not tell the reader the Gate 1 ids are out of order — the scorer re-tagged them",
+    );
+  });
+
+  await t.step("the schema and its field card both carry the rule", async () => {
+    // assessment-file.md owns what the id MEANS, the card is what a writer actually reads;
+    // the two must not drift (assessment-file.md -> "Where the shape lives").
+    assertStringIncludes(flatten(await Deno.readTextFile(ASSESSMENT_REF)), "re-tags the list");
+    assertStringIncludes(flatten(await Deno.readTextFile(TEMPLATE_LIB)), "re-tags them once");
+  });
+});
+
+Deno.test("field cards: SKILL.md sends writers to the card, not to the schema", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  assertStringIncludes(md, "field card");
+  // The dispatch is where a worker learns the contract — it must name the card, since the
+  // worker has no other cheap route to the shape.
+  assertStringIncludes(md, "written to the field card");
+  // And the reference read is explicitly demoted to a meaning lookup. A skill that stops
+  // saying this silently goes back to a full schema read per worker.
+  assertStringIncludes(md, "only if you need what a field MEANS");
+  // SKILL.md still names NO enum value — the card owns the shape, the reference the meaning.
+  for (const v of ["very high", "weak|adequate|strong"]) {
+    assertEquals(
+      md.includes(v),
+      false,
+      `SKILL.md restates the enum "${v}". The field card carries the values; the spine points at it.`,
+    );
+  }
+});
+
+/**
+ * The check that replaced "read it back against the schema": three named things, run on reads
+ * the skill already makes (the two gate slices and finalize) rather than on a read of its own.
+ * Vague wording here is what made the old instruction cost a 345-line re-read or get skipped.
+ */
+Deno.test("field cards: the three-check is named, bounded, and rides on existing reads", async () => {
+  const md = await Deno.readTextFile(SKILL);
+  assertStringIncludes(md, "three-check");
+  assertStringIncludes(md, "never by re-reading the schema");
+  // Its cadence: both gates and finalize, on reads those steps already make.
+  assertStringIncludes(md, "It costs no read of its own");
+  assertStringIncludes(md, "at both gates and at finalize");
+  // Both gate steps run it on the bounded slice they already read.
+  for (const gate of ["## Threats` slice", "## Mitigations` slice"]) {
+    assertStringIncludes(md, gate);
+  }
+});
+
+Deno.test("assessment-file.md: owns the meaning, and stays in step with the cards", async () => {
+  const md = await Deno.readTextFile(ASSESSMENT_REF);
+  // The ownership split, stated by the owner: cards carry shape, this file carries meaning.
+  assertStringIncludes(md, "field card");
+  assertStringIncludes(md.toLowerCase(), "normative");
+  // Three copies of the shape now exist, so the reference carries the anti-drift rule and
+  // names the renderer. Without this the card and the schema part ways on the next edit.
+  assertStringIncludes(md, "scripts/lib/artifact-template.sh");
+  assertStringIncludes(md, "in the same edit");
+});
+
 Deno.test("assessment-file.md: owns the living-document behavior", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
   // The file is written/updated as a living document — stated by its owner, not by SKILL.md.
@@ -201,36 +340,6 @@ Deno.test("ownership: SKILL.md does not restate what assessment-file.md owns", a
         `Point at the reference instead of restating it.`,
     );
   }
-});
-
-/**
- * The validator wiring. `scripts/validate-assessment` checks a written assessment file
- * against the schema its reference file specifies, and the rule is that it runs after EVERY
- * write — so `assessment-file.md` owns the contract (modes, exit codes, the retry bound) and
- * SKILL.md carries only the when. A skill that stops naming it silently goes back to writing
- * unchecked files, which is the regression these fence.
- */
-Deno.test("validation: assessment-file.md owns the after-every-write contract", async () => {
-  const md = await Deno.readTextFile(ASSESSMENT_REF);
-  assertStringIncludes(md, "scripts/validate-assessment");
-  // Both modes, and which one belongs to a finished file.
-  assertStringIncludes(md, "--lenient");
-  assertStringIncludes(md.toLowerCase(), "finalize");
-  // The failure contract: bounded retries, and never a silent hand-off.
-  assertStringIncludes(md.toLowerCase(), "at most twice");
-});
-
-Deno.test("validation: SKILL.md runs it after every write and strictly at finalize", async () => {
-  const md = await Deno.readTextFile(SKILL);
-  assertStringIncludes(md, "scripts/validate-assessment");
-  assertStringIncludes(md, "--lenient");
-  // The spine points at the owner rather than restating the contract.
-  assertStringIncludes(md, "references/formatting/assessment-file.md");
-  // The workers hold no shell, so the orchestrator validates what they wrote on return.
-  assertStringIncludes(md.toLowerCase(), "validate on every return");
-  // Finalize is the strict run, and the checklist tracks it.
-  assertStringIncludes(md, "validate it strictly — no `--lenient`");
-  assertStringIncludes(md, "assessment validated strictly");
 });
 
 Deno.test("ownership: dispatch.md § Selection windows stays mechanism-only", async () => {
@@ -294,7 +403,8 @@ Deno.test("ingrain-cli.md: documents the ingrain rule-retrieval CLI", async () =
 
 Deno.test("SKILL.md: the orchestrator's own step retrieves rules", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // Step 5 is the orchestrator's retrieval pass, run in session — not a dispatch.
+  // Step 5 is the orchestrator's retrieval pass, run in session — not a dispatch. It runs after
+  // Gate 1, so it keys on the user-selected threats only, and blocks mitigation generation.
   // It points at the CLI reference rather than restating the command.
   assertStringIncludes(md, "references/lib/ingrain-cli.md");
 });

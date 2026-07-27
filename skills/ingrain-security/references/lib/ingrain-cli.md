@@ -6,7 +6,7 @@ drive that CLI**: the availability probe, the retrieval command, the shape of wh
 and how to classify a failure.
 
 This file owns the mechanics; the caller owns what to *do* about a given outcome — SKILL.md
-§5 for the orchestrator's retrieval pass.
+§ Development Step 5 for the orchestrator's retrieval pass, which runs after Gate 1.
 
 ## Availability probe
 
