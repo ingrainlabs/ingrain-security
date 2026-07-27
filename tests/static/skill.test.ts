@@ -348,8 +348,8 @@ Deno.test("ingrain-cli.md: documents the ingrain rule-retrieval CLI", async () =
 
 Deno.test("SKILL.md: the orchestrator's own step retrieves rules", async () => {
   const md = await Deno.readTextFile(SKILL);
-  // Step 2 is the orchestrator's retrieval pass, run in session — not a dispatch. It shares a
-  // block with the threat critique, so the retrieval costs no wall-clock of its own.
+  // Step 5 is the orchestrator's retrieval pass, run in session — not a dispatch. It runs after
+  // Gate 1, so it keys on the user-selected threats only, and blocks mitigation generation.
   // It points at the CLI reference rather than restating the command.
   assertStringIncludes(md, "references/lib/ingrain-cli.md");
 });

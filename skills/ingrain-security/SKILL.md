@@ -96,7 +96,7 @@ You orchestrate six worker roles, each defined by a reference file at
 `references/development/<name>.md` (`ingrain-relevance-triage`, `ingrain-threat-generator`,
 `ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-mitigation-generator`,
 `ingrain-mitigation-critic`). You dispatch each as a fresh subagent, in order, holding the state
-between steps yourself. One step is yours alone: the org-rules retrieval at Step 2.
+between steps yourself. One step is yours alone: the org-rules retrieval at Step 5, after Gate 1.
 
 The process produces exactly **two things**: the **assessment file** (the hand-off medium the
 workers write section by section, and you finalize) and the **user-selected finding set folded
@@ -219,37 +219,13 @@ checklist** at the end of this file.
    `## Threats` and returns a pointer. Ids are assigned in discovery order and are **permanent**;
    Step 3 sets priority by scoring, not by renumbering.
 
-2. **Critique threats, and retrieve the org rules in the SAME block.** They are independent, so
-   issuing them together costs the retrieval no wall-clock of its own.
+2. **Critique the threats** *(single round)*.
 
-   - **Dispatch `ingrain-threat-critic`** at `## Threats` *(single round)*.
-   - **Retrieve the org rules yourself, in this session — there is no worker.** They are ingested
-     knowledge — how *this* team implements auth, validation, secrets, crypto — reached by semantic
-     search over the `ingrain` CLI, and this is the review's **one** retrieval pass. Probe the CLI,
-     reason from the plan and the generated threats about which security features need org guidance
-     ("how do we authenticate service-to-service calls"), and run one query per distinct question.
-     Write what comes back — id, title and **full body verbatim** — into `## Retrieved rules` at
-     the already-minted `rules_abs`. Nothing retrieved → leave the sidecar unwritten.
-     → `references/lib/ingrain-cli.md` owns the probe, the query and the failure taxonomy;
-     `references/formatting/rules-file.md` owns the sidecar's schema.
-
-   Then act on the critic's keyword:
+   - **Dispatch `ingrain-threat-critic`** at `## Threats`, then act on its keyword:
    - `needs-revision` → re-dispatch `ingrain-threat-generator` **once**, with a pointer to
      `## Threats` + `## Threat critique`, then **freeze**. That single revision closes the loop.
-     Retrieval does **not** re-run: the revision works from the rules already on disk, and Step 6's
-     critic is what flags a gap.
    - `approved` → **freeze** the threats.
    - Either way, surface anything the critique left unresolved.
-
-   Running before Gate 1 means retrieval keys on **all** generated threats, not the selected
-   subset. Rules are best-effort supporting context, so the extra breadth is harmless; on a
-   zero-selection Gate 1 the pass was spent for nothing, which costs tokens, not time.
-   - **Sandbox or permission denial** → you are in the main session, so the host's native "allow
-     this command?" prompt reaches the user. **Recoverable:** re-run so it surfaces, and carry on
-     without rules once they decline.
-   - **Genuine unavailability** — binary absent, unconfigured, or no matches — degrades gracefully:
-     sidecar unwritten, one line on why, carry on. The mitigations then stand on the workers' own
-     analysis.
 
 3. **Risk score** — dispatch `ingrain-risk-scorer` at the frozen `## Threats`. It fills each
    entry's five scoring field lines and writes the plan-level residual into `## Risk score`, moving
@@ -286,18 +262,38 @@ checklist** at the end of this file.
 
    - **1–N selected** → only those proceed to Step 5. Name the excluded in one line
      ("T02, T05 excluded — risk accepted").
-   - **None selected** → skip Steps 5–7. State "no threats selected — review closed", close with a
+   - **None selected** → skip Steps 5–8. State "no threats selected — review closed", close with a
      one-line verdict naming the threats as accepted risk, then **go to Finalize** — the
      all-`excluded` `## Threats` section is the preserved context. Then carry on planning.
 
-5. **Mitigate** — dispatch `ingrain-mitigation-generator` with the **user-selected threats only**
+5. **Retrieve the org rules — yours alone, no worker.** Reached only when Gate 1 selected 1+
+   threats (a zero-selection Gate 1 has already gone to Finalize). They are ingested knowledge —
+   how *this* team implements auth, validation, secrets, crypto — reached by semantic search over
+   the `ingrain` CLI, and this is the review's **one** retrieval pass. It keys on the
+   **user-selected threats only**: probe the CLI, reason from the plan and the selected threats
+   about which security features need org guidance ("how do we authenticate service-to-service
+   calls"), and run one query per distinct question. Write what comes back — id, title and **full
+   body verbatim** — into `## Retrieved rules` at the already-minted `rules_abs`. Nothing retrieved
+   → leave the sidecar unwritten. **This step blocks Step 6** — the mitigation generator reads
+   these rules.
+   → `references/lib/ingrain-cli.md` owns the probe, the query and the failure taxonomy;
+   `references/formatting/rules-file.md` owns the sidecar's schema.
+
+   - **Sandbox or permission denial** → you are in the main session, so the host's native "allow
+     this command?" prompt reaches the user. **Recoverable:** re-run so it surfaces, and carry on
+     without rules once they decline.
+   - **Genuine unavailability** — binary absent, unconfigured, or no matches — degrades gracefully:
+     sidecar unwritten, one line on why, carry on. The mitigations then stand on the workers' own
+     analysis.
+
+6. **Mitigate** — dispatch `ingrain-mitigation-generator` with the **user-selected threats only**
    (excluded threats are out of scope), `assessment_abs`, and `rules_abs` — pointing it at the
    sidecar's `## Retrieved rules` so it grounds its proposals in established org practice. It
    proposes both **threat mitigations** and **general implementation instructions** for the full
    scoped task; both belong in the plan. It writes the mitigation rows and the sidecar's
    `## Per-mitigation mapping`, working from the rules already on disk — it has no CLI of its own.
 
-6. **Critique mitigations** *(single round)* — dispatch `ingrain-mitigation-critic` at
+7. **Critique mitigations** *(single round)* — dispatch `ingrain-mitigation-critic` at
    `## Mitigations` **and the `rules-<…>.md` sidecar**, so it can judge the mitigations against the
    rules they cite *and* against the retrieved rules they leave unapplied. A retrieved rule that no
    mitigation applies is exactly the gap this critic reports.
@@ -305,7 +301,7 @@ checklist** at the end of this file.
    - `approved` → **freeze** the mitigations.
    - Either way, surface anything the critique left unresolved.
 
-7. **Gate 2 — the user selects which mitigations to adopt.** Follow **How to ask the user**. In
+8. **Gate 2 — the user selects which mitigations to adopt.** Follow **How to ask the user**. In
    order:
 
    1. **Read** the bounded `## Mitigations` slice, and the `rules-<…>.md` sidecar to resolve rule
@@ -388,7 +384,7 @@ Testing measures how robust the adopted mitigations are, by **negative testing**
 Gate 1 selected, can it still be realized in the code as built? The threats define the scope. It
 fires when **Phase select** lands on Testing — an assessment for this task exists, it carries
 `selected` mitigations, and `scripts/branch-diff` reported `delta_empty: false`.
-**Everything above this line belongs to Development:** Steps 0–7, both gates, the critique steps,
+**Everything above this line belongs to Development:** Steps 0–8, both gates, the critique steps,
 and the org-rules CLI lookup.
 
 **Read `references/testing/verification-pass.md` NOW and follow it.** The full loop lives there;
@@ -411,7 +407,7 @@ these are what it cannot infer.
 | A worker's section looks correct | Three-check it against its field card at the next gate anyway — an enum typo stays invisible until it breaks in a later session. |
 | About to open the schema reference mid-run | Only for what a field *means*. The card under the section is the whole of the shape; re-reading the reference to recover it is the cost this skill exists to avoid. |
 | A **session rule says** to call the subagent tool once the user has requested it | A permission gate over a mechanism the host already has. Ask the user to allow the subagent flow before your first dispatch — → `references/development/dispatch.md` § When a session rule gates subagents behind user request. The sequential fallback is for a host whose only mode is the main session. |
-| The `ingrain` fetch was sandbox-blocked | Step 2 runs in the main session — re-run and let the host's native prompt reach the user. Continue without rules only once they decline. |
+| The `ingrain` fetch was sandbox-blocked | Step 5 runs in the main session — re-run and let the host's native prompt reach the user. Continue without rules only once they decline. |
 
 ## Development — checklist
 
@@ -423,10 +419,11 @@ never on a fresh read of `references/formatting/assessment-file.md`.**
 
 - [ ] 0. Triage dispatched — bias to `major` when uncertain; `minor` → stop, `major` → open the assessment file
 - [ ] 1. Threats generated into `## Threats`, seeded from any prior analysis
-- [ ] 2. Threat critique dispatched AND org rules retrieved by YOU in ONE block — one revision at most, then threats frozen; sidecar written, or none
+- [ ] 2. Threat critique dispatched — one revision at most, then threats frozen
 - [ ] 3. Risk scored — five scoring fields per threat plus the plan-level residual; ids untouched
 - [ ] 4. Gate 1 — slice three-checked, table displayed FIRST, then one window per threat; `Selection` recorded (zero selected ends the review)
-- [ ] 5. Mitigations generated for the selected threats ONLY, grounded in the sidecar; generator ran without a shell of its own
-- [ ] 6. Single mitigation critique pass done — approved, or one revision applied; mitigations frozen
-- [ ] 7. Gate 2 — slice three-checked, table displayed FIRST, then one window per mitigation; `Selection` recorded
+- [ ] 5. Org rules retrieved by YOU (keys on the selected threats ONLY) — no worker; sidecar written, or none/skipped; blocks mitigation generation
+- [ ] 6. Mitigations generated for the selected threats ONLY, grounded in the sidecar; generator ran without a shell of its own
+- [ ] 7. Single mitigation critique pass done — approved, or one revision applied; mitigations frozen
+- [ ] 8. Gate 2 — slice three-checked, table displayed FIRST, then one window per mitigation; `Selection` recorded
 - [ ] Finalize — `Latest stage: development` set, critique sections deleted, sidecar + cards kept, file three-checked, plan file links it + Maintenance

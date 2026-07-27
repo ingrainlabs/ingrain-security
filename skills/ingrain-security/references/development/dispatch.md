@@ -32,8 +32,6 @@ This covers:
 - **The three bundled scripts at Phase select** — `assessment-path mint`, `rules-path mint` and
   `branch-diff` are read-only and deterministic, and none reads another's output. One block, and
   the values are reused for the whole run; no later step re-mints.
-- **The threat critique and the org-rules retrieval** (SKILL.md § Development Step 2) — a subagent
-  dispatch and the orchestrator's own CLI queries, neither waiting on the other.
 - **The Testing verifiers** — one per selected threat, mutually independent (see
   `references/testing/verification-pass.md` § How to dispatch a verifier).
 
