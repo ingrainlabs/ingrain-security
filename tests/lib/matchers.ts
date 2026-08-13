@@ -162,23 +162,40 @@ export const section = (md: string, heading: string): string => {
 };
 
 /**
- * A procedure's checklist must track its flow: same step numbers, same order. The flow is the
+ * A procedure's checklist must track its flow: same step labels, same order. The flow is the
  * single source of truth for HOW; the checklist restates WHAT as a terse tracker. That
  * restatement is deliberate — and it silently drifts the moment a step is added to one and
  * not the other, which is exactly what this catches.
+ *
+ * A step may carry a **sub-letter** (`1a`, `1b`), which is how the flow marks two steps that
+ * run in parallel rather than in sequence. The checklist then has to name both halves: a
+ * tracker listing only `1` for a forked step would hide whichever half was skipped. The flow
+ * numbers those sub-steps inside the parent's prose, so they are matched against the
+ * checklist's labels rather than against the flow's own `N. **` headings.
  */
 export const assertChecklistTracksFlow = (
   md: string,
   flowHeading: string,
   checklistHeading: string,
 ): void => {
-  const flow = [...section(md, flowHeading).matchAll(/^(\d)\. \*\*/gm)].map((m) => m[1]);
-  const list = [...section(md, checklistHeading).matchAll(/^- \[ \] (\d)\./gm)].map((m) => m[1]);
+  const flowBody = section(md, flowHeading);
+  const flow = [...flowBody.matchAll(/^(\d)\. \*\*/gm)].map((m) => m[1]);
+  const list = [...section(md, checklistHeading).matchAll(/^- \[ \] (\d[a-z]?)\./gm)]
+    .map((m) => m[1]);
   if (flow.length === 0) throw new AssertionError(`'${flowHeading}' has no numbered steps`);
-  if (flow.join(",") !== list.join(",")) {
+
+  // Expand each flow step to the sub-steps its own prose declares (`**1a — …**`), so a fork
+  // is tracked half by half.
+  const expected = flow.flatMap((step) => {
+    const subs = [...flowBody.matchAll(new RegExp(`\\*\\*${step}([a-z]) — `, "g"))]
+      .map((m) => `${step}${m[1]}`);
+    return subs.length > 0 ? [...new Set(subs)] : [step];
+  });
+
+  if (expected.join(",") !== list.join(",")) {
     throw new AssertionError(
       `'${checklistHeading}' drifted from '${flowHeading}': ` +
-        `flow has steps [${flow.join(", ")}], checklist has [${list.join(", ")}]`,
+        `flow has steps [${expected.join(", ")}], checklist has [${list.join(", ")}]`,
     );
   }
 };

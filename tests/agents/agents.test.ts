@@ -28,10 +28,11 @@ import { runChecked } from "../lib/reporter.ts";
 import {
   MAJOR_PLAN,
   MINOR_PLAN,
+  RETRIEVED_RULES,
   SELECTED_THREATS,
   TASK_AND_FROZEN_THREATS,
   TASK_AND_WEAK_MODEL,
-  THREAT_AND_MITIGATIONS,
+  THREAT_AND_GUIDANCE,
 } from "../lib/sampleInputs.ts";
 
 /**
@@ -53,6 +54,16 @@ interface AgentCase {
   /** Shape assertions on the worker's response. */
   check: (r: RunResult) => void;
 }
+
+/**
+ * The lines a worker ADDED to the seeded skeleton. `seeded` is the file exactly as the mint
+ * left it, so anything not in that set is the worker's own writing — headings, field cards
+ * and pre-filled values all drop out.
+ */
+const addedLines = (written: string, seeded: string): string => {
+  const before = new Set(seeded.split("\n"));
+  return written.split("\n").filter((line) => !before.has(line)).join("\n");
+};
 
 const CASES: AgentCase[] = [
   {
@@ -109,10 +120,10 @@ const CASES: AgentCase[] = [
     },
   },
   {
-    // ingrain-mitigation-critic (sonnet): scores mitigation coverage 0-100 + a verdict.
-    worker: "ingrain-mitigation-critic",
-    label: "ingrain-mitigation-critic :: sample mitigations",
-    input: THREAT_AND_MITIGATIONS,
+    // ingrain-guidance-critic (sonnet): scores coverage across both driver axes 0-100 + a verdict.
+    worker: "ingrain-guidance-critic",
+    label: "ingrain-guidance-critic :: sample guidance",
+    input: THREAT_AND_GUIDANCE,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {
       assertContainsAny(r.text, [/approved/i, /needs[-\s]revision/i], "expected a verdict");
@@ -120,17 +131,31 @@ const CASES: AgentCase[] = [
     },
   },
   {
-    // ingrain-mitigation-generator (sonnet): proposes mitigations for the selected threats,
-    // each with Yield / Effort / threatTags fields. It has no CLI by design — the org rules
-    // are retrieved before it runs — and here no rules sidecar exists either, so this
-    // exercises the no-rules path: it must still produce mitigations from its own analysis.
-    worker: "ingrain-mitigation-generator",
-    label: "ingrain-mitigation-generator :: selected threats (no rules sidecar)",
+    // ingrain-guidance-generator (sonnet): proposes guidance for the selected drivers, each
+    // with Yield / Effort and the drivers it names. It has no CLI by design — the org rules
+    // are retrieved before it runs — and here `## Org rules` is empty, so this exercises the
+    // no-rules path: it must still produce threat-anchored guidance from its own analysis.
+    worker: "ingrain-guidance-generator",
+    label: "ingrain-guidance-generator :: selected threats (no org rules)",
     input: SELECTED_THREATS,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {
       assertContainsAll(r.text, [/yield/i, /effort/i], "expected Yield & Effort fields");
-      assertContainsAny(r.text, [/threatTags/i, /\bT1\b/], "expected a threat-tag reference");
+      assertContainsAny(r.text, [/threats/i, /\bT1\b/], "expected a threat driver reference");
+    },
+  },
+  {
+    // ingrain-rule-critic (haiku): judges each retrieved rule's applicability to THIS change
+    // and returns a keep/prune line per rule. The credential-hashing rule governs a login
+    // feature; the build-artifact retention rule plainly does not — the noise broad retrieval
+    // produces, and what this round exists to remove before the user sees anything.
+    worker: "ingrain-rule-critic",
+    label: "ingrain-rule-critic :: retrieved rules, one applicable and one not",
+    input: RETRIEVED_RULES,
+    timeoutMs: AGENT_TIMEOUT_MS,
+    check: (r) => {
+      assertContainsAll(r.text, [/keep/i, /prune/i], "expected both verdicts across the rules");
+      assertContainsAny(r.text, [/0f7b0e6f/, /c611c934/], "expected a rule id to key each line");
     },
   },
 ];
@@ -157,8 +182,17 @@ for (const c of CASES) {
             "worker left the seeded assessment file untouched — it must write its section",
           );
           // A compliant worker returns only a headline plus a pointer and puts the substance
-          // on disk, so the shape assertions run over the return AND the file together.
-          c.check({ ...r, text: `${r.text}\n${written}` });
+          // on disk, so the shape assertions run over the return AND its writes together —
+          // but over the WRITES ONLY, never the whole file.
+          //
+          // Concatenating `written` wholesale disarmed most of this tier: the seeded field
+          // cards stay in the file by design, and they spell out the very vocabulary being
+          // asserted. The `## Triage` card reads `Verdict: minor|major`, so BOTH the major
+          // and the minor case passed whatever the model decided; `Impact (critical|high|
+          // medium|low)` satisfied the impact/likelihood checks; `Yield`/`Effort` and the
+          // 0–100 score came free the same way. Subtracting the skeleton leaves the worker's
+          // own lines, which is what these assertions were always meant to read.
+          c.check({ ...r, text: `${r.text}\n${addedLines(written, seeded)}` });
         },
       );
     } finally {

@@ -11,7 +11,7 @@
   "interface": {
     "displayName": "Ingrain Security",
     "shortDescription": "Threat assessment for coding agents.",
-    "longDescription": "Assesses potential security risks in code and design before implementation, and grounds its mitigations in your organization's own security rules retrieved through the ingrain CLI.",
+    "longDescription": "Assesses potential security risks in code and design before implementation, and grounds its implementation guidance in your organization's own security rules retrieved through the ingrain CLI.",
     "developerName": "Ingrain Labs",
     "category": "Security",
     "capabilities": ["Read", "Write"],

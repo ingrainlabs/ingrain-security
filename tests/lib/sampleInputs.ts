@@ -29,7 +29,7 @@ export const MINOR_PLAN = `# Implementation plan: tidy up the landing page
 
 /**
  * A frozen threat list under the generator's working tags, for ingrain-risk-scorer /
- * mitigation inputs. The tags are deliberately NOT in risk order — SQL injection, the
+ * guidance inputs. The tags are deliberately NOT in risk order — SQL injection, the
  * most severe of the three, arrives last — so a scorer that leaves the tags alone fails
  * the risk-order assertion instead of passing by luck.
  */
@@ -42,8 +42,8 @@ T3 - SQL injection: the email is concatenated into the users-table query, allowi
      an attacker to read or modify arbitrary rows.
 `;
 
-/** A subset the user "selected" at Gate 1, for ingrain-mitigation-generator. */
-export const SELECTED_THREATS = `Selected threats to mitigate:
+/** A subset the user "selected" at the threat gate, for ingrain-guidance-generator. */
+export const SELECTED_THREATS = `Selected threats to address:
 
 T1 - SQL injection in the users-table lookup query.
 T2 - Plaintext password storage in the users table.
@@ -55,18 +55,41 @@ export const THREAT_MODEL_WEAK = `Threat model for the login feature:
 T1 - Someone might guess a password.
 `;
 
-/** Sample mitigations to feed ingrain-mitigation-critic. */
-export const MITIGATIONS_SAMPLE = `Proposed mitigations:
+/** Sample implementation guidance to feed ingrain-guidance-critic.
+ *
+ * Field names are the ARTIFACT's, not the wire's. This carried `threatTags:` — the wire key —
+ * so the worker whose whole job is catching contract violations was being exercised against a
+ * field that does not exist in the schema it grades. */
+export const GUIDANCE_SAMPLE = `Proposed implementation guidance:
 
 - Description: Use parameterized queries / prepared statements for the users-table
   lookup so user input can never alter the query structure.
-  Yield: High. Effort: Low. threatTags: T1
+  Yield: High. Effort: Low. Threats: T1
 - Description: Hash passwords with a slow, salted algorithm (bcrypt/argon2) before
   storing them; never store plaintext.
-  Yield: High. Effort: Medium. threatTags: T2
+  Yield: High. Effort: Medium. Threats: T2
 `;
 
 /** A single task + threats blob, for the critic agents that take both. */
 export const TASK_AND_WEAK_MODEL = `Task:\n${MAJOR_PLAN}\n\n${THREAT_MODEL_WEAK}`;
 export const TASK_AND_FROZEN_THREATS = `Task:\n${MAJOR_PLAN}\n\n${FROZEN_THREATS}`;
-export const THREAT_AND_MITIGATIONS = `${SELECTED_THREATS}\n\n${MITIGATIONS_SAMPLE}`;
+export const THREAT_AND_GUIDANCE = `${SELECTED_THREATS}\n\n${GUIDANCE_SAMPLE}`;
+
+/**
+ * The rule gate's other axis: retrieved org rules awaiting a verdict, for
+ * ingrain-rule-critic. One clearly governs the change, one clearly does not — broad
+ * retrieval's characteristic mix, and what the critic exists to separate.
+ */
+export const RETRIEVED_RULES = `Task:\n${MAJOR_PLAN}\n
+Retrieved org rules, each awaiting an applicability verdict:
+
+### 0f7b0e6f-edd6-4a5f-ac59-c867f1be7e8f — Hash credentials at rest
+Selection: —
+Passwords and other long-lived credentials are stored only as a slow, salted hash
+(bcrypt or argon2id). Plaintext or reversible storage is never acceptable.
+
+### c611c934-151b-4fb9-8e7a-5b765e660837 — Retain build artifacts for 90 days
+Selection: —
+CI build artifacts are kept for 90 days so a release can be reproduced from the exact
+bytes that shipped.
+`;

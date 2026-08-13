@@ -5,9 +5,11 @@
 # shellcheck shell=bash
 #
 # Sourced — never executed. Sets no shell options: every caller runs `set -uo pipefail`
-# WITHOUT `-e` on purpose, and sourcing must not change that. Requires the sibling
-# project-root.sh to be sourced first (resolve_project_root), and jq to read the
-# payload — without jq every decision degrades to "defer".
+# WITHOUT `-e` on purpose, and sourcing must not change that.
+#
+# Flat: every function takes what it needs as arguments, so this file requires no sibling lib.
+# Composition — resolving the project root, naming the folder — belongs to the hook that has
+# both. jq is the one external requirement; without it every decision degrades to "defer".
 #
 # Sourced by:
 #   hooks/claude/allow-assessment-write   (PreToolUse,        Claude Code)
@@ -87,12 +89,16 @@ absolutize() {
     printf '%s' "${path}"
 }
 
-# The project's canonical `.ingrain-security/` folder for the given host ($1: claude|codex),
-# or non-zero when it is missing or is itself a symlink — either could redirect the write
-# outside the tree, the same guard ensure-assessment-dir and assessment-path apply.
+# Canonicalize the assessment folder ($1, absolute), or return non-zero when it is missing or
+# is itself a symlink — either could redirect the write outside the tree, the same guard
+# ensure-assessment-dir and assessment-mint apply.
+#
+# Takes the folder rather than the host: resolving a project root and knowing the folder's
+# name belong to two other libs, and reaching into them from here is what made this file
+# require siblings sourced first. The hook composes those two and passes the result.
 canonical_assessment_dir() {
-    local dir
-    dir="$(resolve_project_root "$1")/.ingrain-security"
+    local dir="$1"
+    [ -n "${dir}" ] || return 1
     [ -L "${dir}" ] && return 1
     physical_dir "${dir}"
 }
@@ -104,12 +110,12 @@ canonical_assessment_dir() {
 #     not a `..` escape. The parent is canonicalized BEFORE the equality test, so a literal
 #     `…/.ingrain-security/../src/app.ts` resolves away rather than passing a prefix check,
 #     and equality (not a prefix) means a sibling folder sharing the prefix falls through.
-#   - the basename matches one of the minters' naming (`assessment*.md` or `rules*.md` — the
-#     assessment file and its org-rules sidecar are the only two files this plugin mints),
+#   - the basename matches the minter's naming (`assessment*.md` — one artifact carries the
+#     whole analysis, so it is the only file this plugin mints),
 #   - the target is not a symlink, which would follow the link out of the folder.
 #
-# A legitimate target's parent already exists — ensure-assessment-dir, assessment-path and
-# rules-path all create the folder — so a parent that cannot be entered is grounds to refuse.
+# A legitimate target's parent already exists — ensure-assessment-dir and assessment-mint
+# both create the folder — so a parent that cannot be entered is grounds to refuse.
 is_assessment_target() {
     local canon_dir="$1" path="$2" parent base canon_parent
 
@@ -120,7 +126,7 @@ is_assessment_target() {
     [ "${canon_parent}" = "${canon_dir}" ] || return 1
 
     case "${base}" in
-        assessment*.md | rules*.md) ;;
+        assessment*.md) ;;
         *) return 1 ;;
     esac
 

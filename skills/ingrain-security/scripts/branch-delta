@@ -1,0 +1,413 @@
+#!/usr/bin/env bash
+# The BRANCH DELTA — everything this branch changed since it diverged — served whole to the
+# ingrain-security review. Sibling to the assessment minter.
+#
+# The review's single interface to what changed, so no agent hand-rolls git in prose. It owns
+# the basis, the file set and the change as text:
+#
+#   1. Phase select (SKILL.md): CONTEXT only. The route itself is resolved by the mint, which
+#      reads the same delta through lib/fork-point.sh — one resolution, so the two agree.
+#   2. Testing (verification-pass.md): what is the basis, what changed, and what does it say?
+#      -> `base_ref` + `diff_ref`, `changed_files`, and the `diff` subcommand.
+#
+# Named for the delta rather than for the diff on purpose: a diff is ONE rendering of the
+# delta, and the previous name advertised that rendering while hiding the file set and the
+# basis — which sends an agent that wants "what changed" back to hand-writing `git status`,
+# the exact drift this script exists to remove.
+#
+# Both callers must agree, which is exactly why this is one script and not two prose
+# procedures: a gate that tests the working tree while the review reads the branch delta
+# sends a fully-COMMITTED implementation to the plan review, where none of it is verified.
+#
+# Emits ONE JSON object on stdout; diagnostics go to stderr.
+#
+# It is INTENDED to be read-only — it resolves and reports, and creates no file, folder or git
+# state. That is a design rule for whoever edits it, not a guarantee: nothing enforces it, and
+# the agent invoking it already has a shell, so there is no boundary here to protect. Stated as
+# intent for the same reason the verifier references say "this is advisory — the platform relies
+# on you to honor it": an absolute nobody can enforce invites reliance it cannot carry.
+#
+# Usage:
+#   branch-delta <host>                              facts — the JSON entry point
+#   branch-delta <host> diff [--ref REF] [PATH...]   the change itself, as text
+#   branch-delta --help
+#
+#   <host>  the host's config dotfolder base name — "claude" (Claude Code), "codex"
+#           (Codex), or any future coding agent's token. It selects project-root
+#           resolution only, exactly like the minter — but here that is a correctness
+#           requirement, not symmetry: every git call runs `git -C "<project_root>"`, so a
+#           cwd inside a vendored NESTED repo cannot resolve a fork point for one
+#           repository while the assessment file describes another.
+#
+# THE VOCABULARY. Every git command this review runs lives here, so no agent hand-writes
+# one. That is the whole point: a diff invocation brewed in prose drifts between the
+# orchestrator and each verifier, and the run then reads several different changes while
+# reporting one. `facts` answers "what changed" as data; `diff` answers "what does the
+# change say" as text. Two shapes because a unified diff in a JSON string is unreadable and
+# a file list as loose text has to be re-parsed.
+#
+# The default (no subcommand) is `facts`, because it is the entry point every caller needs
+# first and the one Phase select needs alone. An unrecognized subcommand is refused rather
+# than treated as the default, so a typo fails where it is made.
+#
+# THE FORK POINT. The parent branch is never assumed to be `main` — branches are routinely
+# cut from other feature, release or integration branches. We take every other local and
+# remote branch — excluding this branch under every name it goes by, its remote-tracking
+# copies included (see `other_refs`) — compute each one's merge-base with HEAD, discard any
+# whose merge-base IS HEAD (those carry no divergence), and keep the merge-base with the
+# most recent commit date — the nearest branch point. Where two refs tie on the same
+# merge-base commit, `refs/heads` is emitted before `refs/remotes` and the sort is STABLE,
+# so the local branch name wins and `base_ref` is reproducible; `diff_ref` is identical
+# either way.
+#
+# THE FALLBACK. When no fork point resolves — a detached HEAD, a repo with no other branch,
+# a shallow clone whose history is too truncated for merge-base, a freshly cut branch with
+# no commits yet — `diff_ref` becomes HEAD and only the uncommitted delta is visible. The
+# `reason` field names which case it was, because they are NOT equivalent: `no-divergence`
+# (a branch cut moments ago) means HEAD captures everything and the review is COMPLETE,
+# while the others mean the review is genuinely narrower than intended and the report must
+# say so.
+#
+# ORDERING NOTE — load-bearing and not obvious. Phase select mints the assessment file
+# BEFORE it runs this script. That is only safe because `.ingrain-security/` self-ignores
+# (its .gitignore is a bare `*`, which matches the ignore file too — see
+# lib/assessment-dir.sh seed_gitignore). The mint therefore cannot flip `uncommitted` to
+# true and manufacture a phantom Testing route out of the skill's own bookkeeping.
+#
+# Exit codes: 0 ok · 2 usage error (empty host, unknown subcommand, bad flag) · 1 runtime error
+# (a path that is not a readable file inside the repo, or a git invocation that failed).
+#
+# Every DEGRADED case still exits 0 with a complete JSON object — a non-git directory, an
+# empty repo, a detached HEAD. Callers route on `fallback`/`reason`, never on a status code.
+#
+# The keys below are this script's AGENT-FACING CONTRACT — see the same block in
+# `assessment-mint` for what it is and which tier reads it.
+# CONTRACT KEYS BEGIN
+#   base_ref diff_ref delta_empty fallback reason shallow
+#   changed_files instruction
+# CONTRACT KEYS END
+#
+# Bundled with the skill and run directly by the orchestrator (which already has a bash
+# shell — the ready-to-run command, with plugin root + host substituted, is injected by the
+# session-start hook). Uses `set -uo pipefail` WITHOUT `-e`: merge-base, show, rev-list and
+# rev-parse all fail routinely on precisely the checkouts this script exists to survive.
+
+set -uo pipefail
+
+usage() {
+    cat <<'EOF'
+Every git command the ingrain-security review needs, so no agent writes one by hand.
+
+Usage:
+  branch-delta <host>                              facts, as one JSON object on stdout
+  branch-delta <host> diff [--ref REF] [PATH...]   the change itself, as text on stdout
+  branch-delta --help
+
+Arguments:
+  <host>              config dotfolder base name: claude | codex | <future token>
+                      (selects project-root resolution only; not part of any path)
+  --ref REF           diff against REF instead of re-resolving the fork point. Pass the
+                      diff_ref that `facts` returned: the run then reads ONE basis, where
+                      re-resolving per call can drift if the tree moves mid-run.
+  PATH...             narrow the diff to these paths. An untracked path prints its CONTENTS,
+                      because a diff of a file git has never seen is empty — which reads as
+                      "nothing changed" for the files most likely to be the change.
+
+facts — the JSON keys:
+  base_ref            the parent branch this one was cut from, for the report ("" on fallback)
+  diff_ref            the merge-base commit to diff against — the run's FIXED basis; pass it
+                      verbatim to every verifier, never re-derive it, never substitute HEAD
+  host                the host token you passed, echoed
+  project_root        the resolved repository root
+  branch              the current branch, or empty on a detached HEAD
+  delta_empty         true when this branch has no commits since diff_ref AND a clean tree;
+                      the Phase-select signal. On the fallback it reduces to the tree test.
+  fallback / reason   true + why, when no fork point resolved: not-a-git-repository |
+                      no-commits | no-divergence | no-fork-point | shallow-history
+  commits_ahead       commits since diff_ref (0 on fallback)
+  uncommitted         git status --porcelain is non-empty
+  shallow             the clone is shallow — a truncated history can defeat merge-base
+  changed_files       the COMPLETE changed-file set, resolved: [{path, status}] over
+                      committed, staged, unstaged and untracked, which no single git command
+                      covers. status is added|modified|deleted|type-changed|untracked.
+                      A STARTING POINT for a review, never its boundary: a threat survives,
+                      and a control goes missing, in code this change never touched.
+  instruction         restates how to use the above, with the refs interpolated
+
+Exit codes: 0 ok (INCLUDING every degraded case) · 2 usage error · 1 runtime error.
+EOF
+}
+
+# --- helpers ----------------------------------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Load map — every lib below is FLAT, so the order here is free and this script composes them.
+#   json.sh          escape_for_json
+#   project-root.sh  resolve_project_root · resolve_branch
+#   fork-point.sh  the fork-point resolution, shared with the mint so the two agree
+# The mint's own libs are deliberately NOT sourced: this script mints nothing and creates
+# nothing, and that guarantee is what it loads rather than what a comment claims.
+# shellcheck source=lib/json.sh
+if ! . "${SCRIPT_DIR}/lib/json.sh" 2>/dev/null; then
+    printf 'branch-delta: cannot load lib/json.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/project-root.sh
+if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
+    printf 'branch-delta: cannot load lib/project-root.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/fork-point.sh
+if ! . "${SCRIPT_DIR}/lib/fork-point.sh" 2>/dev/null; then
+    printf 'branch-delta: cannot load lib/fork-point.sh\n' >&2
+    exit 1
+fi
+
+# --- the change ---------------------------------------------------------------------
+
+# git's one-letter status, as a word the agent reads without knowing git's table.
+status_word() {
+    case "$1" in
+        A) printf 'added' ;;
+        M) printf 'modified' ;;
+        D) printf 'deleted' ;;
+        T) printf 'type-changed' ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+# The COMPLETE changed-file set as a JSON array of {path,status}: committed, staged, unstaged
+# and untracked. No single git command covers all four, and the merge is deterministic — which
+# makes it this script's job rather than something every caller re-derives in prose.
+#
+# The two queries ALMOST partition the set — `diff` reports tracked paths, `ls-files --others`
+# untracked ones — and git emits each in path order, which is what retires the `sort -u` this
+# used to need and with it every failure around a path containing a newline.
+#
+# They are NOT disjoint, though, and an earlier comment here claimed they were. `git rm --cached
+# creds.env` — the standard way to untrack a wrongly-committed secret — leaves the path in BOTH:
+# `D` against the fork point, and untracked on disk. Emitting both entries told the reviewer
+# "deleted" about a file still sitting there, on exactly the question a security review asks.
+# So the untracked pass wins on a collision: it is the disk truth, and the disk is what a
+# reviewer opens. `seen` is what enforces that.
+#
+# `-z` throughout, because git octal-escapes a non-ASCII path under core.quotePath and a
+# caller handed the raw text has no way to undo it. That is also what puts raw bytes into the
+# JSON: `lib/json.sh` escapes five characters and no more, so a path carrying a control byte or
+# invalid UTF-8 emits an object no strict parser accepts — an ACCEPTED limitation, documented at
+# `escape_for_json`. `--no-renames` on purpose: a rename lands
+# as a delete plus an add, which names BOTH paths — for a security review the old location is
+# as interesting as the new one, and it costs the R-parsing branch nothing to keep.
+# `--exclude-standard` honours .gitignore, so the self-ignoring assessment folder drops out.
+changed_files_json() {
+    local root="$1" ref="$2" out="[" sep="" st path
+    # Untracked first, so the tracked pass can defer to it on a collision. A NUL-delimited
+    # membership string rather than an array: paths may contain anything but NUL, and this is
+    # the one separator no path can forge.
+    local untracked="" seen=""
+    while IFS= read -r -d '' path; do
+        untracked="${untracked}${path}"$'\0'
+        out="${out}${sep}{\"path\":\"$(escape_for_json "${path}")\",\"status\":\"untracked\"}"
+        sep=","
+    done < <(git -C "${root}" ls-files --others --exclude-standard -z 2>/dev/null)
+    seen="${untracked}"
+
+    while IFS= read -r -d '' st && IFS= read -r -d '' path; do
+        case "${seen}" in *"${path}"$'\0'*) continue ;; esac
+        out="${out}${sep}{\"path\":\"$(escape_for_json "${path}")\",\"status\":\"$(status_word "${st:0:1}")\"}"
+        sep=","
+    done < <(git --no-pager -C "${root}" diff --no-color --no-ext-diff --name-status --no-renames -z "${ref}" 2>/dev/null)
+    printf '%s]' "${out}"
+}
+
+# True when git already knows this path. What it separates is the one case a diff cannot
+# report: an untracked file has no blob to compare against, so `git diff` prints nothing at
+# all for it — indistinguishable from "unchanged" unless something checks first.
+is_tracked() {
+    git -C "$1" ls-files --error-unmatch -- "$2" >/dev/null 2>&1
+}
+
+# True when $2 resolves to a regular file INSIDE $1. Two separate refusals, and both matter:
+# a symlink is not followed, because `ls-files --others` lists the link itself and a repo
+# carrying `notes -> ~/.ssh/id_rsa` would otherwise read that key into the review; and a
+# resolved path outside the root is refused, because a `../` path argument would otherwise
+# render a file this branch never touched as part of "what this branch changed".
+inside_repo() {
+    local root="$1" path="$2" resolved
+    [ -L "${root}/${path}" ] && return 1
+    [ -f "${root}/${path}" ] || return 1
+    resolved="$(cd "$(dirname "${root}/${path}")" 2>/dev/null && pwd -P)" || return 1
+    case "${resolved}/" in "${root}/"*) return 0 ;; esac
+    return 1
+}
+
+# Print an untracked file the way a diff would have, if a diff could see it. Refuses anything
+# `inside_repo` rejects, and says so on stderr — a silent omission would read as "this file has
+# no content", which is the same confusion the whole function exists to prevent.
+render_untracked() {
+    if ! inside_repo "$1" "$2"; then
+        printf 'branch-delta: skipped %s — not a regular file inside the repository\n' "$2" >&2
+        return 0
+    fi
+    printf '=== NEW FILE (untracked): %s ===\n' "$2"
+    cat "$1/$2" 2>/dev/null || printf 'branch-delta: cannot read %s\n' "$2" >&2
+}
+
+# The change as text: the tracked diff, then every new file's contents. $1 root, $2 ref, and
+# any remaining arguments narrow it to those paths.
+#
+# Every git call here is pinned to plain output — `--no-pager --no-color --no-ext-diff` — because
+# the repo's own config otherwise decides what an agent reads. A `pager.diff` or `color.ui = always`
+# delivers ANSI escapes, and a `diff.external` driver replaces the unified diff with whatever that
+# tool prints. Centralizing the commands is worth nothing if each one still renders differently per
+# machine, so the pinning is the point rather than a precaution.
+render_diff() {
+    local root="$1" ref="$2" path
+    shift 2
+
+    if [ $# -gt 0 ]; then
+        for path in "$@"; do
+            if is_tracked "${root}" "${path}"; then
+                git --no-pager -C "${root}" diff --no-color --no-ext-diff "${ref}" -- "${path}" || return 1  # ref is pre-validated below
+            elif inside_repo "${root}" "${path}"; then
+                render_untracked "${root}" "${path}"
+            else
+                printf 'branch-delta: no such path under %s: %s\n' "${root}" "${path}" >&2
+                return 1
+            fi
+        done
+        return 0
+    fi
+
+    # `|| return 1` rather than letting the status fall through to the loop below: a bad ref
+    # otherwise printed nothing and exited 0, which a verifier reads as "nothing changed".
+    git --no-pager -C "${root}" diff --no-color --no-ext-diff "${ref}" || return 1
+    while IFS= read -r -d '' path; do
+        printf '\n'
+        render_untracked "${root}" "${path}"
+    done < <(git -C "${root}" ls-files --others --exclude-standard -z 2>/dev/null)
+}
+
+# `diff` subcommand: resolve the root, take --ref or resolve the fork point, then render.
+run_diff() {
+    local host="$1" ref="" project_root branch
+    shift
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --ref)
+                shift
+                [ $# -gt 0 ] || { printf 'branch-delta: --ref needs a value. Try --help.\n' >&2; return 2; }
+                # A value starting with `-` would reach git as an OPTION, not a revision —
+                # `--ref --stat` silently changes what the command does. Refused here rather
+                # than separated with `--`, because a ref beginning with a dash is not a thing
+                # a caller legitimately has, and a clear error beats a confusing diff.
+                case "$1" in -*) printf 'branch-delta: --ref value must be a revision, not an option: %s\n' "$1" >&2; return 2 ;; esac
+                ref="$1"
+                shift
+                ;;
+            --) shift; break ;;
+            -*) printf 'branch-delta: unknown option "%s". Try --help.\n' "$1" >&2; return 2 ;;
+            *) break ;;
+        esac
+    done
+
+    project_root="$(resolve_project_root "${host}")"
+    [ -n "${project_root}" ] || { printf 'branch-delta: could not resolve project root\n' >&2; return 1; }
+
+    # No --ref means resolve the fork point here. Deterministic, so it agrees with `facts` on a
+    # still tree — but pass the ref you were given anyway: that is what holds a multi-verifier
+    # run to one basis while the working tree keeps moving under it.
+    if [ -z "${ref}" ]; then
+        branch="$(resolve_branch "${project_root}")"
+        resolve_delta_facts "${project_root}" "${branch}"
+        ref="${DELTA_DIFF_REF}"
+    fi
+
+    render_diff "${project_root}" "${ref}" "$@"
+}
+
+# --- main -------------------------------------------------------------------------
+
+# Emit the JSON. The RESOLUTION lives in lib/fork-point.sh, shared with the minter so
+# `phase` and these refs can never disagree about whether there is a delta; what stays here
+# is this script's own product — the diff commands and the instruction that reads them out.
+# Named for that emit, not for the resolve it delegates: the lib's resolve_delta_facts is
+# what resolves, and two functions a letter apart doing different jobs is how they drift.
+emit_delta_facts() {
+    local host="$1" project_root branch changed_files instruction
+
+    project_root="$(resolve_project_root "${host}")"
+    [ -n "${project_root}" ] || { printf 'branch-delta: could not resolve project root\n' >&2; return 1; }
+
+    branch="$(resolve_branch "${project_root}")"
+    resolve_delta_facts "${project_root}" "${branch}"
+
+    # Resolved, not handed out as a command to run. The command form cost a round-trip, and the
+    # caller could not fix what git's own output does to a non-ASCII path — see changed_files_json.
+    changed_files="$(changed_files_json "${project_root}" "${DELTA_DIFF_REF}")"
+
+    # Carried in the JSON so the refs and the rule governing them arrive together, in the
+    # same tool result, at the moment the agent is about to dispatch its verifiers. Same
+    # reasoning as the minter's instruction field: a static sentence read thousands of
+    # tokens earlier gets lost.
+    if [ "${DELTA_EMPTY}" = "true" ]; then
+        instruction="This branch has no delta to verify: no commits since ${DELTA_DIFF_REF} and a clean working tree. Phase select routes this to Development (there is no code for this task yet); Testing stops and reports \"no changes to verify\"."
+    elif [ "${DELTA_FALLBACK}" = "true" ] && [ "${DELTA_REASON}" = "no-divergence" ]; then
+        instruction="No fork point resolved because this branch has no commits since it was cut, so diff_ref is HEAD — but HEAD captures ALL of this branch's work, so the review is complete, NOT narrowed. Diff against HEAD and pass it verbatim to every verifier."
+    elif [ "${DELTA_FALLBACK}" = "true" ]; then
+        instruction="No fork point resolved (${DELTA_REASON}), so diff_ref is HEAD and ONLY uncommitted changes are under review — any committed implementation is invisible. Say so in the report: this is a caveat on the result, not a silent detail. Pass HEAD verbatim to every verifier."
+    else
+        instruction="changed_files is your entry point: the complete set this branch touched, committed AND uncommitted. Read the change itself with 'branch-delta <host> diff --ref ${DELTA_DIFF_REF}' for the whole delta, or with one or more paths appended for just those files — never hand-write a git command. diff_ref (${DELTA_DIFF_REF}) is the fork point from base_ref (${DELTA_BASE_REF}) and this run's fixed basis: pass it verbatim to every verifier so the whole run reads one change. A clean working tree does NOT mean there is no code."
+    fi
+
+    printf '{"host":"%s","project_root":"%s","branch":"%s","base_ref":"%s","diff_ref":"%s","fallback":%s,"reason":"%s","shallow":%s,"commits_ahead":%s,"uncommitted":%s,"delta_empty":%s,"changed_files":%s,"instruction":"%s"}\n' \
+        "$(escape_for_json "${host}")" \
+        "$(escape_for_json "${project_root}")" \
+        "$(escape_for_json "${branch}")" \
+        "$(escape_for_json "${DELTA_BASE_REF}")" \
+        "$(escape_for_json "${DELTA_DIFF_REF}")" \
+        "${DELTA_FALLBACK}" \
+        "${DELTA_REASON}" \
+        "${DELTA_SHALLOW}" \
+        "${DELTA_COMMITS_AHEAD}" \
+        "${DELTA_UNCOMMITTED}" \
+        "${DELTA_EMPTY}" \
+        "${changed_files}" \
+        "$(escape_for_json "${instruction}")"
+}
+
+
+case "${1:-}" in
+    -h|--help)
+        usage
+        exit 0
+        ;;
+    "")
+        printf 'branch-delta: missing <host>. Try --help.\n' >&2
+        exit 2
+        ;;
+esac
+
+host="$1"
+shift
+
+# The minter validates the host token via slugify; here it is only ever a JSON field and a
+# selector for resolve_project_root, so an empty token is the one thing worth rejecting.
+[ -n "${host}" ] || { printf 'branch-delta: empty <host>. Try --help.\n' >&2; exit 2; }
+
+# An unknown subcommand is refused, never treated as the default: a typo that silently
+# returned facts would look like it worked and hand back the wrong shape entirely.
+case "${1:-}" in
+    "")
+        emit_delta_facts "${host}"
+        ;;
+    diff)
+        shift
+        run_diff "${host}" "$@"
+        ;;
+    *)
+        printf 'branch-delta: unknown subcommand "%s". Try --help.\n' "$1" >&2
+        exit 2
+        ;;
+esac
