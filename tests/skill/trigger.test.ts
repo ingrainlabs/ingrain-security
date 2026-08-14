@@ -19,15 +19,19 @@ Deno.test("trigger: security-relevant plan starts the review", async () => {
   );
 });
 
-Deno.test("trigger: trivial plan stops at triage (minor)", async () => {
+Deno.test("trigger: trivial plan stops at the review question (minor)", async () => {
   await runChecked(
     "skill trigger :: minor plan",
     `Here is my implementation plan, ready to build:\n\n${MINOR_PLAN}`,
     { streamJson: true, maxTurns: SESSION_MAX_TURNS, timeoutMs: SESSION_TIMEOUT_MS },
     (r) => {
-      // Behavioral outcome, not exact prose: triage lands on `minor` and the cycle
-      // stops there. (The exact instructed phrase is checked in static/skill.test.ts.)
-      assertContainsAny(r.text, [/\bminor\b/i], "expected a 'minor' triage outcome");
+      // Behavioral outcome, not exact prose: the run lands on `minor` and the cycle stops
+      // there. (The exact instructed phrase is checked in static/skill.test.ts.)
+      //
+      // The user's answer is now what decides this, so on a host that cannot show a window the
+      // flow's stated fallback is `Yes` — this asserts the outcome the harness actually
+      // reaches, which is why it keys on the word and not on a dispatch that no longer happens.
+      assertContainsAny(r.text, [/\bminor\b/i], "expected a 'minor' outcome");
       assertEquals(
         dispatchedWorkers(r.events).includes("ingrain-threat-generator"),
         false,
