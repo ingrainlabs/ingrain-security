@@ -304,17 +304,24 @@ requirement is a driver in its own right.
 - The selected findings, **folded into the work in hand**.
 
 The assessment declares its own format under `## Task` as **`Schema version: 2`**, so a consumer
-branches on a stated version. Version 2 is the first to carry `Description`, the three threat
-verification fields (`Robustness justification`, `Residual path`, `Evidence`) and the
-`## Rule adherence` section, and the first to require org rule ids written **in full, verbatim** —
-an id is an exact-match key. Bump the version whenever a field is added, removed, or given new
-allowed values, and record the plugin release that introduced it in the table below, so
-"artifacts at version ≥ 2" stays checkable.
+branches on a stated version rather than sniffing structure. Bump the version whenever a field is
+added, removed, or given new allowed values, and record the plugin release that introduced it in
+the table below, so "artifacts at version ≥ 2" stays checkable.
 
 | Schema version | First plugin release | What it introduced |
 | --- | --- | --- |
 | 1 | ≤ 0.2.5 | the heading-per-entry layout that replaced the original tables; predates the `Schema version` line, so a consumer reads its absence as version 1 |
-| 2 | *(set by the release that merges this change)* | `Description`, `Schema version`, the three threat verification fields, `## Rule adherence`, and full-verbatim rule ids |
+| 2 | *(set by the release that merges this change)* | **The two driver axes and the vessel between them.** `Description` and `Schema version` under `## Task`; `## Affected paths`; `## Org rules` carrying each retrieved rule's gate decision and verbatim body (the sidecar is gone); `## Implementation guidance` — renamed from `## Mitigations`, carrying no verdict and no Selection, every entry naming **at least one driver**; the three threat verification fields (`Robustness justification`, `Residual path`, `Evidence`); `## Rule adherence`; org rule ids written **in full, verbatim** — an id is an exact-match key; and **phase blocks** (`#### gen` / `#### score` / `#### usergate` / `#### test`) declaring stage ownership inside each `## Threats` entry |
+
+**Version 2 was redefined rather than superseded**, which is worth stating once: no released
+plugin has ever emitted a `Schema version` line at all — version 1 is the *absence* of one — so
+there is no version-2 artifact anywhere for this shape to break. Bumping to 3 would have implied
+an earlier v2 that consumers must still handle, and none exists.
+
+**Phase blocks are tolerated in both directions**, so version 2 does not pin a layout. An entry
+may group its fields under markers or run them flat; both parse to the same fields, and a
+consumer reads a marker-less entry's verification fields exactly where they have always been.
+That is what lets this plugin and the `ingrain` CLI move independently.
 
 The version number is filled in by the release flow, which bumps it from the PR's `release:*`
 label — see [`.github/RELEASING.md`](.github/RELEASING.md).

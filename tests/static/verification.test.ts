@@ -312,8 +312,12 @@ Deno.test("assessment-file.md: defines the Justification + Robustness fields", a
   assertStringIncludes(md, "Testing");
   assertStringIncludes(md, "Latest stage: testing");
   // The template teaches the reasoning-first ordering on the threat entry, which is now the
-  // only entry carrying a verdict at all.
-  assertStringIncludes(md, "Robustness: adequate\nRobustness justification: …");
+  // only entry carrying a verdict at all — and since the `#### test` block it sits in was
+  // introduced, the template finally SHOWS what this comment always claimed. The pair used to
+  // read verdict-then-reasoning here while every other layer ran the other way round: both
+  // verifiers return JUSTIFICATION first, and `Concluding the Robustness` opens with "read the
+  // justification before you look at the level". Reversing it back re-opens that split.
+  assertStringIncludes(md, "Robustness justification: …\nRobustness: adequate");
   // Every reasoning field in the file carries the same 256-char cap: the threat's scoring
   // Justification, its Robustness justification, and the rule adherence Justification. A
   // tripwire, deliberately a bare count — a fourth reasoning field added without a cap, or an
@@ -457,12 +461,19 @@ Deno.test("assessment-file.md: threat entries carry the three verification field
   // The naming collision is the whole reason `Robustness justification` is not called
   // `Justification`: on a threat entry that name already means the RISK-SCORING rationale.
   assertStringIncludes(md, "Deliberately **not** named `Justification`");
-  // The four verification fields form one contiguous run at the tail — that is what keeps the
-  // Testing pass at one Edit per entry, and what lets an older parser still find the old fields.
+  // The four are the `#### test` block — one named region the Testing pass fills in a single
+  // edit, which is what replaced "they happen to be contiguous at the tail" as the guarantee.
   assertStringIncludes(
     md,
-    "Robustness: —\nRobustness justification: —\nResidual path: —\nEvidence: —",
+    "| `#### test` | the Testing verification pass | Robustness justification, Robustness, " +
+      "Residual path, Evidence |",
   );
+  // And the load-bearing half: an unrun block carries NO field lines. The template's excluded
+  // threat is the case that shows it — under the old flat layout those four lines read `—`,
+  // which is exactly the seeding this replaced. If `—` placeholders creep back into an empty
+  // block, the CLI can no longer tell "this stage has not run" from "this stage ran and found
+  // nothing to say", and a half-run verification starts reporting as a finished one.
+  assertStringIncludes(md, "Selection: excluded\n\n#### test\n\n## Risk score");
 });
 
 Deno.test("assessment-file.md: `## Task` declares a Description and a Schema version", async () => {
