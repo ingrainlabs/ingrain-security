@@ -930,3 +930,159 @@ Deno.test("SKILL.md: the Testing route is an OR across the two axes", async () =
   // field's paragraph is one it has no reason to carry.
   assertStringIncludes(phaseSelect, "- **`selected_threats` / `selected_rules`**");
 });
+
+/**
+ * Phase blocks — the `#### <name>` regions that carry stage ownership inside a threat entry.
+ *
+ * Three copies of that mapping now exist: the schema's block table (meaning), the seeded
+ * field card (shape, and the only one a writer actually reads), and the four writer
+ * references (each naming the block it fills). The repo's standing parity rule covers the
+ * first two for *fields*; these extend it to *which block a field sits in*, because that is
+ * the half a stage acts on. A field that drifts into the wrong block is not a cosmetic
+ * error: the stage that owns the block it moved to will overwrite it, and the stage that
+ * should have written it will read an empty block as "my stage has not run".
+ */
+const THREAT_BLOCKS = ["gen", "score", "usergate", "test"] as const;
+
+/** The schema's block table, as `[block, [field, …]]` in document order. */
+const blockTable = (ref: string): Array<[string, string[]]> =>
+  [...ref.matchAll(/^\| `#### (\w+)` \| [^|]+ \| ([^|]+) \|$/gm)]
+    .map((row) => [row[1], row[2].split(",").map((field) => field.trim())]);
+
+Deno.test("phase blocks: the card and the schema agree on which block each field sits in", async (t) => {
+  const sh = await Deno.readTextFile(TEMPLATE_LIB);
+  const ref = await Deno.readTextFile(ASSESSMENT_REF);
+  const table = blockTable(ref);
+
+  await t.step("the schema names the four blocks, in the order the stages run", () => {
+    // Cardinality first: a reworded table that stops matching would otherwise empty the
+    // loops below and let every assertion in this test pass while proving nothing.
+    assertEquals(table.map(([block]) => block), [...THREAT_BLOCKS]);
+  });
+
+  // The card's block enumeration, sliced per block. Bounded at the prose that follows it
+  // so a field named in the ownership paragraph cannot be mistaken for a card entry.
+  const card = between(sh, "#### gen", "THE BLOCK IS THE OWNERSHIP RECORD");
+  const regions = THREAT_BLOCKS.map((block, nth) => {
+    const from = card.indexOf(`#### ${block}`);
+    const next = THREAT_BLOCKS[nth + 1];
+    const to = next === undefined ? card.length : card.indexOf(`#### ${next}`);
+    assertEquals(from !== -1, true, `the card does not enumerate \`#### ${block}\``);
+    return card.slice(from, to);
+  });
+
+  /**
+   * A field as the card ENTERS it — the label followed by its value spec, its separating
+   * comma, or the end of a line.
+   *
+   * A bare substring search cannot do this job. The card's `#### test` region explains
+   * that `Robustness justification` is deliberately not called `Justification` — "NOT the
+   * risk-scoring Justification above" — so a plain `includes` reads the `score` block's
+   * field as living in `test` too. That cross-reference is the whole reason the two
+   * rationales stopped being interleaved, so the matcher bends around it rather than the
+   * card losing it.
+   */
+  const declares = (region: string, field: string): boolean =>
+    new RegExp(String.raw`\b${field}\s*(\(|,|$)`, "m").test(region);
+
+  await t.step(
+    "every field the schema assigns to a block appears in that block's card region",
+    () => {
+      for (const [block, fields] of table) {
+        const region = regions[THREAT_BLOCKS.indexOf(block as typeof THREAT_BLOCKS[number])];
+        for (const field of fields) {
+          assertEquals(
+            declares(region, field),
+            true,
+            `the card's \`#### ${block}\` region does not name \`${field}\`, which the schema ` +
+              `assigns to it — the two must change in the same edit`,
+          );
+        }
+      }
+    },
+  );
+
+  await t.step("and appears in exactly one region, so no field has two owners", () => {
+    for (const [, fields] of table) {
+      for (const field of fields) {
+        // The case this catches silently loses data: a field that drifted into a second
+        // block is rewritten by whichever stage owns that block, and the stage that should
+        // have written it reads an empty region as "my stage has not run".
+        const owners = regions.filter((region) => declares(region, field)).length;
+        assertEquals(owners, 1, `\`${field}\` is declared in ${owners} card regions, expected 1`);
+      }
+    }
+  });
+});
+
+Deno.test("phase blocks: only `## Threats` has them, and the rule says why", async () => {
+  const sh = await Deno.readTextFile(TEMPLATE_LIB);
+  const ref = await Deno.readTextFile(ASSESSMENT_REF);
+
+  // The narrowing this phase settled. A block records which of SEVERAL writers owns a
+  // field, and `## Threats` is the one entry written by more than one — so marking any
+  // other section would be claiming a shared ownership that does not exist. Asserted as
+  // the RULE rather than as an exemption list, because a list is what drifts: the reason
+  // survives a new section being added, a list does not.
+  assertStringIncludes(ref, "written by more than one **writer**");
+
+  // No other card seeds a marker. Sliced from the `## Threats` card's end so the
+  // enumeration inside it is not what this matches.
+  const otherCards = sh.slice(sh.indexOf("## Risk score"));
+  assertEquals(
+    /^\s*#### /m.test(otherCards),
+    false,
+    "a section after `## Threats` seeds a `####` marker — only `## Threats` carries blocks",
+  );
+});
+
+Deno.test("phase blocks: each writer names the block it fills, and the seeding rules survive", async (t) => {
+  const generator = await Deno.readTextFile(
+    `${ROOT}skills/ingrain-security/references/development/ingrain-threat-generator.md`,
+  );
+  const scorer = await Deno.readTextFile(SCORER_REF);
+  const verification = await Deno.readTextFile(
+    `${ROOT}skills/ingrain-security/references/testing/verification-pass.md`,
+  );
+  const flow = await Deno.readTextFile(DEV_FLOW);
+
+  await t.step("each of the four stages names its own block", () => {
+    // Deliberately NOT "names exactly one block": the risk scorer legitimately names all
+    // four, because re-tagging moves entries and it is the one writer that rewrites them
+    // whole — so it has to be told to carry the other three across verbatim. Asserting
+    // exclusivity here would have failed on the correct instruction.
+    assertStringIncludes(generator, "#### gen");
+    assertStringIncludes(scorer, "#### score");
+    assertStringIncludes(flow, "#### usergate");
+    assertStringIncludes(verification, "#### test");
+  });
+
+  await t.step("the generator seeds all four markers and fills only its own", () => {
+    // Seeding is what makes every later stage's write a replacement rather than an
+    // append, and it is the generator's alone: no other stage creates the entry.
+    assertStringIncludes(generator, "you seed all four");
+    assertStringIncludes(flatten(generator), "fill only `#### gen`");
+  });
+
+  await t.step("no stage seeds `—` into a block it does not own", () => {
+    // The load-bearing rule. An empty block IS the signal that its stage has not run, so
+    // a placeholder makes an unrun stage indistinguishable from one that ran and had
+    // nothing to say — which is how a half-finished review starts reading as complete.
+    assertStringIncludes(flatten(generator), "no `—` placeholders");
+    assertStringIncludes(flatten(verification), "no `—` placeholders in it");
+  });
+
+  await t.step("the scorer is told to carry the blocks it does not own across whole", () => {
+    // The one writer that rewrites entries wholesale. Without this clause the block rule
+    // and its contract contradict each other, and the resolution it would reach on its
+    // own — write only your block — cannot re-tag at all.
+    assertStringIncludes(flatten(scorer), "VERBATIM AND WHOLE");
+  });
+
+  await t.step("the missing-marker fallback is stated where a writer will meet it", async () => {
+    // The writer-side half of tolerance: the parse tests prove a marker-less file is
+    // READ correctly, and nothing but this tells a writer what to DO with one.
+    const sh = await Deno.readTextFile(TEMPLATE_LIB);
+    assertStringIncludes(sh, "Missing marker? Append your fields at the end of the entry.");
+  });
+});

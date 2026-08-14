@@ -19,11 +19,13 @@ description: >-
 > - **Recommended model:** a cheap, basic model (advisory — applied only where the platform
 >   supports per-subagent model selection).
 > - **Hand-off contract:** write one `### T<n> — <title>` entry per threat into the
->   `## Threats` section of the stored analysis file (path per your dispatch), filling the
->   descriptive fields (Asset, Vector, Description, Assumptions) per the **field card** seeded
->   under that heading — it is the whole of the shape you need — and leaving every scoring
->   field as `—` — the
->   risk-scorer fills those, and the orchestrator fills Selection later; most tasks warrant
+>   `## Threats` section of the stored analysis file (path per your dispatch). Every entry
+>   carries **four phase-block markers** — `#### gen`, `#### score`, `#### usergate`,
+>   `#### test` — and **you seed all four**, filling only your own `#### gen` (Asset, Vector,
+>   Description, Assumptions) per the **field card** seeded under that heading; it is the whole
+>   of the shape you need. **Leave the other three markers with nothing beneath them** — the
+>   risk scorer, the threat gate and the Testing pass each fill their own, and an empty block
+>   is how each knows its stage has not run yet. Most tasks warrant
 >   3–6 threats — keep it short and scoped. Write **every entry in a single Write or Edit** —
 >   the whole section in one call, not one call per entry and never one per field. Then return to the
 >   orchestrator ONLY a one-line headline (e.g. the threat count) plus a pointer to
@@ -52,28 +54,30 @@ A list of threats, each with an id so the critic can point at it.
 
 **Ids are provisional.** Assign them in discovery order — `T01`, `T02`, … — and keep them stable through your own revision round, so the critic's `[T<n>]` feedback keys line up against the same threats. Gaps are legal at this stage: a dropped threat's id is simply left out. Leave priority to the `ingrain-risk-scorer` — it holds the scores. It re-tags the whole list once, into descending-risk order, and closes the gaps; the ids become permanent there.
 
-Write every field you do not own as `—`, and write **all fourteen lines** — the field card
-under `## Threats` is the contract, and a missing label fails the orchestrator's check at the
-gate even when its value would have been `—`. Impact, Likelihood, Risk score and Criticality
-belong to the `ingrain-risk-scorer`, Selection to the orchestrator at the threat gate, and the
-last four to the Testing pass — each edits the line you leave for it.
+**Seed all four markers; fill only `#### gen`.** The markers are the entry's ownership record
+— each later stage writes between its own marker and the next — so an entry missing one leaves
+that stage nowhere to write. The field card under `## Threats` is the contract for which fields
+sit in which block.
+
+**Put no `—` placeholders under the three blocks you do not own.** An empty block is precisely
+how the risk scorer, the threat gate and the Testing pass are recognised as not yet run; a
+placeholder makes an unrun stage indistinguishable from one that ran and had nothing to say,
+and downstream that turns a half-finished review into one that looks complete.
 
 ```
 ### T01 — <short title>
+
+#### gen
 Asset: <the part of the change this targets>
 Vector: <how the threat is realized — be specific to this task>
 Description: <1–2 sentences on the threat>
 Assumptions: <what must be true for this to apply>
-Justification: —
-Impact: —
-Likelihood: —
-Risk score: —
-Criticality: —
-Selection: —
-Robustness: —
-Robustness justification: —
-Residual path: —
-Evidence: —
+
+#### score
+
+#### usergate
+
+#### test
 ```
 
 Then a brief **Reasoning** paragraph on why this set, taken together, covers the task. Keep it

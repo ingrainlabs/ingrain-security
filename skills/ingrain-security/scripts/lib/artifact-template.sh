@@ -87,17 +87,37 @@ Security relevant:
 Surfaces:
 
 ## Threats
-<!-- Each threat is a \"### T<nn> — <title>\" heading, then these fields, one per line, in
-     this order: Asset, Vector, Description, Assumptions, Justification (≤256 chars),
-     Impact (critical|high|medium|low), Likelihood (very high|high|medium|low),
-     Risk score (0-100), Criticality (low|medium|high|critical),
-     Selection (selected|excluded|undecided), Robustness (weak|adequate|strong),
-     Robustness justification (≤256 chars — the reasoning behind Robustness, NOT the
-     risk-scoring Justification above), Residual path (for a weak verdict: the route still
-     open and the change that would close it; — otherwise), Evidence (optional — file:line).
-     A field whose stage has not run yet reads \"—\". Ids start in discovery order; the
-     risk scorer re-tags them once into descending-risk order (T01 = highest risk) and
-     they are permanent after that. Entries sit in id order. -->
+<!-- Each threat is a \"### T<nn> — <title>\" heading, then FOUR PHASE BLOCKS in this
+     order, each a \"#### <name>\" line with its own fields beneath it, one per line:
+
+     #### gen      — threat generator:  Asset, Vector, Description, Assumptions
+     #### score    — risk scorer:       Justification (≤256 chars),
+                     Impact (critical|high|medium|low),
+                     Likelihood (very high|high|medium|low), Risk score (0-100),
+                     Criticality (low|medium|high|critical)
+     #### usergate — threat gate:       Selection (selected|excluded|undecided)
+     #### test     — verification pass: Robustness justification (≤256 chars — the
+                     reasoning behind Robustness; the risk-scoring rationale is a
+                     separate field, over in #### score),
+                     Robustness (weak|adequate|strong),
+                     Residual path (for a weak verdict: the route still open and the
+                     change that would close it; — otherwise),
+                     Evidence (optional — file:line)
+
+     THE BLOCK IS THE OWNERSHIP RECORD — who writes what is carried by this file, not by
+     anyone's memory of it. The generator seeds all four markers when it creates the
+     entry; every later stage writes ONLY between its own marker and the next, and
+     carries every other block across byte for byte.
+
+     An unrun stage leaves its marker with NO field lines under it. That emptiness IS the
+     signal it has not run, so never seed \"—\" placeholders into an empty block. Inside a
+     block whose stage HAS run, \"—\" keeps its usual meaning — a field that does not apply
+     (Residual path on a non-weak verdict, Evidence nobody cited).
+     Missing marker? Append your fields at the end of the entry.
+
+     Ids start in discovery order; the risk scorer re-tags them once into descending-risk
+     order (T01 = highest risk) and they are permanent after that. Entries sit in id
+     order. -->
 
 ## Risk score
 <!-- Score: 0-100. Criticality: low|medium|high|critical. The plan-level residual risk. -->

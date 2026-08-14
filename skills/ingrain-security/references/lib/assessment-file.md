@@ -81,7 +81,7 @@ shape.
   | `## Task` | the mint seeds `Title`, `Latest stage` and `Schema version`; the orchestrator writes `Description` at Development, and the Testing pass advances `Latest stage` |
   | `## Affected paths` | orchestrator, at Development beside `Description` |
   | `## Triage` | the orchestrator alone — `Verdict` + `Security relevant` from the user's answer to the review question, `Prior analysis` from its own Step 0 lookup, and `Surfaces` beside them on `major` |
-  | `## Threats` | `ingrain-threat-generator` (the entries and their descriptive fields) → `ingrain-risk-scorer` (the scoring fields) → orchestrator (Selection at the **threat gate**) → the Testing verification pass (Robustness + its justification, Residual path and Evidence at the Testing phase) — **filled in stages**, each stage editing the field lines it owns |
+  | `## Threats` | **four writers, one phase block each** — `ingrain-threat-generator` (`#### gen`) → `ingrain-risk-scorer` (`#### score`) → orchestrator at the **threat gate** (`#### usergate`) → the Testing verification pass (`#### test`). The only entry in the file written by more than one writer, and the blocks are how it says so: each stage writes inside its own marker and carries the rest across verbatim → § `## Threats` |
   | `## Threat critique` | `ingrain-threat-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Risk score` | `ingrain-risk-scorer` (plan-level residual) |
   | `## Org rules` | orchestrator (the broad retrieval pass writes each entry and its body; the machine prune removes rejected ones; the **rule gate** records each surviving Selection) |
@@ -168,61 +168,95 @@ unwritten section simply means an unscoped search.
 
 ### `## Threats` — one `###` entry per threat; most tasks warrant **3–6** — treat it as a target; keep it short and scoped
 
-Each threat is a `### <id> — <title>` heading followed by one `Name: value` field per line:
+Each threat is a `### <id> — <title>` heading, then **four phase blocks** — one per stage
+that writes into the entry, each a `#### <name>` line with its fields beneath it:
 
 ```markdown
 ### T01 — Refresh token replay
+
+#### gen
 Asset: the refresh endpoint
 Vector: a captured token is replayed
 Description: …
 Assumptions: …
-Justification: —
-Impact: —
-Likelihood: —
-Risk score: —
-Criticality: —
-Selection: —
-Robustness: —
-Robustness justification: —
-Residual path: —
-Evidence: —
+
+#### score
+
+#### usergate
+
+#### test
 ```
 
-| Field | Constraint |
-|-------|------------|
-| **id** (in the heading) | `T<n>`, zero-padded (`T01`) — unique within the file; assigned in discovery order by the generator, **reassigned once** by the risk scorer into descending-risk order, and fixed from that point on |
-| **title** (in the heading) | string, after the ` — ` |
-| **Asset** | string |
-| **Vector** | string |
-| **Description** | string |
-| **Assumptions** | string |
-| **Justification** | string, **≤ 256 characters** |
-| **Impact** | `critical` \| `high` \| `medium` \| `low` |
-| **Likelihood** | `very high` \| `high` \| `medium` \| `low` |
-| **Risk score** | integer `0`–`100` |
-| **Criticality** | `low` \| `medium` \| `high` \| `critical` |
-| **Selection** | `selected` \| `excluded` \| `undecided` (`—` until the **threat gate**) |
-| **Robustness** | `weak` \| `adequate` \| `strong` — how well this threat is closed in the implementation: `weak` = the threat can still be realized (a route survives, or the analysis leaves its closure unestablished); `adequate` = its realization routes are closed; `strong` = closed broadly **plus** artefacts that would fail if the control regressed. Concluded by the Testing pass from negative testing against the implementation. Normative definitions: `references/testing/verification-pass.md` → **Robustness levels**. **Set it from that verification's verdict** — it reads `—` until then, and for any threat outside the `selected` set. |
-| **Robustness justification** | string, **≤ 256 characters** — the reasoning behind **Robustness**, concluded by the Testing orchestrator from the verifier's evidence. Deliberately **not** named `Justification`: on this entry that name already means the risk-scoring rationale, and one name for two rationales is what makes them get interleaved. Reads `—` until Testing runs, and for any threat outside the `selected` set. |
-| **Residual path** | string — for a `weak` verdict, the concrete route by which the threat can still be realized and the change that would close it. The actionable half of the verification. `—` for any other verdict, where there is no surviving route to name. |
-| **Evidence** | *optional* — where the threat is closed or left open (`file:line`) — **anywhere in the tree, not only in the changed files**: a control that closes this threat counts wherever it lives, and a route that leaves it open counts wherever it survives. Advisory and volatile: line numbers drift as the code moves on, so treat it as a pointer, never as a claim the reader can re-verify later. `—` when the verifier cited none. |
+That is the entry as the **generator** leaves it: its own block filled, the other three
+markers seeded and empty. Each later stage fills the block it owns, in place.
 
-**One field per line is what makes this file cheap to maintain.** Every stage after the
-generator fills a field the stage before it left `—` — the risk scorer, the threat gate, the
-verification pass — and each of those touches a contiguous run of lines inside an entry, so a
-stage costs **one Edit per entry**, not one per field. Write the fields in the
-order above; a field the stage that owns it has not run yet reads `—`.
+**The block is the ownership record.** Who writes which field is carried by the entry
+itself, structurally — not by a prose enumeration in some other file that goes stale the
+moment a stage moves. A stage writes **only** between its own marker and the next, and
+carries every other block across **byte for byte**:
 
-**The four verification fields sit at the tail for that reason** — `Robustness` and the three
-that follow it are everything the Testing pass owns, so they form one contiguous run and that
-stage still edits a single block. They are appended rather than filed beside their relatives
-(`Robustness justification` next to `Justification`, say) because existing fields keeping their
-positions is what lets a parser written against the old order still find them.
+`## Threats` is the **only** section whose entries carry blocks, and that is a rule rather
+than a list: *a phase block exists where an entry is written by more than one **writer***.
+Every other entry in this file — an org rule, a guidance entry, an adherence verdict — has
+exactly one writer, so there is no ownership to record and a marker would claim a sharing
+that does not exist. (`## Task` has three writers but holds no entries, so a per-entry
+mechanism does not reach it; its three writers touch named, disjoint fields.)
 
-**Justification leads the scoring fields on purpose.** The scorer fills an entry top-down,
-so this schema doubles as a reasoning schema: writing the justification *before* the
-numerical (Risk score) and qualitative (Impact, Likelihood, Criticality) scores lets the
-reasoning come first and drive the scores.
+| Block | Written by | Fields, in order |
+|-------|-----------|------------------|
+| `#### gen` | `ingrain-threat-generator` | Asset, Vector, Description, Assumptions |
+| `#### score` | `ingrain-risk-scorer` | Justification, Impact, Likelihood, Risk score, Criticality |
+| `#### usergate` | the orchestrator, at the **threat gate** | Selection |
+| `#### test` | the Testing verification pass | Robustness justification, Robustness, Residual path, Evidence |
+
+**An empty block is a stage that has not run — and that is a state, not a defect.** An
+unrun stage leaves its marker with **no field lines under it at all**; the emptiness *is*
+the signal, which is why a block is never seeded with `—` placeholders. Inside a block
+whose stage **has** run, `—` keeps its ordinary meaning: a field that does not apply, such
+as `Residual path` on a non-`weak` verdict or an `Evidence` nobody cited.
+
+Two readings follow from that, and both matter downstream: an **excluded** threat's empty
+`#### test` block is its expected permanent state, while a **selected** threat's empty
+`#### test` block means its verification has not reached it yet — reported as information
+and synced truthfully, never as a malformed file.
+
+**If a marker is missing**, append your fields at the end of the entry. A file written by
+an older plugin carries no markers at all and is read field-by-field as it always was.
+
+| Field | Block | Constraint |
+|-------|-------|------------|
+| **id** (in the heading) | heading | `T<n>`, zero-padded (`T01`) — unique within the file; assigned in discovery order by the generator, **reassigned once** by the risk scorer into descending-risk order, and fixed from that point on |
+| **title** (in the heading) | heading | string, after the ` — ` |
+| **Asset** | `gen` | string |
+| **Vector** | `gen` | string |
+| **Description** | `gen` | string |
+| **Assumptions** | `gen` | string |
+| **Justification** | `score` | string, **≤ 256 characters** |
+| **Impact** | `score` | `critical` \| `high` \| `medium` \| `low` |
+| **Likelihood** | `score` | `very high` \| `high` \| `medium` \| `low` |
+| **Risk score** | `score` | integer `0`–`100` |
+| **Criticality** | `score` | `low` \| `medium` \| `high` \| `critical` |
+| **Selection** | `usergate` | `selected` \| `excluded` \| `undecided` (the block is empty until the **threat gate**) |
+| **Robustness justification** | `test` | string, **≤ 256 characters** — the reasoning behind **Robustness**, concluded by the Testing orchestrator from the verifier's evidence. Deliberately **not** named `Justification`: on this entry that name already means the risk-scoring rationale, and one name for two rationales is what makes them get interleaved. |
+| **Robustness** | `test` | `weak` \| `adequate` \| `strong` — how well this threat is closed in the implementation: `weak` = the threat can still be realized (a route survives, or the analysis leaves its closure unestablished); `adequate` = its realization routes are closed; `strong` = closed broadly **plus** artefacts that would fail if the control regressed. Concluded by the Testing pass from negative testing against the implementation. Normative definitions: `references/testing/verification-pass.md` → **Robustness levels**. **Set it from that verification's verdict.** |
+| **Residual path** | `test` | string — for a `weak` verdict, the concrete route by which the threat can still be realized and the change that would close it. The actionable half of the verification. `—` for any other verdict, where there is no surviving route to name. |
+| **Evidence** | `test` | *optional* — where the threat is closed or left open (`file:line`) — **anywhere in the tree, not only in the changed files**: a control that closes this threat counts wherever it lives, and a route that leaves it open counts wherever it survives. Advisory and volatile: line numbers drift as the code moves on, so treat it as a pointer, never as a claim the reader can re-verify later. `—` when the verifier cited none. |
+
+The `#### test` block is written for `selected` threats alone. On an `excluded` or
+`undecided` threat it stays empty permanently — there is no verdict to record on a threat
+nobody asked to have closed.
+
+**One field per line, one block per stage.** Each stage's fields are a named, contiguous
+region, so filling them is a single replacement of the run between two markers rather than
+one edit per field. Write the fields in the order the block table gives them.
+
+**Reasoning leads its verdict, in both blocks that carry one.** `Justification` opens
+`#### score` and `Robustness justification` opens `#### test`, because a block is filled
+top-down and this schema doubles as a reasoning schema: writing the reasoning *before* the
+scores it explains, or before the level it supports, keeps the reasoning driving the verdict
+instead of dressing one already chosen. Every other layer already works this way — both
+verifiers return their justification first, and the Testing orchestrator weighs it before it
+looks at the level.
 
 **The id carries the priority.** Before scoring, an id is a provisional discovery-order label:
 the generator assigns `T01`, `T02`, … as it finds threats, and those labels stay stable across
@@ -244,7 +278,7 @@ a worker's report, the verification tables — display them in **id order, `T01`
 
 **The threat gate → Selection.** When the user decides, record each threat's **Selection**: act on
 it → `selected`, accept the risk → `excluded`. Use `undecided` only if the user is explicitly
-unsure. Before the gate the field reads `—`. It is one of the two driver gates, presented in the
+unsure. Before the gate the `#### usergate` block is empty. It is one of the two driver gates, presented in the
 same user moment as the **rule gate**, and its Selection scopes the **robustness** dimension
 exactly as the rule gate's scopes **adherence**.
 
@@ -355,10 +389,11 @@ at the guidance level a deliberate drop and an oversight both read as an absent 
 deliberate-decision records live at the two driver gates.
 
 **Who fills the verification fields.** The Testing verification pass
-(`references/testing/verification-pass.md`) writes `## Threats` → **Robustness**, **Robustness
-justification**, **Residual path** and **Evidence** from its negative testing of each selected
-threat, and every `## Rule adherence` entry from its rule-adherence pass. Threats outside the
-`selected` set stay `—`. Writing them, alongside setting `## Task` → `Latest stage: testing`,
+(`references/testing/verification-pass.md`) fills each selected threat's `#### test` block —
+**Robustness justification**, **Robustness**, **Residual path**, **Evidence** — from its
+negative testing, and writes every `## Rule adherence` entry from its rule-adherence pass. A
+threat outside the `selected` set keeps an empty `#### test` block. Writing them, alongside
+setting `## Task` → `Latest stage: testing`,
 is what marks the assessment checked; the plan review leaves them at `—` for Testing to fill.
 **Nothing in this section is among them** — the vessel has no verdict to write.
 
@@ -466,36 +501,48 @@ Prior analysis: none
 ## Threats
 
 ### T01 — <short title>
+
+#### gen
 Asset: …
 Vector: …
 Description: …
 Assumptions: …
+
+#### score
 Justification: …
 Impact: high
 Likelihood: medium
 Risk score: 78
 Criticality: high
+
+#### usergate
 Selection: selected
-Robustness: adequate
+
+#### test
 Robustness justification: …
+Robustness: adequate
 Residual path: —
 Evidence: services/auth/router.ts:42
 
 ### T02 — <short title>
+
+#### gen
 Asset: …
 Vector: …
 Description: …
 Assumptions: …
+
+#### score
 Justification: …
 Impact: low
 Likelihood: low
 Risk score: 40
 Criticality: medium
+
+#### usergate
 Selection: excluded
-Robustness: —
-Robustness justification: —
-Residual path: —
-Evidence: —
+
+#### test
 
 ## Risk score
 Score: 78

@@ -89,10 +89,18 @@ branch + task title:
 so it resolves to the **same file** the plan review wrote for this task
 (`has_content: true` confirms it).
 
-The fields Testing fills are `## Threats` → **Robustness**, **Robustness justification**,
-**Residual path** and **Evidence**; every `## Rule adherence` entry; plus `## Task` →
-`Latest stage`. **Write them from the field card** seeded under each of those headings — that card
-is the write contract, and it arrives with the file you are already opening.
+What Testing fills is each selected threat's **`#### test` block** — **Robustness
+justification**, then **Robustness**, **Residual path** and **Evidence**, in that order; every
+`## Rule adherence` entry; plus `## Task` → `Latest stage`. **Write them from the field card**
+seeded under each of those headings — that card is the write contract, and it arrives with the
+file you are already opening.
+
+**That block is the whole of your write into a threat entry.** A threat carries four phase
+markers — `#### gen`, `#### score`, `#### usergate`, `#### test` — and the first three belong
+to the plan review. Write between `#### test` and the end of the entry; leave everything above
+it exactly as you found it. A threat outside the `selected` set keeps an **empty** `#### test`
+block: it takes no verdict, and no `—` placeholders standing in for one either — an empty
+block is how "this threat was never in verification scope" is stated.
 
 **`## Implementation guidance` is not among them.** Guidance is the vessel, never a subject: it
 carries no verdict, so this pass reads it and writes nothing into it. **`## Org rules` is
@@ -110,11 +118,14 @@ that name below.
 **Write it with the Edit or Write tool, on `assessment_abs`** — `allow-assessment-write`
 pre-approves those for this file, so the write lands with no permission prompt.
 
-**Check the write.** Testing writes this file exactly once, at step 6, and that write is a
-finished file — so run the **three-check** on the single read you make straight after, against
-the cards, never against a fresh read of the schema. Three things and nothing else: every field
-label present, in the order its card lists; every enumerated value one of the words the card
-names, verbatim; nothing left `—` that this pass was meant to fill. Fix what does not match.
+**Check the write.** Testing writes this file exactly once — at **Finalize the assessment**,
+the step named below — and that write is a finished file, so run the **three-check** on the
+single read you make straight after, against the cards,
+never against a fresh read of the schema.
+Three things and nothing else: every field label present, in the order its card lists;
+every enumerated value one of the words the card names, verbatim; and no selected subject left
+unfilled — a `#### test` block still empty on a threat you verified, or a selected rule with no
+adherence entry. Fix what does not match.
 `## Org rules` and `## Implementation guidance` are read-only here and are not touched — their
 cards included.
 
@@ -505,13 +516,16 @@ file.
    (see **Concluding the Adherence**). Write your own ≤256-char justification for each. **Do
    not read this off step 4** — a rule's verdict is about the control it prescribes, not about
    whether a threat survived or whether any guidance drove it.
-6. **Finalize the assessment (you write).** Write each threat's concluded Robustness, its
-   ≤256-char **Robustness justification**, its **Residual path** (for `weak`; `—` otherwise)
-   and its **Evidence** into that `## Threats` entry; **one `## Rule adherence` entry per
-   selected rule** — a `### <rule-id> — <title>` heading with `Adherence` and `Justification`;
-   and set `## Task` → `Latest stage: testing`. Follow the field card under each heading, leaving
-   excluded/undecided threat entries as `—`. **Write nothing into `## Implementation guidance`
-   or `## Org rules`** — the vessel has no verdict, and the rule Selections are the gate's.
+6. **Finalize the assessment (you write).** Fill each selected threat's **`#### test` block** —
+   its ≤256-char **Robustness justification**, then its concluded **Robustness**, its
+   **Residual path** (for `weak`; `—` otherwise) and its **Evidence**, in that order; **one
+   `## Rule adherence` entry per selected rule** — a `### <rule-id> — <title>` heading with
+   `Adherence` and `Justification`; and set `## Task` → `Latest stage: testing`. Follow the
+   field card under each heading. Write only between `#### test` and the end of each entry —
+   the three blocks above it are the plan review's — and leave an excluded or undecided
+   threat's `#### test` block **empty**, with no `—` placeholders in it.
+   **Write nothing into `## Implementation guidance` or `## Org rules`** — the vessel has no
+   verdict, and the rule Selections are the gate's.
    One write, to the minted `assessment_abs`. On a re-verification (the file was already at
    `Latest stage: testing` and the code changed again), **overwrite** the previous
    justifications, levels and adherence entries — they record the current implementation.
@@ -592,5 +606,5 @@ assessment and the diff, and each verifier opens them itself. Report the empty c
 - [ ] 3. Both fan-outs dispatched in ONE block — one verifier per selected threat, one per selected rule; each pointed at `## Org rules` in the SAME file; justification FIRST in every return
 - [ ] 4. Each threat's Robustness concluded — justification weighed BEFORE the level; a level stands only when its evidence carries it; the conclusion is YOURS; recorded on the threat and nowhere else
 - [ ] 5. Each selected rule's Adherence concluded — justification weighed BEFORE the verdict; `followed` stands only when its evidence carries it; NOT read off a threat's Robustness or off whether any guidance drives it
-- [ ] 6. `## Threats` → `Robustness` + `Robustness justification` + `Residual path` + `Evidence`, one `## Rule adherence` entry per SELECTED rule, `Latest stage: testing` — YOU write, the verifiers only return; NOTHING written into `## Implementation guidance` or `## Org rules`; then three-checked against the field cards; then `ingrain record verification --assessment` (best-effort, AFTER the write)
+- [ ] 6. Each SELECTED threat's `#### test` block filled — justification FIRST, then `Robustness`, `Residual path`, `Evidence`; the three blocks above it untouched; an excluded threat's left EMPTY, no `—` in it; one `## Rule adherence` entry per SELECTED rule; `Latest stage: testing` — YOU write, the verifiers only return; NOTHING written into `## Implementation guidance` or `## Org rules`; then three-checked against the field cards; then `ingrain record verification --assessment` (best-effort, AFTER the write)
 - [ ] 7. Reported to the coding agent — one table per driver axis and none for guidance; `weak` threats named with their residual path, `not-followed` rules named with their reason; the coding agent owns the code changes

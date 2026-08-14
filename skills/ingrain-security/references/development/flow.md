@@ -281,16 +281,19 @@ checklist** at the end of this file.
 
    1. **Read** the bounded `## Threats` slice — **required**, and exactly the read the
       context-window discipline permits. **Run the three-check on it while it is in front of you.**
-      If the slice is empty or its scoring fields still read `—`, re-dispatch `ingrain-risk-scorer`
-      (or `ingrain-threat-generator` where the entries themselves are missing). A wrong enum or a
-      missing field line goes back the same way, to the worker that owns that field.
+      If the slice is empty, or the entries' `#### score` blocks are, re-dispatch
+      `ingrain-risk-scorer` (or `ingrain-threat-generator` where the entries themselves are
+      missing). A wrong enum or a missing field line goes back the same way, to the worker that
+      owns that block.
    2. **Display** the scored threats as a Markdown table **in id order — `T01` first**, which the
       scorer already re-tagged into descending risk. Take the ids as the order, and confirm the
       risk scores descend down them; where a score rises, Step 3 goes back for the re-tag.
    3. **Present** one single-choice window per threat; mark high/critical recommended.
-   4. **Record** each threat's `Selection` in `## Threats` (act on it → `selected`, accept the risk
-      → `excluded`; `undecided` only if the user is explicitly unsure) — a mistyped `Selection`
-      here silently drops a threat from Testing's scope.
+   4. **Record** each threat's `Selection` into its **`#### usergate` block** (act on it →
+      `selected`, accept the risk → `excluded`; `undecided` only if the user is explicitly
+      unsure) — that block is yours and the three around it are not, so write between its
+      marker and the next and leave `#### gen`, `#### score` and `#### test` untouched. A
+      mistyped `Selection` here silently drops a threat from Testing's scope.
 
    | Column | Contents |
    |--------|----------|
@@ -463,13 +466,13 @@ fork and run together, as do 2a and 2b.
 The three-check runs at the user gates and at finalize, on the reads those steps already make;
 never on a fresh read of `references/lib/assessment-file.md`.**
 
-- [ ] 0. Prior-analysis lookup, then the review question; `## Triage` from the answer — `minor` → sync + stop; `major` → `Surfaces` + `## Affected paths`
-- [ ] 1a. Threats generated into `## Threats`, seeded from any prior analysis
+- [ ] 0. Prior-analysis lookup, then the review question; `## Triage` + `Description` — `minor` → sync + stop; `major` → also `Surfaces` + `## Affected paths`
+- [ ] 1a. Threats generated into `## Threats`, seeded from any prior analysis; all four phase markers seeded, only `#### gen` filled
 - [ ] 1b. Org rules retrieved by YOU, forked with 1a — keyed on plan/Surfaces/paths, not a gate; broad; ALL queries in ONE call; bodies verbatim, `Selection: —`
 - [ ] 2a. Threat critique dispatched — one revision at most, then threats frozen
 - [ ] 2b. Rule critique dispatched — YOU applied the prune, keeping any unfounded one; a pruned rule is never presented and never recorded
-- [ ] 3. Risk scored — five fields per threat plus the plan-level residual; threats re-tagged into risk order (`T01` = highest)
-- [ ] 4a. Threat gate — slice three-checked, table displayed FIRST, then one window per threat; `Selection` recorded
+- [ ] 3. Risk scored — each `#### score` filled, other blocks carried VERBATIM, plus the plan-level residual; threats re-tagged into risk order (`T01` first)
+- [ ] 4a. Threat gate — slice three-checked, table displayed FIRST, then one window per threat; `Selection` recorded into `#### usergate`
 - [ ] 4b. Rule gate, SAME user moment — curated set only, table FIRST, then accept-all and per-rule windows; `Selection` recorded on every entry
 - [ ] 4c. Routed on the OR of both gates — 1+ selected on either axis proceeds; only both empty ends the review
 - [ ] 5. Guidance generated from BOTH selected driver sets, by pointer; every entry names ≥1 driver; a multi-driver entry written ONCE
