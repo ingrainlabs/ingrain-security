@@ -41,7 +41,7 @@ This covers:
 - **The two bundled scripts at Phase select** — `assessment-mint` and `branch-delta` are
   read-only and deterministic, and neither reads the other's output. One block, and the values
   are reused for the whole run; no later step re-mints.
-- **The two driver chains after triage** — the threat chain and the broad rule retrieval have no
+- **The two driver chains after the review question** — the threat chain and the broad rule retrieval have no
   data dependency on each other, so they run in parallel and join at the guidance generator.
 - **The Testing verifiers** — one per selected threat and one per selected rule, mutually
   independent (see `references/testing/verification-pass.md` § How to dispatch a verifier).
@@ -83,7 +83,7 @@ obtain that request. The sequential fallback below covers a different case — a
 is the main session.
 
 **Ask the user to allow the subagent flow, before the first dispatch of the run** — Development
-Step 0's triage, or Testing's verifier fan-out. Ask once, up front: one answer covers the whole run,
+Step 1a's threat generator, or Testing's verifier fan-out. Ask once, up front: one answer covers the whole run,
 where a mid-flow ask splits it across two modes. State the rule and the trade-off in one short
 message, then put the choice to the user with the host's question or selection primitive (plain
 text elsewhere), **allow as the recommended option**:

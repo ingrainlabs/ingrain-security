@@ -14,7 +14,6 @@ import { isWorker } from "./workers.ts";
 export const PLUGIN_DIR = fromFileUrl(new URL("../..", import.meta.url));
 
 /** Per-call timeouts (ms). */
-export const TRIAGE_TIMEOUT_MS = 90_000; // triage — fast
 export const AGENT_TIMEOUT_MS = 120_000; // single-agent default
 export const SESSION_TIMEOUT_MS = 180_000; // full session (skill + agents)
 export const ORCHESTRATION_TIMEOUT_MS = 600_000; // full gated cycle

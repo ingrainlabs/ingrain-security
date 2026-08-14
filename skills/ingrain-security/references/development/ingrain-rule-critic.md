@@ -51,7 +51,7 @@ way — nothing downstream prunes a rule you kept.
 
 ## Inputs
 
-- The **task** (implementation plan) and the triage **Surfaces**.
+- The **task** (implementation plan) and the `## Triage` **Surfaces**.
 - The **retrieved org rules**, from `## Org rules` — each a `### <id> — <title>` heading with its
   full body and `Selection: —` (nobody has decided yet; that is the gate's job, after you).
 

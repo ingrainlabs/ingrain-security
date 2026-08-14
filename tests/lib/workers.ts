@@ -9,7 +9,6 @@
  * mitigation → guidance rename. Import it, never restate it.
  */
 export const WORKERS = [
-  "ingrain-relevance-triage",
   "ingrain-threat-generator",
   "ingrain-threat-critic",
   "ingrain-risk-scorer",

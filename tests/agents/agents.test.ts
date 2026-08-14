@@ -17,17 +17,11 @@ import {
   assertHasScore0to100,
   assertRiskDescendsByTag,
 } from "../lib/matchers.ts";
-import {
-  AGENT_TIMEOUT_MS,
-  mintAssessment,
-  TRIAGE_TIMEOUT_MS,
-  workerDispatchPrompt,
-} from "../lib/claudeRunner.ts";
+import { AGENT_TIMEOUT_MS, mintAssessment, workerDispatchPrompt } from "../lib/claudeRunner.ts";
 import type { RunResult } from "../lib/types.ts";
 import { runChecked } from "../lib/reporter.ts";
 import {
   MAJOR_PLAN,
-  MINOR_PLAN,
   RETRIEVED_RULES,
   SELECTED_THREATS,
   TASK_AND_FROZEN_THREATS,
@@ -65,22 +59,12 @@ const addedLines = (written: string, seeded: string): string => {
   return written.split("\n").filter((line) => !before.has(line)).join("\n");
 };
 
+// The two `ingrain-relevance-triage` cases that opened this table are gone with the worker.
+// Its classification is now a question the orchestrator puts to the user, so there is no
+// subagent to run in isolation and nothing here to replace them with: a question's behaviour
+// is the orchestrator's, asserted statically over the flow file and end to end in
+// `skill/trigger.test.ts`.
 const CASES: AgentCase[] = [
-  {
-    // ingrain-relevance-triage (haiku): classifies a plan as `major` or `minor`.
-    worker: "ingrain-relevance-triage",
-    label: "ingrain-relevance-triage :: major plan",
-    input: MAJOR_PLAN,
-    timeoutMs: TRIAGE_TIMEOUT_MS,
-    check: (r) => assertContainsAny(r.text, [/\bmajor\b/i], "expected a 'major' verdict"),
-  },
-  {
-    worker: "ingrain-relevance-triage",
-    label: "ingrain-relevance-triage :: minor plan",
-    input: MINOR_PLAN,
-    timeoutMs: TRIAGE_TIMEOUT_MS,
-    check: (r) => assertContainsAny(r.text, [/\bminor\b/i], "expected a 'minor' verdict"),
-  },
   {
     // ingrain-threat-generator (sonnet): produces a threat list with stable tags T1, T2, …
     worker: "ingrain-threat-generator",
@@ -187,8 +171,8 @@ for (const c of CASES) {
           //
           // Concatenating `written` wholesale disarmed most of this tier: the seeded field
           // cards stay in the file by design, and they spell out the very vocabulary being
-          // asserted. The `## Triage` card reads `Verdict: minor|major`, so BOTH the major
-          // and the minor case passed whatever the model decided; `Impact (critical|high|
+          // asserted. The `## Triage` card reads `Verdict: minor|major`, which passed a
+          // verdict assertion whatever the model decided; `Impact (critical|high|
           // medium|low)` satisfied the impact/likelihood checks; `Yield`/`Effort` and the
           // 0–100 score came free the same way. Subtracting the skeleton leaves the worker's
           // own lines, which is what these assertions were always meant to read.

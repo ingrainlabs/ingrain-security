@@ -78,10 +78,10 @@ Schema version: 2
 ## Triage
 <!-- Fields in file order: Verdict (minor|major), Security relevant (true|false), Surfaces,
      then Prior analysis — optional, a pointer to a prior analysis of this task, or none.
-     Verdict, Security relevant and Prior analysis are the triage worker's.
-     Surfaces: a bullet list naming the security-relevant aspects the change touches, present
-     when major — the ORCHESTRATOR's, written beside Description, because it feeds both the
-     threat generator and the org-rule retrieval. -->
+     All four are the ORCHESTRATOR's: Verdict and Security relevant record the user's answer to
+     the review question that opens the run, Prior analysis comes from its own lookup, and
+     Surfaces is a bullet list naming the security-relevant aspects the change touches, present
+     when major — it feeds both the threat generator and the org-rule retrieval. -->
 Verdict:
 Security relevant:
 Surfaces:

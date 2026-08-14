@@ -11,7 +11,7 @@ owns **how to drive that CLI** for both directions.
 
 This file owns the mechanics; the caller owns what to *do* about a given outcome — `references/development/flow.md`
 § Development — the flow for the orchestrator's retrieval pass, which is **forked alongside the
-threat chain** and keys on the plan, the triage Surfaces and `## Affected paths` — never on a
+threat chain** and keys on the plan, the `## Triage` Surfaces and `## Affected paths` — never on a
 gate's selections — and the two finalizes for the syncs below.
 
 ## Availability probe

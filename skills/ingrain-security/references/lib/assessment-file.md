@@ -80,7 +80,7 @@ shape.
   |---------|-----------|
   | `## Task` | the mint seeds `Title`, `Latest stage` and `Schema version`; the orchestrator writes `Description` at Development, and the Testing pass advances `Latest stage` |
   | `## Affected paths` | orchestrator, at Development beside `Description` |
-  | `## Triage` | `ingrain-relevance-triage` (`Verdict`, `Security relevant`, `Prior analysis`); the orchestrator writes `Surfaces`, and writes `Verdict` + `Security relevant` itself when triage returned `unclear` |
+  | `## Triage` | the orchestrator alone — `Verdict` + `Security relevant` from the user's answer to the review question, `Prior analysis` from its own Step 0 lookup, and `Surfaces` beside them on `major` |
   | `## Threats` | `ingrain-threat-generator` (the entries and their descriptive fields) → `ingrain-risk-scorer` (the scoring fields) → orchestrator (Selection at the **threat gate**) → the Testing verification pass (Robustness + its justification, Residual path and Evidence at the Testing phase) — **filled in stages**, each stage editing the field lines it owns |
   | `## Threat critique` | `ingrain-threat-critic` — **transient**, deleted by the orchestrator at finalize |
   | `## Risk score` | `ingrain-risk-scorer` (plan-level residual) |
@@ -152,17 +152,18 @@ the analysis to the right part of the codebase. A wrong path narrows retrieval t
 place, so it is worth a moment's thought — but the skill never depends on it, and an
 unwritten section simply means an unscoped search.
 
-### `## Triage` — the relevance-triage verdict
-- **Verdict** — `minor` | `major`. Two values, and they stay two: where the plan does not say enough
-  for the triage worker to classify it, the worker returns `unclear` **without writing this field**
-  and the orchestrator asks the user, recording their answer here. An inconclusive triage is a
-  question, never a third verdict — so nothing downstream has to interpret one.
-- **Security relevant** — `true` | `false`. Written with `Verdict`, by whoever wrote it.
+### `## Triage` — whether this change gets a review, and what it builds on
+- **Verdict** — `minor` | `major`. **The user's answer**, recorded by the orchestrator: the review
+  opens by asking whether this change gets a security review, and the two options say what each
+  answer means ("it touches a security surface" / "it is not security-relevant"). Two values, and
+  they stay two — there is no third state to interpret downstream, because a question that was put
+  to the user always comes back answered.
+- **Security relevant** — `true` | `false`. Written with `Verdict`, and agreeing with it.
 - **Surfaces** — bullet list (present when `major`).
 - **Prior analysis** — optional; a pointer to a prior analysis file found for this
   task (its `.ingrain-security/…` path and threat count, e.g.
-  `.ingrain-security/assessment-<…>.md — 4 threats`), or `none`. Set by
-  `ingrain-relevance-triage` when it finds a threats-bearing prior analysis of the same
+  `.ingrain-security/assessment-<…>.md — 4 threats`), or `none`. Set by the orchestrator's
+  Step 0 lookup when it finds a threats-bearing prior analysis of the same
   task (branch + title); the generator seeds from it.
 
 ### `## Threats` — one `###` entry per threat; most tasks warrant **3–6** — treat it as a target; keep it short and scoped
@@ -256,7 +257,7 @@ exactly as the rule gate's scopes **adherence**.
 The **second driver axis**, symmetric with `## Threats`: a threat sets a goal (close this), a
 rule sets a goal (implement this control), and implementation guidance is how either goal is
 reached. Written by the broad retrieval pass, which runs **in parallel with the threat chain**
-and keys on the plan, the triage Surfaces and `## Affected paths` — never on gate selections.
+and keys on the plan, the `## Triage` Surfaces and `## Affected paths` — never on gate selections.
 
 Each entry is a `### <rule-id> — <title>` heading, then a `Selection` line, then the rule's
 body verbatim:

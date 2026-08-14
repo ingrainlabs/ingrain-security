@@ -13,7 +13,7 @@ back into the agent's work.
 ## What it does
 
 Security analysis is treated as the last step before code. Once you know what you are about to
-build, the plugin triages the change, and for security-relevant ("major") changes runs a full
+build, the plugin asks whether this change gets a security review, and for a "major" one runs a full
 review along **two driver axes**: *threats* (what could go wrong here, risk-scored) and (optional) — with
 the [`ingrain` CLI](https://docs.ingrainlabs.dev/getting-started/) — *org rules* (which of your
 standing security requirements govern this change). You decide each axis — which threats to
@@ -132,9 +132,11 @@ time. Leave the CLI unconfigured and the review runs wholly on your machine.
 The full spec lives in [`skills/ingrain-security/SKILL.md`](skills/ingrain-security/SKILL.md);
 the short version:
 
-- **Triage first.** "Major" (security-relevant) changes get the full review; "minor" changes end
-  at triage, and the agent carries on with the work.
-- **Two axes, run in parallel.** After triage the **threat chain** (generate → critique →
+- **You decide whether it runs.** The review opens with one question — *run a security review
+  for this change?* — recommending yes whenever the change plausibly touches a security surface,
+  because a needless review is cheap and a missed concern is not. Answer "not security-relevant"
+  and it stops there, records that, and the agent carries on with the work.
+- **Two axes, run in parallel.** After that the **threat chain** (generate → critique →
   risk-score 0–100 → **threat gate**) and, with the CLI, the **rule chain** (retrieve broadly →
   critique → **rule gate**) run side by side. Each is recall-then-precision: cast a wide net, then
   let a critic prune it before you see anything.
@@ -152,8 +154,8 @@ the short version:
   `## Org rules` section; the gate records your decision per rule; finalize keeps the selected
   rules' bodies (Testing reads them as the specification) and reduces the excluded to a
   decision-only stub. One artifact carries the whole analysis.
-- **Worker roles.** The orchestrator dispatches seven worker roles as fresh
-  subagents — `ingrain-relevance-triage`, `ingrain-threat-generator`,
+- **Worker roles.** The orchestrator dispatches six worker roles as fresh
+  subagents — `ingrain-threat-generator`,
   `ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-rule-critic`,
   `ingrain-guidance-generator`, `ingrain-guidance-critic` (defined under
   [`skills/ingrain-security/references/development/`](skills/ingrain-security/references/development/)).
@@ -170,9 +172,9 @@ The whole lifecycle, both phases end to end — **Development** before code, **T
 ```mermaid
 flowchart TD
     subgraph DEV["Development — review before code"]
-        planning(["Work is scoped: files, changes, tests"]) --> triage["relevance triage"]
-        triage --> majorQ{"major?"}
-        majorQ -->|minor| stop(["Stop — carry on"])
+        planning(["Work is scoped: files, changes, tests"]) --> ask["ask the user:<br/>run a security review?"]
+        ask --> majorQ{"major?"}
+        majorQ -->|minor — not security-relevant| stop(["Stop — carry on"])
         majorQ -->|major| threats["generate threats → critic"]
         majorQ -->|major, in parallel| rules["retrieve org rules — broad<br/>optional: needs the ingrain CLI"]
         threats --> score["risk score 0–100"]

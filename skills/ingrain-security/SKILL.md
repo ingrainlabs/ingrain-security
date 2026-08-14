@@ -12,8 +12,8 @@ description: >-
   **Testing — verification:** run AFTER you have implemented code for that plan, but before
   you present or commit it. It judges each selected threat's robustness and each selected org
   rule's adherence against the branch diff, and reports; the coding agent implements.
-  If there is even a 1% chance the change touches security, invoke it — triage decides
-  whether a full review is warranted.
+  If there is even a 1% chance the change touches security, invoke it — it opens by asking
+  you whether a full review is warranted.
 license: MIT
 compatibility: >-
   Built for agent hosts that can dispatch subagents (Claude Code, Codex). Requires bash, git and
@@ -26,7 +26,7 @@ allowed-tools: Bash(ingrain context:*) Bash(ingrain record:*)
 ---
 
 <SUBAGENT-STOP>
-If you were dispatched as a worker subagent (ingrain-relevance-triage, ingrain-threat-generator,
+If you were dispatched as a worker subagent (ingrain-threat-generator,
 ingrain-threat-critic, ingrain-risk-scorer, ingrain-rule-critic, ingrain-guidance-generator,
 ingrain-guidance-critic, ingrain-rule-verifier, ingrain-threat-verifier), do the one job you were given
 and return. The orchestration — Development and Testing alike — is run by the session that
@@ -38,8 +38,8 @@ Security analysis is the FINAL step of planning. Build the plan in full first �
 concrete implementations, tests. The trigger is that *state*, reached alike by an **ad-hoc plan**
 worked out inline and a **formal planning session** (plan mode, a design doc): detailed plan,
 implementation still ahead. Run the review there, before you present it or write any code, then
-fold its results back into the plan. At a 1% chance of touching security, run it — triage decides
-minor vs. major.
+fold its results back into the plan. At a 1% chance of touching security, run it — its first act is
+to ask the user whether to review, so the cost of being wrong here is one question.
 </EXTREMELY-IMPORTANT>
 
 ## Phase select — do this FIRST
@@ -78,8 +78,8 @@ re-mints anything, except the recovery case named under `siblings`. (A run that 
   cannot be derived from it. Every worker dispatch pastes it in front of the reference-file path,
   for the same reason it pastes `assessment_abs` in full: a subagent's cwd is the user's project,
   so a relative `references/…` resolves to `<project>/references/…` and the read fails outright.
-- **`branch_slug`** — this branch, slugified; empty when HEAD is detached. Triage is dispatched
-  with it (pass `unknown` when empty), and it is the branch half of the file's identity — which is
+- **`branch_slug`** — this branch, slugified; empty when HEAD is detached. Step 0's prior-analysis
+  lookup matches on it, and it is the branch half of the file's identity — which is
   why re-minting the same task on the same branch resolves to the same file.
 - **`phase` / `phase_reason`** — the resolved route, and why. Read it and act; see below.
 - **`has_content`** — `true` once a stage has written into the assessment. A mint always leaves a
@@ -132,7 +132,7 @@ re-mints anything, except the recovery case named under `siblings`. (A run that 
 
 | `phase_reason` | What is ambiguous | Resolve it |
 |---|---|---|
-| `siblings_present` | This title minted nothing, which is **also** what a paraphrased title looks like — the real analysis may be the written assessment sitting beside it, possibly one already implemented. | Open each `siblings` entry and read its `## Task` Title. If one is this task under different wording, re-run the mint with that Title **verbatim** and use the result. Otherwise it is a fresh task: Development, start at triage. |
+| `siblings_present` | This title minted nothing, which is **also** what a paraphrased title looks like — the real analysis may be the written assessment sitting beside it, possibly one already implemented. | Open each `siblings` entry and read its `## Task` Title. If one is this task under different wording, re-run the mint with that Title **verbatim** and use the result. Otherwise it is a fresh task: Development, start at Step 0. |
 | `delta_unreliable` | Drivers are gated and the tree is clean, which normally means the implementation is still ahead — but no fork point resolved, so **committed work is invisible** and `delta_empty` measured only the working tree. | Look at whether this branch already carries the implementation (`git log`), or ask. Implementation present → Testing; genuinely not started → Development. |
 
 `phase_reason` also names the settled cases — `fresh_task`, `resume_analysis`,
@@ -158,10 +158,10 @@ How to classify three less-obvious repo states. Verdict first, then why:
 - **`Latest stage: testing`, delta grown since → Testing again (`verify_now`).** It records that
   a verification ran, not that the task is closed. What a re-verification overwrites, and what it
   must leave alone, is `verification-pass.md`'s — do not re-derive it here.
-- **A `minor` triage → Development (`resume_analysis`)** — no driver was selected on either axis, so there is
+- **A `minor` verdict → Development (`resume_analysis`)** — no driver was selected on either axis, so there is
   nothing to verify. An explicit request sends you to Testing, which stops at its
-  own no-drivers case; otherwise the run resumes Development and triage re-confirms `minor`. Either way the
-  run ends at triage, which is right for a minor change.
+  own no-drivers case; otherwise the run resumes Development and puts the review question again.
+  Either way the run ends at Step 0, which is right for a minor change.
 
 **Announce the phase you picked in your opening line.** Each flow file carries its own opening
 phrase — use the one belonging to the phase you routed to, so a misroute costs the user one turn
@@ -209,7 +209,7 @@ re-dispatch the worker that produced it with the problem quoted back.
 
 ## Development — plan review
 
-Development reviews the plan before code exists: triage, then the two driver chains (threats and
+Development reviews the plan before code exists: the review question, then the two driver chains (threats and
 org rules) run in parallel through critique into the two user gates, then implementation guidance,
 finalize, and the write back into the plan. It fires when **Phase select** lands on Development —
 `phase: development`.

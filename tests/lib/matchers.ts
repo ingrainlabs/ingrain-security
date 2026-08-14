@@ -126,14 +126,20 @@ export const assertRiskDescendsByTag = (text: string, msg?: string): void => {
   }
 };
 
-/** The orchestrator started the security review (announce / triage dispatch / Skill). */
+/**
+ * The orchestrator started the security review (announce / review question / Skill).
+ *
+ * The middle signal used to be the triage worker's dispatch. That worker is gone — Step 0 is
+ * now a question the orchestrator asks directly — so the observable it leaves behind is the
+ * question's own wording, which `static/skill.test.ts` pins in the flow file.
+ */
 export const assertReviewStarted = (result: RunResult, msg?: string): void => {
   const announced = /using ingrain-security/i.test(result.text);
-  const triaged = dispatchedWorkers(result.events).includes("ingrain-relevance-triage");
+  const asked = /run a security review for this change/i.test(result.text);
   const skillFired = result.events.some((ev) => usesSkill(ev, "ingrain-security"));
-  if (announced || triaged || skillFired) return;
+  if (announced || asked || skillFired) return;
   throw new AssertionError(
-    `${msg ?? "Expected the review to start"} (no announce / ingrain-relevance-triage / Skill)\n` +
+    `${msg ?? "Expected the review to start"} (no announce / review question / Skill)\n` +
       `--- text ---\n${snippet(result.text)}`,
   );
 };

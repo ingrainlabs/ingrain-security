@@ -51,12 +51,12 @@ Every **live** test prints a block as it runs, so you can validate the model's a
 eye alongside the automated verdict:
 
 ```
-===== ingrain-relevance-triage :: major plan =====
+===== ingrain-threat-generator :: major plan =====
 INPUT:
     <the exact prompt sent>
 OUTPUT:
     <the model's full response>
-DISPATCHED: [ingrain-relevance-triage]        # skill/orchestration tests only
+DISPATCHED: [ingrain-threat-generator]       # skill/orchestration tests only
 VERDICT: ok  (exit 0, 3.1s)
 ```
 
@@ -113,10 +113,11 @@ This is always on for the live tiers — Deno streams each test's output live (w
   its write target, then asserts the worker actually modified the seeded file and checks the
   output's _shape_ (a verdict keyword, a 0–100 score, risk descending by threat tag, required
   fields) over the return and the file together. Assertions are loose because live output varies.
-  The table has eight cases over seven workers (`ingrain-relevance-triage` runs twice, on a major
-  and a minor plan).
+  The table has six cases over six workers. It once opened with two `ingrain-relevance-triage`
+  cases; that worker was replaced by a question the orchestrator asks the user, which has no
+  subagent to run in isolation.
 - **skill/** — a full session (skill + agents + hook). `trigger.test.ts` checks a security-relevant
-  plan starts the review and a trivial one stops at triage. `orchestration.test.ts`
+  plan starts the review and a trivial one stops at the review question. `orchestration.test.ts`
   (integration-gated) checks the workers fire in order through risk scoring and the run halts at the
   user gates, on both driver axes.
 
@@ -141,11 +142,11 @@ deno task ci                 # what CI runs: lint + fmt:check + test:offline
 **Needs an agent** — spawns `claude`, requires auth, costs model calls, can flake:
 
 ```bash
-deno task test:agent         # 8 live worker cases (7 workers; triage runs twice) + the 2 skill trigger tests
+deno task test:agent         # 6 live worker cases (one per worker) + the 2 skill trigger tests
 deno task test:integration   # everything, incl. the full orchestration cycle (slow)
 
 # one worker only:
-deno test --allow-run=claude --allow-read --allow-env agents/ --filter ingrain-relevance-triage
+deno test --allow-run=claude --allow-read --allow-env agents/ --filter ingrain-threat-generator
 ```
 
 Each tier's Deno permissions double as a capability tag: `test:static` gets `--allow-read` only and

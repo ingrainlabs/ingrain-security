@@ -5,11 +5,12 @@ the two user gates.
 
 **Announce:** open with "Using ingrain-security to assess this plan."
 
-You orchestrate seven worker roles, each defined by a reference file at
-`references/development/<name>.md` (`ingrain-relevance-triage`, `ingrain-threat-generator`,
+You orchestrate six worker roles, each defined by a reference file at
+`references/development/<name>.md` (`ingrain-threat-generator`,
 `ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-rule-critic`,
 `ingrain-guidance-generator`, `ingrain-guidance-critic`). You dispatch each as a fresh subagent,
-holding the state between steps yourself. One step is yours alone: the broad org-rule retrieval,
+holding the state between steps yourself. Two steps are yours alone: Step 0's review question,
+including the prior-analysis lookup behind it, and the broad org-rule retrieval,
 **forked alongside the threat chain rather than after a gate** — Step 1 states exactly what that
 overlap is and is not.
 
@@ -21,7 +22,7 @@ workers write section by section, and you finalize) and the modifications to the
 **The prompt is this file's; the mechanism is `dispatch.md`'s.** It owns the subagent primitive
 and the in-context fallback, the write rules, the model tier, and the permission gate to open when
 a session rule holds subagent dispatch behind the user's request — **ask before your first
-dispatch**, which here is Step 0's triage.
+dispatch**, which here is Step 1a's threat generator.
 → `references/lib/dispatch.md`, and its § When a session rule gates subagents behind user request.
 
 Dispatch every worker with the same shape. The write target is restated inline because that path
@@ -52,12 +53,12 @@ worker must read — e.g. "read <the run's assessment file> § Threats and
 the critic's itemized feedback>
 Write your full Output into your section of the assessment file, then RETURN ONLY:
 your branch keyword — the exact set YOUR reference file's hand-off contract names
-(minor/major/unclear for triage, approved/needs-revision for a critic) — or headline result, plus
+(approved/needs-revision for a critic) — or headline result, plus
 a one-line pointer to the section you wrote, which carries the full output.
 ```
 
-Branch on the keyword the worker leads its return with (`minor`/`major`/`unclear`,
-`approved`/`needs-revision`), and pass the **next** worker a pointer to the sections it must read.
+Branch on the keyword the worker leads its return with (`approved`/`needs-revision`), and pass
+the **next** worker a pointer to the sections it must read.
 
 ## How to ask the user
 
@@ -94,28 +95,65 @@ then carry the **section pointer** and let every later reader open it for itself
 Each step is one dispatch; you hold the state between them. The tracker is **Development —
 checklist** at the end of this file.
 
-0. **Triage** — dispatch `ingrain-relevance-triage` with the plan, the resolved `branch_slug` (or
-   `unknown`), the task title, and the mint's **`siblings`** list as absolute paths (prefix each
-   with `<project_root>/.ingrain-security/`). That list is the prior-analysis lookup, already
-   done: hand it over rather than letting the worker glob, which would return this run's own
-   file and report the analysis about to be overwritten as prior work.
-   → `references/development/ingrain-relevance-triage.md` defines it; you branch on its keyword.
-   - `unclear` → **the plan did not tell the worker what the change does. Ask the user.** It is the
-     one verdict a worker may decline to give, and it is handed to the user rather than resolved by
-     you: they know what the change is, where the plan text does not say. State in one line what
-     could not be established, then present **one single-choice window** — run the full review
-     (**recommended**) or treat it as minor and stop. Then **write their answer into `## Triage`
-     yourself**: `Verdict: major` + `Security relevant: true`, or `Verdict: minor` +
-     `Security relevant: false`, and follow that branch below. The user's answer *is* the verdict,
-     which is why the field's values stay two. **No answer reachable** — no window mechanism, a
-     non-interactive run — take `major`: the asymmetry that makes it the worker's tie-break makes
-     it the fallback here.
-     → `references/lib/dispatch.md` § Selection windows for the host mechanism.
+0. **The review question — yours, no worker.** Two things, in this order: find any prior analysis
+   of this task, then ask the user whether to review this change. The answer *is* the verdict,
+   which is why the field's values stay two.
+
+   **Find the prior analysis first.** The mint handed you a **`siblings`** list — the assessments
+   already on this branch that this run's title did not produce, already filtered to written files
+   and already excluding the file this run is about to write. Read those candidates as absolute
+   paths (prefix each with `<project_root>/.ingrain-security/`). **Do not glob the folder**: a glob
+   returns this run's own file, so you would report the analysis about to be overwritten as prior
+   work.
+   - **Match on the task, strictly.** A shared branch may hold several concurrent tasks'
+     assessments, so the list can hold files belonging to *other* work. For each candidate read its
+     `## Task` Title and compare the branch and the title against the current plan — a match needs
+     the same branch **and** a title describing the *same* work. On ties prefer the most recently
+     modified. Anything looser is `none` and starts fresh: a sibling task's analysis would mislead
+     every stage downstream, so starting fresh is strictly safer.
+   - **A matched snapshot whose `## Threats` section is non-empty** is your **Prior analysis**
+     pointer — its path and threat count. Step 1a hands it to the threat generator, which seeds
+     from it. Nothing matched, or no candidate carries threats → `none`.
+
+   **Then ask the user.** One single-choice window, worded so the answer stands on its own as a
+   record:
+
+   > **Run a security review for this change?**
+   > - **Yes — it touches a security surface**
+   > - **No — this change is not security-relevant**
+
+   Word the options that way rather than as "do you want to" / "skip for now". A `no` is written
+   into the file as `Verdict: minor` and syncs as *assessed, found not security-relevant*, so the
+   option the user picked has to say that much; a "skip" option would record a claim they never
+   made.
+
+   **Mark `Yes` recommended whenever the change plausibly touches any of these** — authentication,
+   authorization, access control, sessions; data storage, queries, user or sensitive data; network
+   calls, API endpoints, webhooks, external services; file upload, download or filesystem work;
+   cryptography, hashing, token generation; user input handling and validation; infrastructure,
+   deployment, CI/CD; dependency additions or upgrades; configuration that changes runtime
+   behaviour; any backend or server-side logic.
+
+   **Mark `No` recommended only when the change is ONLY** cosmetic or UI (colour, font, spacing),
+   a typo fix in docs or comments, reformatting or lint-only edits, static content, a rename with
+   no behavioural change, or a non-executable asset.
+
+   **Borderline recommends `Yes`.** A needless review is cheap; a missed security concern is
+   expensive. State your reading in one line above the window so the user can correct it — the
+   recommendation is a default, never a decision, and their answer is what gets recorded either
+   way. **No window mechanism reachable** — a non-interactive run — take `Yes`, for the same
+   asymmetry.
+   → `references/lib/dispatch.md` § Selection windows for the host mechanism.
+
+   **Write `## Triage` yourself** from the answer — `Verdict: major` + `Security relevant: true`,
+   or `Verdict: minor` + `Security relevant: false` — plus the `Prior analysis` line from the
+   lookup above (the pointer, or `none`). Then take that branch:
+
    - `minor` → **record it, then stop.** Open the assessment at `assessment_abs` and write
-     `## Task` → `Description` (one line on what this change does) beside the worker's
-     `## Triage`; the file is otherwise left as seeded. Then sync it — best-effort, exactly like
+     `## Task` → `Description` (one line on what this change does) beside the `## Triage` you just
+     wrote; the file is otherwise left as seeded. Then sync it — best-effort, exactly like
      the Development finalize: `ingrain record design --assessment "<assessment_abs>"`.
-     Then state "no security review needed — minor change" and **STOP**; triage is the whole
+     Then state "no security review needed — minor change" and **STOP**; the question is the whole
      pipeline for a minor change, so carry on building the plan.
 
      **Why a `minor` still records.** "We assessed this and it is not security-relevant" is a
@@ -123,7 +161,7 @@ checklist** at the end of this file.
      assessed change from an unreviewed one. `Description` is written because the CLI requires it
      of any file that is not an untouched skeleton — without it the sync is refused and the record
      is unreachable. The platform skips the push itself when the task already has a prior run, so
-     a `minor` re-triage can never wipe a real analysis.
+     a later `minor` answer can never wipe a real analysis.
      → `references/lib/ingrain-cli.md` § Recording the assessment. A failed sync never fails the
      review: one line and carry on.
    - `major` → keep any **Prior analysis pointer** for Step 1, then
@@ -131,14 +169,12 @@ checklist** at the end of this file.
      and every empty section, so fill the `## Task` fields in place rather than writing the page
      over. **Write `Description`** there — one line on what this change does, in your own words;
      it is yours alone to record, and no later stage fills it. Leave `Schema version` as seeded.
-     The worker's `## Triage` section is already in it.
-     Then **write `Surfaces`** into `## Triage` — a short bullet list naming the security-relevant
-     aspects the plan touches ("new file-upload endpoint", "adds JWT verification", "raw SQL with
-     user input"). Yours, not the worker's: they feed **both** driver chains — the threat generator
-     seeds its list from them and the broad rule retrieval keys its queries on them — and triage's
-     one job is deciding whether the change is worth a deeper look, not serving two consumers it
-     cannot see. Name security **features**, since that is what a rule query matches on, as well as
-     the ways the change could go wrong.
+     Then **write `Surfaces`** into `## Triage`, beside the verdict you already wrote — a short
+     bullet list naming the security-relevant aspects the plan touches ("new file-upload endpoint",
+     "adds JWT verification", "raw SQL with user input"). They feed **both** driver chains — the
+     threat generator seeds its list from them and the broad rule retrieval keys its queries on
+     them. Name security **features**, since that is what a rule query matches on, as well as the
+     ways the change could go wrong.
      Then **write `## Affected paths`** — a bullet list of the repository-relative folders the
      plan says this change will touch. A prediction, not a measurement: the code does not exist
      yet, and this is the only record of where it will land. It scopes the org-rule
@@ -159,7 +195,8 @@ checklist** at the end of this file.
    between.
 
    **1a — Threats.** Dispatch `ingrain-threat-generator` at the plan **and the `## Triage` section**
-   (the Surfaces you wrote seed the search; extend beyond them). **If triage returned a Prior analysis pointer**,
+   (the Surfaces you wrote seed the search; extend beyond them). **If Step 0's lookup found a Prior
+   analysis pointer**,
    also point it at that snapshot's `## Threats` and `## Implementation guidance` so it **seeds from
    the prior analysis**, re-derived against the current plan. It writes one `### T<n>` entry per
    threat into `## Threats` and returns a pointer. Ids are assigned in discovery order and are
@@ -169,7 +206,7 @@ checklist** at the end of this file.
    **1b — Retrieve the org rules, broadly. Yours alone, no worker.** They are ingested knowledge —
    how *this* team implements auth, validation, secrets, crypto — reached by semantic search over
    the `ingrain` CLI, and this is the review's **one** retrieval pass. It keys on **the plan, the
-   triage Surfaces and `## Affected paths`** — all on disk from Step 0 — and **never on gate
+   `## Triage` Surfaces and `## Affected paths`** — all on disk from Step 0 — and **never on gate
    selections**, which is what lets it run here rather than after a gate.
 
    **Cast a wide net.** Missing a governing rule is the costly failure, and precision is restored
@@ -426,7 +463,7 @@ fork and run together, as do 2a and 2b.
 The three-check runs at the user gates and at finalize, on the reads those steps already make;
 never on a fresh read of `references/lib/assessment-file.md`.**
 
-- [ ] 0. Triage dispatched — `unclear` → ask user; `minor` → `Description`, sync, stop; `major` → open file, write `Description` + `## Affected paths`
+- [ ] 0. Prior-analysis lookup, then the review question; `## Triage` from the answer — `minor` → sync + stop; `major` → `Surfaces` + `## Affected paths`
 - [ ] 1a. Threats generated into `## Threats`, seeded from any prior analysis
 - [ ] 1b. Org rules retrieved by YOU, forked with 1a — keyed on plan/Surfaces/paths, not a gate; broad; ALL queries in ONE call; bodies verbatim, `Selection: —`
 - [ ] 2a. Threat critique dispatched — one revision at most, then threats frozen

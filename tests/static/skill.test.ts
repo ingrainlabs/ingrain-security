@@ -6,6 +6,7 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
+import { walk } from "@std/fs";
 import { fromFileUrl } from "@std/path";
 import {
   assertChecklistTracksFlow,
@@ -29,8 +30,6 @@ const DEV_FLOW = `${ROOT}skills/ingrain-security/references/development/flow.md`
 const devDoc = async (): Promise<string> =>
   `${await Deno.readTextFile(SKILL)}\n${await Deno.readTextFile(DEV_FLOW)}`;
 const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/lib/assessment-file.md`;
-const TRIAGE_REF =
-  `${ROOT}skills/ingrain-security/references/development/ingrain-relevance-triage.md`;
 const DISPATCH_REF = `${ROOT}skills/ingrain-security/references/lib/dispatch.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
@@ -71,9 +70,9 @@ Deno.test("SKILL.md: workflow steps are in the required order", async () => {
   const flow = section(md, "## Development — the flow");
   assertOrder(
     flow,
-    "ingrain-relevance-triage",
+    "Run a security review for this change?",
     "ingrain-threat-generator",
-    "triage before threats",
+    "the review question before threats",
   );
   assertOrder(
     flow,
@@ -525,28 +524,59 @@ Deno.test("ownership: dispatch.md § Selection windows stays mechanism-only", as
   assertStringIncludes(md.toLowerCase(), "fallback");
 });
 
-Deno.test("triage: instructs a prior-analysis lookup that seeds the generator", async () => {
+Deno.test("step 0: instructs a prior-analysis lookup that seeds the generator", async () => {
+  // This lookup was the triage WORKER's until the worker was replaced by a question the
+  // orchestrator asks directly. The classification left with the worker; the lookup did not,
+  // and it is the half a merge silently drops — the generator's seeding is its only consumer,
+  // and a generator that simply starts fresh looks exactly like one that found nothing.
   const skill = await devDoc();
-  const triage = await Deno.readTextFile(TRIAGE_REF);
-  // The triage worker looks for a prior analysis of this task — from the candidate list the
-  // orchestrator hands it, which IS the mint's `siblings`.
-  assertStringIncludes(triage.toLowerCase(), "check for prior analysis");
-  assertStringIncludes(triage, "do not glob the folder");
-  assertStringIncludes(skill, "**`siblings`** list as absolute paths");
+  assertStringIncludes(skill, "Find the prior analysis first");
+  assertStringIncludes(skill, "Do not glob the folder");
+  assertStringIncludes(skill, "**`siblings`** list");
   // The never-glob rule has been re-invented twice by files that re-derive this lookup, so
   // pin the absence: a glob here returns THIS run's own file — the mint seeded it moments
-  // earlier — and triage would report the analysis about to be overwritten as prior work.
+  // earlier — so it would report the analysis about to be overwritten as prior work.
   assertEquals(
-    /Glob the assessment folder|assessment-<branch-slug>-\*\.md/.test(triage),
+    /Glob the assessment folder|assessment-<branch-slug>-\*\.md/.test(skill),
     false,
-    "triage must take the candidate list, not glob — the mint already did this lookup",
+    "step 0 must take the candidate list, not glob — the mint already did this lookup",
   );
-  // It compares branch + title and emits a Prior analysis pointer.
-  assertStringIncludes(triage, "Prior analysis");
-  // The orchestrator forwards that pointer to the generator so it seeds prior threats.
+  // It compares branch + title and emits a Prior analysis pointer, which Step 1a forwards.
+  assertStringIncludes(skill, "Prior analysis");
   assertStringIncludes(skill, "Prior analysis pointer");
   // The schema carries the optional Prior analysis field.
   assertStringIncludes(await Deno.readTextFile(ASSESSMENT_REF), "Prior analysis");
+});
+
+Deno.test("step 0: the review question is the user's, asked with a recommended default", async () => {
+  const skill = await devDoc();
+  // The question replaces a classifier, so the two things the classifier guaranteed have to
+  // survive in it: a default that leans to reviewing, and an answer legible as the record.
+  assertStringIncludes(skill, "Run a security review for this change?");
+  // BOTH options state what the answer MEANS. A `no` is written as `Verdict: minor` and syncs
+  // as "assessed, found not security-relevant" — so an option reading "skip for now" would
+  // record a claim the user never made.
+  assertStringIncludes(skill, "Yes — it touches a security surface");
+  assertStringIncludes(skill, "No — this change is not security-relevant");
+  // The asymmetry the whole skill rests on: a needless review is cheap, a missed concern is not.
+  assertStringIncludes(skill, "Borderline recommends `Yes`");
+  // And the non-interactive fallback goes the same way, for the same reason.
+  assertStringIncludes(skill, "No window mechanism reachable");
+});
+
+Deno.test("the relevance-triage worker is gone from every surface", async () => {
+  // A deleted worker leaves three kinds of wreckage: a dispatch nobody can satisfy, a roster
+  // entry pointing at a missing file, and prose describing a step that no longer runs. The
+  // reference-file lint catches the second only; this catches the other two.
+  for await (const entry of walk(`${ROOT}skills/ingrain-security`, { exts: [".md", ".sh"] })) {
+    if (!entry.isFile) continue;
+    const text = await Deno.readTextFile(entry.path);
+    assertEquals(
+      /ingrain-relevance-triage|triage worker/.test(text),
+      false,
+      `${entry.path} still names the removed relevance-triage worker`,
+    );
+  }
 });
 
 Deno.test("SKILL.md: documents the pointer-based hand-off and context-window discipline", async () => {

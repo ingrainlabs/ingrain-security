@@ -35,16 +35,9 @@ Deno.test({
         const order = dispatchedWorkers(r.events);
         const trace = order.join(" -> ");
 
-        assertWorkerDispatched(r.events, "ingrain-relevance-triage");
         assertWorkerDispatched(r.events, "ingrain-threat-generator");
         assertWorkerDispatched(r.events, "ingrain-risk-scorer");
 
-        assertOrder(
-          trace,
-          "ingrain-relevance-triage",
-          "ingrain-threat-generator",
-          "triage before threats",
-        );
         assertOrder(
           trace,
           "ingrain-threat-generator",
