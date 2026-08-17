@@ -59,10 +59,9 @@ A list of threats, each with an id so the critic can point at it.
 that stage nowhere to write. The field card under `## Threats` is the contract for which fields
 sit in which block.
 
-**Put no `—` placeholders under the three blocks you do not own.** An empty block is precisely
-how the risk scorer, the threat gate and the Testing pass are recognised as not yet run; a
-placeholder makes an unrun stage indistinguishable from one that ran and had nothing to say,
-and downstream that turns a half-finished review into one that looks complete.
+**Leave the three blocks you do not own as bare markers.** An empty block is precisely how the
+risk scorer, the threat gate and the Testing pass are each recognised as not yet run, and that
+is what keeps a half-finished review legible as one all the way downstream.
 
 ```
 ### T01 — <short title>

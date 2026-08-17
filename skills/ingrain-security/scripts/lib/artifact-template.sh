@@ -104,15 +104,15 @@ Surfaces:
                      change that would close it; — otherwise),
                      Evidence (optional — file:line)
 
-     THE BLOCK IS THE OWNERSHIP RECORD — who writes what is carried by this file, not by
-     anyone's memory of it. The generator seeds all four markers when it creates the
-     entry; every later stage writes ONLY between its own marker and the next, and
-     carries every other block across byte for byte.
+     THE BLOCK IS THE OWNERSHIP RECORD — this file carries who writes what. The generator
+     seeds all four markers when it creates the entry; every later stage writes ONLY
+     between its own marker and the next, and carries every other block across byte for
+     byte.
 
-     An unrun stage leaves its marker with NO field lines under it. That emptiness IS the
-     signal it has not run, so never seed \"—\" placeholders into an empty block. Inside a
-     block whose stage HAS run, \"—\" keeps its usual meaning — a field that does not apply
-     (Residual path on a non-weak verdict, Evidence nobody cited).
+     An unrun stage leaves its marker with NO field lines under it — leave an empty block
+     as it stands, marker only. That emptiness IS the signal its stage has not run yet.
+     Inside a block whose stage HAS run, \"—\" keeps its usual meaning: a field that does
+     not apply (Residual path on a non-weak verdict, Evidence nobody cited).
      Missing marker? Append your fields at the end of the entry.
 
      Ids start in discovery order; the risk scorer re-tags them once into descending-risk

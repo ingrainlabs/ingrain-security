@@ -98,9 +98,9 @@ file you are already opening.
 **That block is the whole of your write into a threat entry.** A threat carries four phase
 markers — `#### gen`, `#### score`, `#### usergate`, `#### test` — and the first three belong
 to the plan review. Write between `#### test` and the end of the entry; leave everything above
-it exactly as you found it. A threat outside the `selected` set keeps an **empty** `#### test`
-block: it takes no verdict, and no `—` placeholders standing in for one either — an empty
-block is how "this threat was never in verification scope" is stated.
+it exactly as you found it. A threat outside the `selected` set keeps its `#### test` block
+**empty**, exactly as Development left it — that emptiness is how "this threat was never in
+verification scope" is stated, and it is already correct.
 
 **`## Implementation guidance` is not among them.** Guidance is the vessel, never a subject: it
 carries no verdict, so this pass reads it and writes nothing into it. **`## Org rules` is
@@ -245,8 +245,9 @@ no fewer**. Selecting a rule at the gate is the developer declaring it governs t
 that declaration is what makes a verdict on it meaningful.
 
 **A pass still under way leaves fewer — on either axis, and that is a state, not a defect.** A
-completed pass leaves one verdict per selected subject; an interrupted one leaves a selected threat
-still at `Robustness: —`, or a selected rule with no `## Rule adherence` entry. Both sync
+completed pass leaves one verdict per selected subject; an interrupted one leaves a selected
+threat's `#### test` block **empty**, or a selected rule with no
+`## Rule adherence` entry. Both sync
 truthfully: the wire accepts a partial verdict set, the CLI reports the gap as *information* rather
 than an error, and what you concluded lands. Completeness is this pass's **procedure**, asserted in
 the checklist below — never a reason to withhold the verdicts you did reach.
@@ -523,7 +524,7 @@ file.
    `Adherence` and `Justification`; and set `## Task` → `Latest stage: testing`. Follow the
    field card under each heading. Write only between `#### test` and the end of each entry —
    the three blocks above it are the plan review's — and leave an excluded or undecided
-   threat's `#### test` block **empty**, with no `—` placeholders in it.
+   threat's `#### test` block **empty**, exactly as you found it.
    **Write nothing into `## Implementation guidance` or `## Org rules`** — the vessel has no
    verdict, and the rule Selections are the gate's.
    One write, to the minted `assessment_abs`. On a re-verification (the file was already at
@@ -606,5 +607,5 @@ assessment and the diff, and each verifier opens them itself. Report the empty c
 - [ ] 3. Both fan-outs dispatched in ONE block — one verifier per selected threat, one per selected rule; each pointed at `## Org rules` in the SAME file; justification FIRST in every return
 - [ ] 4. Each threat's Robustness concluded — justification weighed BEFORE the level; a level stands only when its evidence carries it; the conclusion is YOURS; recorded on the threat and nowhere else
 - [ ] 5. Each selected rule's Adherence concluded — justification weighed BEFORE the verdict; `followed` stands only when its evidence carries it; NOT read off a threat's Robustness or off whether any guidance drives it
-- [ ] 6. Each SELECTED threat's `#### test` block filled — justification FIRST, then `Robustness`, `Residual path`, `Evidence`; the three blocks above it untouched; an excluded threat's left EMPTY, no `—` in it; one `## Rule adherence` entry per SELECTED rule; `Latest stage: testing` — YOU write, the verifiers only return; NOTHING written into `## Implementation guidance` or `## Org rules`; then three-checked against the field cards; then `ingrain record verification --assessment` (best-effort, AFTER the write)
+- [ ] 6. Each SELECTED threat's `#### test` block filled — justification FIRST, then `Robustness`, `Residual path`, `Evidence`; the three blocks above it untouched; an excluded threat's left EMPTY as found; one `## Rule adherence` entry per SELECTED rule; `Latest stage: testing` — YOU write, the verifiers only return; NOTHING written into `## Implementation guidance` or `## Org rules`; then three-checked against the field cards; then `ingrain record verification --assessment` (best-effort, AFTER the write)
 - [ ] 7. Reported to the coding agent — one table per driver axis and none for guidance; `weak` threats named with their residual path, `not-followed` rules named with their reason; the coding agent owns the code changes

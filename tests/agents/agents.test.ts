@@ -12,19 +12,23 @@
 
 import { assertEquals } from "@std/assert";
 import {
+  assertBlockCarriedAcross,
   assertContainsAll,
   assertContainsAny,
   assertHasScore0to100,
+  assertOnlyBlockFilled,
   assertRiskDescendsByTag,
+  threatEntries,
 } from "../lib/matchers.ts";
 import { AGENT_TIMEOUT_MS, mintAssessment, workerDispatchPrompt } from "../lib/claudeRunner.ts";
 import type { RunResult } from "../lib/types.ts";
 import { runChecked } from "../lib/reporter.ts";
 import {
+  FROZEN_THREATS_BLOCKED,
   MAJOR_PLAN,
   RETRIEVED_RULES,
   SELECTED_THREATS,
-  TASK_AND_FROZEN_THREATS,
+  TASK_AND_THREATS_ON_DISK,
   TASK_AND_WEAK_MODEL,
   THREAT_AND_GUIDANCE,
 } from "../lib/sampleInputs.ts";
@@ -47,6 +51,22 @@ interface AgentCase {
   timeoutMs: number;
   /** Shape assertions on the worker's response. */
   check: (r: RunResult) => void;
+  /**
+   * Optional: write into the minted skeleton before the dispatch.
+   *
+   * Some workers do not receive their input as prose — the risk scorer reads `## Threats`
+   * off disk, and its carry-across rule is only reachable if there are blocks on disk to
+   * carry. Seeding the file is what makes that case testable at all.
+   */
+  seedFile?: (assessmentAbs: string) => Promise<void>;
+  /**
+   * Optional: assertions over the file **as written**, rather than over the added lines.
+   *
+   * `check` reads the worker's return plus the lines it added, which is right for shape
+   * assertions on content. Block structure is a property of the whole entry — markers the
+   * worker seeded and blocks it deliberately left alone — so it needs the file itself.
+   */
+  checkFile?: (written: string) => void;
 }
 
 /**
@@ -72,9 +92,21 @@ const CASES: AgentCase[] = [
     input: MAJOR_PLAN,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {
-      assertContainsAny(r.text, [/\bT1\b/], "expected at least a 'T1' threat tag");
+      // `T01`, zero-padded, per the schema — this asserted `\bT1\b` and so contradicted the
+      // very shape the card mandates. A compliant worker failed it; the assertion was
+      // measuring the wrong thing rather than the model doing the wrong thing.
+      assertContainsAny(r.text, [/\bT01\b/], "expected a zero-padded 'T01' threat tag");
       assertEquals(r.text.trim().length > 100, true, "expected a non-trivial threat list");
     },
+    // The producer-side half of the block model, and the only place it is reachable: whether
+    // a live worker reading its reference file actually seeds all four markers and writes
+    // into `#### gen` alone. Every other block assertion in this repo is static prose
+    // checking, which cannot see what a model does with the prose.
+    //
+    // A worker that fills the other three with `—` fails here — that is the exact behaviour
+    // the dispatch prompt used to instruct, and the reason it was reworded.
+    checkFile: (written) =>
+      assertOnlyBlockFilled(written, "gen", "the generator seeds four markers and fills gen"),
   },
   {
     // ingrain-risk-scorer (sonnet): scores each threat likelihood x impact (0-100), with
@@ -83,12 +115,41 @@ const CASES: AgentCase[] = [
     // leaves them alone fails the ordering assertion.
     worker: "ingrain-risk-scorer",
     label: "ingrain-risk-scorer :: frozen threats",
-    input: TASK_AND_FROZEN_THREATS,
+    input: TASK_AND_THREATS_ON_DISK,
     timeoutMs: AGENT_TIMEOUT_MS,
     check: (r) => {
       assertContainsAll(r.text, [/likelihood/i, /impact/i], "expected likelihood & impact labels");
       assertContainsAny(r.text, [/\b(low|medium|high|critical)\b/i], "expected a criticality band");
       assertRiskDescendsByTag(r.text, "expected the threats re-tagged into risk order");
+    },
+    // The scorer reads `## Threats` off disk, so seeding it is what makes the real dispatch
+    // shape testable — and it is the only way to put blocks in front of the one worker whose
+    // contract is to rewrite entries WHOLE.
+    seedFile: async (assessmentAbs) => {
+      const seeded = await Deno.readTextFile(assessmentAbs);
+      await Deno.writeTextFile(
+        assessmentAbs,
+        seeded.replace("## Threats", FROZEN_THREATS_BLOCKED.replace(/^## Threats\n/, "## Threats")),
+      );
+    },
+    // R-C, the one exception to "write only inside your own block": re-tagging moves entries,
+    // so the scorer rewrites them whole and must carry every other block across verbatim. The
+    // failure it guards is silent and expensive — a re-assessment that flattens `#### test`
+    // erases a prior pass's verdict, and the entry then reads as never verified.
+    checkFile: (written) => {
+      // Membership first. The scorer reorders and re-tags; it never adds or drops. Asserted
+      // explicitly because the first live run of this case DID drop one — the entry whose
+      // `#### usergate` already carried `Selection: excluded`, which the scorer appears to
+      // have read as a filter rather than as context travelling with the entry. Its
+      // reference now says so outright; this is what holds that shut.
+      assertEquals(
+        threatEntries(written).length,
+        2,
+        "the scorer must return exactly the frozen set — it reorders, never adds or drops",
+      );
+      assertBlockCarriedAcross(written, "usergate", "Selection: excluded", "prior gate decision");
+      assertBlockCarriedAcross(written, "test", "Robustness: adequate", "prior verdict");
+      assertBlockCarriedAcross(written, "test", "services/auth/signup.ts:31", "prior evidence");
     },
   },
   {
@@ -149,6 +210,7 @@ for (const c of CASES) {
     const projectDir = await Deno.makeTempDir();
     try {
       const { assessmentAbs } = await mintAssessment(projectDir, c.label);
+      await c.seedFile?.(assessmentAbs);
       const seeded = await Deno.readTextFile(assessmentAbs);
       const prompt = await workerDispatchPrompt(c.worker, c.input, assessmentAbs);
 
@@ -177,6 +239,9 @@ for (const c of CASES) {
           // 0–100 score came free the same way. Subtracting the skeleton leaves the worker's
           // own lines, which is what these assertions were always meant to read.
           c.check({ ...r, text: `${r.text}\n${addedLines(written, seeded)}` });
+          // Block structure is a property of the whole entry, so it reads the file rather
+          // than the added lines — a marker the worker deliberately left empty adds no line.
+          c.checkFile?.(written);
         },
       );
     } finally {

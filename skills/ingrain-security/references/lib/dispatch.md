@@ -58,9 +58,15 @@ this plugin's read-only scripts and the `ingrain` CLI, and never edits the asses
 
 Every field is its own line, but **a write is one call**. A worker writes its whole section in a
 single Write or Edit, and a stage filling fields into entries that already exist makes **one Edit
-per entry** — replacing that entry's contiguous block of field lines, never one Edit per field. A
-block Edit shows the same before/after a per-line one would, so the reviewable change costs one
-call rather than one per line.
+per entry** — replacing the run between its own phase marker and the next, never one Edit per
+field. A block Edit shows the same before/after a per-line one would, so the reviewable change
+costs one call rather than one per line.
+
+An entry's field lines are **not** one contiguous run: `## Threats` entries are divided into
+`#### ` phase blocks, one per writing stage, and replacing first-field-to-last would swallow the
+markers between them. The `ingrain-risk-scorer` is the single exception to writing inside one
+block — re-tagging reorders entries, so it rewrites them whole and carries every block it does
+not own across verbatim; its own reference states that, and this file does not restate it.
 
 **The file tells you its own shape.** The mint seeds a **field card** under every section, and that
 card is the write contract — write from it. `references/lib/assessment-file.md` is for what

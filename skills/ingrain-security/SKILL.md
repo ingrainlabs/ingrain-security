@@ -193,7 +193,14 @@ and nothing else:
 
 1. every field label present, in the order the card lists;
 2. every enumerated value one of the words the card names, verbatim;
-3. every field whose stage has not run yet still `—`.
+3. every field your stage owns written, and every other phase block left exactly as you
+   found it.
+
+**An empty block is a finished state.** Where an entry is divided into `#### ` phase blocks, a
+block with no field lines under it means the stage that owns it has not run — leave it as it
+stands. That emptiness is what lets a later reader tell "not yet judged" from "judged, nothing
+to say". Inside a block whose stage **has** run, `—` keeps its ordinary meaning: a field that
+does not apply.
 
 **An `## Org rules` entry has a different shape, so it gets the check that fits it.** It is a
 heading, one field and a free-text body, so check 1 has almost nothing to read. Check instead:

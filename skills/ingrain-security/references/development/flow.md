@@ -34,10 +34,14 @@ path, with plugin_root from the mint JSON pasted in full — and follow it as yo
 Your ONE permitted write is your own section of the stored analysis file for this run at
 <the minted assessment_abs — the ABSOLUTE path, pasted in full> (section: <## Section for this worker>),
 written to the field card that file already carries under your section: one field per line,
-in the order it lists, with its exact values; a field your stage does not own reads —.
+in the order it lists, with its exact values. Write ONLY the fields your own phase block
+owns, and leave every other block exactly as you found it — markers included, and an empty
+one still empty: that emptiness is how the stage owning it is known not to have run yet.
 Write that section in ONE call — a single Write or Edit carrying every entry. Where you are
-filling fields into entries that already exist, it is one Edit per ENTRY, replacing that
-entry's contiguous block of field lines; never one Edit per field.
+filling fields into entries that already exist, it is one Edit per ENTRY, replacing the run
+between your own marker and the next; never one Edit per field. (The risk scorer is the
+one exception — its reference tells it to rewrite entries whole, because re-tagging moves
+them — and it carries every block it does not own across verbatim.)
 The card is the write contract — read
 <plugin_root>/skills/ingrain-security/references/lib/assessment-file.md
 only if you need what a field MEANS.
@@ -426,8 +430,10 @@ Clearing it restores the section to the state Testing expects to write into. Not
 platform holds the prior verdicts against the revision they judged.
 
 **Run the three-check over the finished file** on the read this step already requires. Here it is
-strict: a field left `—` whose stage *has* run is itself a defect, where mid-run it was the
-expected state. Everything downstream has this file and nothing else.
+strict: a field left `—` inside a block whose stage *has* run is itself a defect. A block
+belonging to a **later** stage is expected to be empty and must stay that way — at this point
+every threat's `#### test` block is empty, and that is the correct finished state, not something
+to fill in. Everything downstream has this file and nothing else.
 
 **Then sync it — best-effort.** Once the file is written, run
 `ingrain record design --assessment "<assessment_abs>"` so the team sees the analysis. **After**

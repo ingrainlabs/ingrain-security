@@ -211,7 +211,7 @@ mechanism does not reach it; its three writers touch named, disjoint fields.)
 
 **An empty block is a stage that has not run — and that is a state, not a defect.** An
 unrun stage leaves its marker with **no field lines under it at all**; the emptiness *is*
-the signal, which is why a block is never seeded with `—` placeholders. Inside a block
+the signal, so an unrun block stays a bare marker. Inside a block
 whose stage **has** run, `—` keeps its ordinary meaning: a field that does not apply, such
 as `Residual path` on a non-`weak` verdict or an `Evidence` nobody cited.
 
@@ -393,8 +393,8 @@ deliberate-decision records live at the two driver gates.
 **Robustness justification**, **Robustness**, **Residual path**, **Evidence** — from its
 negative testing, and writes every `## Rule adherence` entry from its rule-adherence pass. A
 threat outside the `selected` set keeps an empty `#### test` block. Writing them, alongside
-setting `## Task` → `Latest stage: testing`,
-is what marks the assessment checked; the plan review leaves them at `—` for Testing to fill.
+setting `## Task` → `Latest stage: testing`, is what marks the assessment checked; the plan
+review leaves the `#### test` block **empty** for Testing to fill.
 **Nothing in this section is among them** — the vessel has no verdict to write.
 
 ### `## Rule adherence` — one `###` entry per **selected** org rule

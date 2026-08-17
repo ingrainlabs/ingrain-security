@@ -129,8 +129,9 @@ time. Leave the CLI unconfigured and the review runs wholly on your machine.
 
 ## How it works
 
-The full spec lives in [`skills/ingrain-security/SKILL.md`](skills/ingrain-security/SKILL.md);
-the short version:
+The short version — the internals are in
+[`docs/technical-docs.md`](docs/technical-docs.md), and the spec the agent follows is
+[`skills/ingrain-security/SKILL.md`](skills/ingrain-security/SKILL.md):
 
 - **You decide whether it runs.** The review opens with one question — *run a security review
   for this change?* — recommending yes whenever the change plausibly touches a security surface,
@@ -154,12 +155,8 @@ the short version:
   `## Org rules` section; the gate records your decision per rule; finalize keeps the selected
   rules' bodies (Testing reads them as the specification) and reduces the excluded to a
   decision-only stub. One artifact carries the whole analysis.
-- **Worker roles.** The orchestrator dispatches six worker roles as fresh
-  subagents — `ingrain-threat-generator`,
-  `ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-rule-critic`,
-  `ingrain-guidance-generator`, `ingrain-guidance-critic` (defined under
-  [`skills/ingrain-security/references/development/`](skills/ingrain-security/references/development/)).
-  Each worker's sole write is its own section of the assessment file.
+- **Each step is its own agent.** The review runs as a chain of focused subagents rather than one
+  pass, so each starts with clean context and writes only its own part of the assessment.
 - **Then the code gets checked against both axes.** Once the work is implemented, the
   **Testing** phase judges each selected threat for robustness and each selected rule for
   adherence — see [Verifying the implementation](#verifying-the-implementation) below.
@@ -235,64 +232,36 @@ uncommitted.
   guidance I just implemented."* Naming the phase selects it outright, which makes this the
   reliable route; otherwise the skill routes on the repo state above.
 
-It judges **both driver axes**: for each selected threat, whether it can still be realized —
-**negative testing**; and for each selected rule, whether the control it prescribes is present.
-The two gates define the scope. It locates the task's assessment file, reviews the **branch diff
-since this branch diverged from its parent** (committed and uncommitted alike), and dispatches
-one read-only `ingrain-threat-verifier` per selected threat and one `ingrain-rule-verifier` per
-selected rule — each reading what it needs from that one assessment file. A threat selected at
-the gate with no guidance written for it is tested too, and so is a selected rule nothing
-implements.
+It judges **both axes**: for each selected threat, whether it can still be realized — **negative
+testing**; and for each selected rule, whether the control it prescribes is present. Your gate
+decisions define the scope, and it reads the **branch diff since this branch diverged from its
+parent**, committed and uncommitted alike. A threat you selected with no guidance written for it
+is tested too, and so is a selected rule nothing implements.
 
-Each verifier justifies before it concludes, and the skill **weighs that justification on its
-evidence** rather than taking the level word at face value: a level stands when the cited
-`file:line` carries it, and the level recorded is the orchestrator's own conclusion.
+It reports each threat's robustness — `weak` (the threat can still be realized), `adequate` (its
+realization routes are closed), or `strong` (closed broadly *and* backed by artefacts such as
+adversarial tests) — with evidence and, for `weak`, the concrete residual path by which the
+attack still gets through. **Reachability is the bar:** a control built exactly to the wording of
+its guidance still reads `weak` while its threat remains reachable.
 
-It reports each threat's robustness — `weak` (the threat can still be realized), `adequate`
-(its realization routes are closed), or `strong` (closed broadly *and* backed by artefacts such
-as adversarial tests) — with evidence and, for `weak`, the concrete residual path by which the
-attack still gets through. Reachability is the bar: a control built exactly to the wording of its
-Description still reads `weak` while its threat remains reachable. The levels define what was
-tested, and judging robustness is the analyzing agent's call. It marks the assessment checked by
-recording each threat's **Robustness**, the **Robustness justification** behind it, the
-**Residual path** for a `weak` verdict and any **Evidence**, and advancing the file's stage to
-`testing`.
-
-**Guidance is the vessel** through which a threat gets closed and a rule gets implemented, so its
-efficacy is read off the drivers beside it: the threat's robustness and the rule's adherence
-carry the verdicts. Keeping the verdict on the drivers is what lets one entry serve both axes at
-once and still mean one thing.
-
-Testing reports, and the coding agent implements. Each verifier reads the org rules from the
-assessment's own `## Org rules` section. Once the verdicts are written, the CLI can sync them —
-see [Syncing to the platform](#syncing-to-the-platform).
+Testing reports, and the coding agent implements. Once the verdicts are written, the CLI can
+sync them — see [Syncing to the platform](#syncing-to-the-platform).
 
 ### Were the org rules followed?
 
-Testing runs a second, independent pass over the **org security rules you selected at the rule
-gate**, and records `followed` | `not-followed` per rule in a `## Rule adherence` section of the
-assessment. It answers a question of its own: *were the rules we set actually followed?* A
-dedicated read-only `ingrain-rule-verifier` judges each rule against the code as built.
+Testing runs a second pass over the org rules you selected at the rule gate, recording
+`followed` | `not-followed` per rule with its reasoning. It answers a question of its own:
+*were the rules we set actually followed?*
 
-**Each dimension is judged against the code in its own right.** A rule can be followed while a
-threat stays reachable — the rule governed input validation and the surviving route is an
-authorisation gap — and violated while every threat is closed, because they were closed by other
-means. Judging each on its own evidence is what keeps both answers trustworthy.
-
-Three things the record holds:
-
-- **Scope is your decision.** Only rules you **selected** at the rule gate are judged — including
-  one no guidance ends up implementing, because you put it in scope and "not-followed — nothing
-  implements it" is exactly what a security owner needs to see. A rule you **excluded** was deemed
-  inapplicable, and the record keeps it as that decision.
-- **One verdict per rule, judged against the code** — the question is always whether the control
-  the rule prescribes exists.
-- **The verdict tracks the code.** A rule satisfied by other means reads `followed` even where the
-  guidance that would have implemented it was dropped during refinement; an absent control is the
+- **Scope is your decision.** Only rules you **selected** are judged — including one no guidance
+  ends up implementing, since "not-followed — nothing implements it" is exactly what a security
+  owner needs to see. A rule you **excluded** is kept as that decision rather than judged.
+- **The verdict tracks the code.** A rule satisfied by other means reads `followed` even where
+  the guidance that would have implemented it was dropped along the way; an absent control is the
   usual reason a rule reads `not-followed`.
 
-A rule that drives guidance covering no threat is ordinary and fully in scope — a standing
-requirement is a driver in its own right.
+The two answers are independent and can differ: a rule can be followed while a threat stays
+reachable, and violated while every threat is closed.
 
 ## The assessment file
 
@@ -303,28 +272,10 @@ requirement is a driver in its own right.
   git-ignored by default (share one with `git add -f <file>`).
 - The selected findings, **folded into the work in hand**.
 
-The assessment declares its own format under `## Task` as **`Schema version: 2`**, so a consumer
-branches on a stated version rather than sniffing structure. Bump the version whenever a field is
-added, removed, or given new allowed values, and record the plugin release that introduced it in
-the table below, so "artifacts at version ≥ 2" stays checkable.
-
-| Schema version | First plugin release | What it introduced |
-| --- | --- | --- |
-| 1 | ≤ 0.2.5 | the heading-per-entry layout that replaced the original tables; predates the `Schema version` line, so a consumer reads its absence as version 1 |
-| 2 | *(set by the release that merges this change)* | **The two driver axes and the vessel between them.** `Description` and `Schema version` under `## Task`; `## Affected paths`; `## Org rules` carrying each retrieved rule's gate decision and verbatim body (the sidecar is gone); `## Implementation guidance` — renamed from `## Mitigations`, carrying no verdict and no Selection, every entry naming **at least one driver**; the three threat verification fields (`Robustness justification`, `Residual path`, `Evidence`); `## Rule adherence`; org rule ids written **in full, verbatim** — an id is an exact-match key; and **phase blocks** (`#### gen` / `#### score` / `#### usergate` / `#### test`) declaring stage ownership inside each `## Threats` entry |
-
-**Version 2 was redefined rather than superseded**, which is worth stating once: no released
-plugin has ever emitted a `Schema version` line at all — version 1 is the *absence* of one — so
-there is no version-2 artifact anywhere for this shape to break. Bumping to 3 would have implied
-an earlier v2 that consumers must still handle, and none exists.
-
-**Phase blocks are tolerated in both directions**, so version 2 does not pin a layout. An entry
-may group its fields under markers or run them flat; both parse to the same fields, and a
-consumer reads a marker-less entry's verification fields exactly where they have always been.
-That is what lets this plugin and the `ingrain` CLI move independently.
-
-The version number is filled in by the release flow, which bumps it from the PR's `release:*`
-label — see [`.github/RELEASING.md`](.github/RELEASING.md).
+It is plain markdown and yours to read or edit — the record of what was found and what you
+decided. It states its own format under `## Task` as `Schema version`, so tools reading it can
+tell which shape they have; the schema and its history are in the
+[technical docs](docs/technical-docs.md#schema-versioning).
 
 Writes to that one file are approved automatically — by a `PreToolUse` hook on Claude
 Code and a `PermissionRequest` hook on Codex — so the review writes as it works. The grant is

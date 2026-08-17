@@ -1064,12 +1064,21 @@ Deno.test("phase blocks: each writer names the block it fills, and the seeding r
     assertStringIncludes(flatten(generator), "fill only `#### gen`");
   });
 
-  await t.step("no stage seeds `—` into a block it does not own", () => {
-    // The load-bearing rule. An empty block IS the signal that its stage has not run, so
-    // a placeholder makes an unrun stage indistinguishable from one that ran and had
-    // nothing to say — which is how a half-finished review starts reading as complete.
-    assertStringIncludes(flatten(generator), "no `—` placeholders");
-    assertStringIncludes(flatten(verification), "no `—` placeholders in it");
+  await t.step("an unrun block is described as a state to leave, not an error to avoid", () => {
+    // The load-bearing rule, stated as the ACTION rather than the failure. An empty block
+    // is the signal that its stage has not run; a placeholder would make an unrun stage
+    // indistinguishable from one that ran and had nothing to say, which is how a
+    // half-finished review starts reading as complete.
+    //
+    // Pinned in the positive because the skill's files are prompts: an instruction that
+    // spells out the wrong behaviour puts that behaviour in front of the model, where one
+    // naming only the right behaviour does not. The negative phrasing these replaced —
+    // "no `—` placeholders" — is what the wording rule exists to keep out.
+    assertStringIncludes(
+      flatten(generator),
+      "Leave the three blocks you do not own as bare markers",
+    );
+    assertStringIncludes(flatten(verification), "exactly as Development left it");
   });
 
   await t.step("the scorer is told to carry the blocks it does not own across whole", () => {
@@ -1085,4 +1094,149 @@ Deno.test("phase blocks: each writer names the block it fills, and the seeding r
     const sh = await Deno.readTextFile(TEMPLATE_LIB);
     assertStringIncludes(sh, "Missing marker? Append your fields at the end of the entry.");
   });
+});
+
+/**
+ * **Absence assertions.** Every other static in this file checks that the CORRECT string is
+ * present, which is structurally incapable of noticing a sentence elsewhere saying the
+ * opposite — and that is exactly how the flat-model rule survived the phase-block change in
+ * three high-authority places while all 101 tests stayed green. These pin the inverse.
+ *
+ * Each walks the whole tree and asserts a cardinality FIRST: a glob that stops matching would
+ * otherwise turn every assertion below it into a tautology.
+ */
+const skillFiles = async (): Promise<Array<{ path: string; text: string }>> => {
+  const files: Array<{ path: string; text: string }> = [];
+  for await (const entry of walk(`${ROOT}skills/ingrain-security`, { exts: [".md", ".sh"] })) {
+    if (entry.isFile) files.push({ path: entry.path, text: await Deno.readTextFile(entry.path) });
+  }
+  return files;
+};
+
+const assertNowhere = (
+  files: Array<{ path: string; text: string }>,
+  pattern: RegExp,
+  why: string,
+): void => {
+  const hits = files.filter((file) => pattern.test(file.text)).map((file) => file.path);
+  assertEquals(hits, [], `${why}\nmatched ${pattern} in:\n${hits.join("\n")}`);
+};
+
+Deno.test("absence: no file tells a writer to seed `—` into a block it does not own", async () => {
+  const files = await skillFiles();
+  // Cardinality first — see the block comment above.
+  assertEquals(files.length > 10, true, `only ${files.length} skill files found; fix the walk`);
+
+  // An empty block IS the signal that its stage has not run. A writer that fills every field
+  // it does not own with `—` destroys that distinction for the whole run, at the earliest
+  // possible moment — and nothing downstream can then tell a half-run review from a finished
+  // one. `—` inside a block whose stage HAS run keeps its ordinary "not applicable" meaning,
+  // which is why these patterns are scoped to the not-my-block case rather than banning it.
+  assertNowhere(
+    files,
+    /does not own reads\s+—/,
+    "the dispatch prompt must not tell every worker to seed `—` into other stages' blocks",
+  );
+  assertNowhere(
+    files,
+    /whose stage has not run yet still\s+`?—/,
+    "the three-check must not ask for `—` where an EMPTY block is the correct state",
+  );
+});
+
+Deno.test("absence: `Robustness: —` is never named as a sanctioned state", async () => {
+  const files = await skillFiles();
+  assertEquals(files.length > 10, true, `only ${files.length} skill files found; fix the walk`);
+
+  // The single placeholder that makes an unverified selected threat indistinguishable from a
+  // verified one with nothing to say — written into the one block whose emptiness is the only
+  // remaining signal. An interrupted pass leaves the block empty instead.
+  assertNowhere(
+    files,
+    /still at `?Robustness:\s*—/,
+    "an interrupted Testing pass leaves `#### test` EMPTY, never `Robustness: —`",
+  );
+});
+
+Deno.test("absence: no file calls an entry's field lines contiguous", async () => {
+  const files = await skillFiles();
+  assertEquals(files.length > 10, true, `only ${files.length} skill files found; fix the walk`);
+
+  // Under phase blocks an entry's field lines are four runs separated by markers. A stage
+  // replacing "first field line to last" swallows the markers between them — and the risk
+  // scorer obeying "one Edit per entry, in place" cannot reorder entries at all, so the
+  // risk re-tag silently never happens and the threat gate then presents threats in the
+  // wrong priority order.
+  assertNowhere(
+    files,
+    /contiguous block of field lines/,
+    "a stage replaces the run between its own marker and the next, not a contiguous block",
+  );
+});
+
+Deno.test("the three-check's item 3 is stated in blocks, in both copies", async () => {
+  // SKILL.md carries the phase-neutral rule and `verification-pass.md` its Testing-specific
+  // instance, so these are deliberately NOT byte-identical — what must hold is that neither
+  // states the flat-model version, and that the shared copy names the mechanism.
+  const skill = await Deno.readTextFile(SKILL);
+  const verification = await Deno.readTextFile(
+    `${ROOT}skills/ingrain-security/references/testing/verification-pass.md`,
+  );
+
+  // Pinned in the positive: the skill's files are prompts, so item 3 names the action a
+  // stage takes rather than the mistake it might make.
+  assertStringIncludes(
+    flatten(skill),
+    "every field your stage owns written, and every other phase block left exactly as you found it",
+  );
+  assertStringIncludes(flatten(skill), "An empty block is a finished state");
+  assertStringIncludes(verification, "no selected subject left");
+});
+
+Deno.test("the finalize gloss expects a later stage's block to be empty", async () => {
+  const flow = flatten(await Deno.readTextFile(DEV_FLOW));
+
+  // Finalize is the strict pass, so a gloss saying `—` "was the expected state mid-run"
+  // invites the orchestrator to normalise before checking — seeding `—` into every
+  // `#### test` block in the LAST write before the design sync, which is what the platform
+  // then stores and what the next Testing session inherits.
+  assertEquals(
+    /mid-run it was the expected state/.test(flow),
+    false,
+    "the finalize gloss still describes the flat model's mid-run state",
+  );
+  assertStringIncludes(flow, "belonging to a **later** stage is expected to be empty");
+});
+
+Deno.test("every worker shown a threat entry is shown its phase markers", async () => {
+  // The critic is dispatched with `## Threats` and reports on what it finds. Shown a flat
+  // example as "the shape the generator produces", it can report the markers as noise — and
+  // the generator, which gets exactly ONE revision round and is told to account for every
+  // critique item, can strip them at the moment the list freezes.
+  for (
+    const name of [
+      "ingrain-threat-generator",
+      "ingrain-risk-scorer",
+      "ingrain-threat-critic",
+    ]
+  ) {
+    const md = await Deno.readTextFile(
+      `${ROOT}skills/ingrain-security/references/development/${name}.md`,
+    );
+    const examples = [...md.matchAll(/```[a-z]*\n([\s\S]*?)```/g)]
+      .map((fence) => fence[1])
+      .filter((body) => body.includes("Asset:"));
+    assertEquals(
+      examples.length > 0,
+      true,
+      `${name}.md shows no threat-entry example — re-aim this test if that is deliberate`,
+    );
+    for (const example of examples) {
+      assertStringIncludes(
+        example,
+        "#### gen",
+        `${name}.md shows a threat entry with no phase markers`,
+      );
+    }
+  }
 });

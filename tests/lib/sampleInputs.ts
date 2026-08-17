@@ -93,3 +93,67 @@ Selection: —
 CI build artifacts are kept for 90 days so a release can be reproduced from the exact
 bytes that shipped.
 `;
+
+/**
+ * A frozen threat list **as the artifact actually holds it** — block-bearing, and carrying a
+ * prior pass's `#### usergate` and `#### test` content.
+ *
+ * The prose `FROZEN_THREATS` above is what a scorer case fed the model directly; the real
+ * scorer reads `## Threats` off disk, and its one hard rule is that re-tagging must move
+ * entries **without** disturbing the blocks it does not own. That rule is only reachable if
+ * the blocks are there to disturb, which is what this fixture supplies.
+ *
+ * Ids are deliberately out of risk order — the plaintext-storage threat outranks the
+ * session-fixation one — so a scorer that leaves the tags alone fails the ordering assertion.
+ */
+export const FROZEN_THREATS_BLOCKED = `## Threats
+
+### T01 — Session fixation via a pre-set cookie
+
+#### gen
+Asset: the session cookie
+Vector: an attacker pre-sets a session id the victim then authenticates into
+Description: The cookie is not regenerated at login.
+Assumptions: The attacker can set a cookie on a shared subdomain.
+
+#### score
+
+#### usergate
+Selection: excluded
+
+#### test
+
+### T02 — Plaintext password storage
+
+#### gen
+Asset: the users table
+Vector: a database read exposes every credential at once
+Description: Passwords are stored without hashing.
+Assumptions: The table is reachable from any read-only breach.
+
+#### score
+
+#### usergate
+Selection: selected
+
+#### test
+Robustness justification: Carried across from the previous pass — argon2id at signup.
+Robustness: adequate
+Residual path: —
+Evidence: services/auth/signup.ts:31
+`;
+
+/**
+ * The scorer's real dispatch shape: the task, plus a pointer to the frozen list **on disk**.
+ *
+ * `TASK_AND_FROZEN_THREATS` pastes a prose list into the INPUT, which is not how this worker
+ * is dispatched — its hand-off contract reads `## Threats` from the assessment file. Pairing
+ * that prose list with a seeded file also put two different threat sets in front of the model
+ * at once, and it said so: it scored the file per its contract and reported the mismatch as a
+ * premature freeze. Correct behaviour, contradictory fixture.
+ */
+export const TASK_AND_THREATS_ON_DISK = `Task:\n${MAJOR_PLAN}
+
+The frozen threat list is already in the assessment file's \`## Threats\` section — read it
+there and score it in place.
+`;

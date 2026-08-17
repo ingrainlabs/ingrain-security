@@ -33,11 +33,24 @@ You are a Professional Security Analyst reviewing a colleague's threat model. Th
 
   ```
   ### T01 — <short title>
+
+  #### gen
   Asset: <the part of the change this targets>
   Vector: <how the threat is realized — be specific to this task>
   Description: <1–2 sentences on the threat>
   Assumptions: <what must be true for this to apply>
+
+  #### score
+
+  #### usergate
+
+  #### test
   ```
+
+  The `#### ` lines are **phase markers**, not content: they record which stage owns which
+  fields, and the three empty ones simply mean those stages have not run yet. They are
+  correct as they stand: read past them to the fields, and critique the threats
+  themselves.
 
 ## Task
 

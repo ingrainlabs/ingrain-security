@@ -205,3 +205,95 @@ export const assertChecklistTracksFlow = (
     );
   }
 };
+
+// ── Phase blocks ────────────────────────────────────────────────────────────
+//
+// The producer half of the block model, which no offline check can reach: whether a live
+// worker, reading its reference file, actually seeds the markers and writes inside its own.
+// Everything else about blocks is asserted statically over prose; these read the artifact a
+// model produced.
+
+/** Each `### T<n> — …` entry in a written assessment, body included. */
+export const threatEntries = (written: string): string[] => {
+  const section = written.slice(written.indexOf("## Threats"));
+  const bounded = section.slice(0, section.search(/\n## (?!Threats)/) + 1 || undefined);
+  return bounded.split(/\n(?=### )/).filter((chunk) => /^### T\d+/.test(chunk.trim()));
+};
+
+/** One entry's `#### <name>` regions, in document order. */
+export const phaseBlocksOf = (entry: string): Array<{ name: string; body: string }> =>
+  entry.split(/\n(?=#### )/)
+    .filter((chunk) => chunk.trim().startsWith("#### "))
+    .map((chunk) => {
+      const [head, ...rest] = chunk.split("\n");
+      return { name: head.replace("#### ", "").trim(), body: rest.join("\n") };
+    });
+
+/** True when a block's body holds at least one `Key: value` line — an em-dash reads as
+ *  unwritten, exactly as the parser treats it, so a block of dashes is still empty. */
+const isFilled = (body: string): boolean =>
+  body.split("\n").some((line) => /^[A-Z][A-Za-z ]*:\s*\S/.test(line) && !/:\s*—\s*$/.test(line));
+
+/**
+ * Every threat entry carries all four markers in order, and **only** `filled` holds fields.
+ *
+ * This is the assertion the whole P1 prose pass exists to earn: a worker that seeds `—` into
+ * blocks it does not own destroys the empty-block signal at the earliest possible moment, and
+ * nothing downstream can then tell a half-run review from a finished one.
+ */
+export const assertOnlyBlockFilled = (written: string, filled: string, msg?: string): void => {
+  const entries = threatEntries(written);
+  // Cardinality first: zero entries would satisfy every per-entry assertion below.
+  if (entries.length === 0) {
+    throw new AssertionError(
+      `${msg ?? "phase blocks"}: no \`### T<n>\` entries were written\n--- file ---\n${
+        snippet(written, 1200)
+      }`,
+    );
+  }
+  for (const entry of entries) {
+    const blocks = phaseBlocksOf(entry);
+    const names = blocks.map((block) => block.name);
+    if (names.join(",") !== "gen,score,usergate,test") {
+      throw new AssertionError(
+        `${msg ?? "phase blocks"}: expected markers gen,score,usergate,test — got [${
+          names.join(", ")
+        }]\n--- entry ---\n${snippet(entry)}`,
+      );
+    }
+    for (const block of blocks) {
+      const shouldBeFilled = block.name === filled;
+      if (isFilled(block.body) !== shouldBeFilled) {
+        throw new AssertionError(
+          `${msg ?? "phase blocks"}: \`#### ${block.name}\` should be ${
+            shouldBeFilled ? "filled" : "empty"
+          }\n--- entry ---\n${snippet(entry)}`,
+        );
+      }
+    }
+  }
+};
+
+/** A line the worker was told to carry across untouched survives verbatim, in the block
+ *  that owned it. The risk scorer is the one writer that rewrites whole entries, so this
+ *  is what stands between a re-tag and a wiped prior verdict. */
+export const assertBlockCarriedAcross = (
+  written: string,
+  block: string,
+  line: string,
+  msg?: string,
+): void => {
+  const owning = threatEntries(written)
+    .flatMap(phaseBlocksOf)
+    .filter((candidate) => candidate.name === block);
+  if (owning.length === 0) {
+    throw new AssertionError(`${msg ?? "carry-across"}: no \`#### ${block}\` block survived`);
+  }
+  if (!owning.some((candidate) => candidate.body.includes(line))) {
+    throw new AssertionError(
+      `${msg ?? "carry-across"}: "${line}" is not in any \`#### ${block}\` block\n--- blocks ---\n${
+        owning.map((candidate) => candidate.body).join("\n---\n")
+      }`,
+    );
+  }
+};

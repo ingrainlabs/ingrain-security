@@ -75,6 +75,12 @@ Your scores also fix the **order** everything downstream reads the threats in: o
 
 Score every threat in the frozen set, and only those — the membership is settled, even though you reorder and re-tag it below.
 
+**Every entry in `## Threats` is in the set, including one whose `#### usergate` block already
+records a `Selection`.** On a re-assessment those blocks arrive carrying a prior pass's
+decisions; they are context travelling with the entry, not a filter on what you score. Your
+output holds exactly as many entries as your input did — score each of them, and let the
+threat gate decide membership afterwards, which is its job and not yours.
+
 For each threat (by id), reason before you score:
 - Write a one-line **justification** first — how probable and how damaging this threat is for *this* change. This reasoning drives the scores below.
 - Then, consistent with that reasoning, rate **likelihood** — how probable it is to be realized for this change.
