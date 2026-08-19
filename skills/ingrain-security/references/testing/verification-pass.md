@@ -333,7 +333,7 @@ INPUT:
   route — an unprotected path, a bypass, a partial application. Judge THE THREAT, not the
   guidance: closure is only as strong as the routes actually closed, so guidance implemented
   exactly as described that still leaves the threat reachable is weak.
-Return ONLY, in this order: JUSTIFICATION (≤256 chars — your reasoning about whether the threat
+Return ONLY, in this order: JUSTIFICATION (a sentence or two — your reasoning about whether the threat
 is still reachable), then LEVEL (weak | adequate | strong) for <t-id>, then EVIDENCE (file:line
 ANYWHERE in the tree — the delta is where you start, not where you stop; an untouched guard or a
 surviving path counts), and — when the level is `weak` — the RESIDUAL PATH (the concrete route by which
@@ -389,7 +389,7 @@ INPUT:
   usual reason a rule is not followed, and a rule NOTHING implements is judged all the same —
   but neither settles the verdict: judge the code. Say nothing about whether any threat survived
   — that is a sibling verifier's question on a different axis.
-Return ONLY, in this order: JUSTIFICATION (≤256 chars — whether the prescribed control is
+Return ONLY, in this order: JUSTIFICATION (a sentence or two — whether the prescribed control is
 present, and why that is the verdict), then ADHERENCE (followed | not-followed), then EVIDENCE
 (file:line ANYWHERE in the tree where the control is present — shared middleware this change
 never touched still counts; when it is ABSENT there is no line to cite, so name where you looked
@@ -425,7 +425,7 @@ threat, in this order:
    the cited line yourself where the level turns on it — yours is the last word.
    Ask the question the verifier was asked: given this code, can the threat still be realized?
 4. **Conclude, then write.** The Robustness you record is **yours**, and so is the Justification:
-   ≤256 characters, in your own words, naming the evidence it rests on. Where you departed from
+   a sentence or two, in your own words, naming the evidence it rests on. Where you departed from
    the level the verifier led with, say what moved it.
 
 **It is recorded on the threat, and nowhere else.** There is no second copy to carry it across
@@ -462,7 +462,7 @@ the same discipline as the Robustness, on the other axis. Per rule, in this orde
    Robustness you just concluded, nor off whether any guidance drives the rule. If your
    reasoning rests on either, it is the wrong reasoning — go back to the code.
 5. **Conclude, then write.** The Adherence you record is **yours**, and so is the
-   Justification: ≤256 characters, in your own words, naming the evidence it rests on. Where no
+   Justification: a sentence or two, in your own words, naming the evidence it rests on. Where no
    guidance implements the rule, say so — whichever way the verdict went.
 
 ## Testing — the flow
@@ -510,15 +510,15 @@ file.
    4 and 5, which are where they are settled.
 4. **Conclude each Robustness (you decide).** For each selected threat, read the verifier's
    justification, weigh it on its evidence, and conclude the threat's Robustness yourself (see
-   **Concluding the Robustness**). Write your own ≤256-char justification for each. It is
+   **Concluding the Robustness**). Write your own justification for each — a sentence or two. It is
    recorded on the threat and nowhere else.
 5. **Conclude each Adherence (you decide).** For each selected rule, read the rule verifier's
    justification, weigh it on its evidence, and conclude `followed` | `not-followed` yourself
-   (see **Concluding the Adherence**). Write your own ≤256-char justification for each. **Do
+   (see **Concluding the Adherence**). Write your own justification for each — a sentence or two. **Do
    not read this off step 4** — a rule's verdict is about the control it prescribes, not about
    whether a threat survived or whether any guidance drove it.
 6. **Finalize the assessment (you write).** Fill each selected threat's **`#### test` block** —
-   its ≤256-char **Robustness justification**, then its concluded **Robustness**, its
+   its **Robustness justification**, then its concluded **Robustness**, its
    **Residual path** (for `weak`; `—` otherwise) and its **Evidence**, in that order; **one
    `## Rule adherence` entry per selected rule** — a `### <rule-id> — <title>` heading with
    `Adherence` and `Justification`; and set `## Task` → `Latest stage: testing`. Follow the

@@ -21,7 +21,7 @@ description: >-
 > - **Recommended model:** the cheap tier — this is a narrow, bounded read-only analysis.
 >   (Advisory — applied only where the platform supports per-subagent model selection.)
 > - **Hand-off contract:** return to the orchestrator, in this order, ONLY: your
->   **JUSTIFICATION** (≤256 chars — the reasoning), then your **LEVEL** for your threat
+>   **JUSTIFICATION** (a sentence or two — the reasoning), then your **LEVEL** for your threat
 >   (`weak` | `adequate` | `strong`), then one line of **EVIDENCE** (`file:line` ANYWHERE in the
 >   tree — an untouched guard counts), and
 >   — when the level is `weak` — the concrete **RESIDUAL PATH**. The justification comes first on
@@ -135,7 +135,7 @@ Return exactly this shape. The justification leads because it is what the orches
 it re-derives the level from the reasoning and the evidence you cite:
 
 ```
-JUSTIFICATION: <≤256 chars — whether the threat's route is closed by the code, and why that is the level>
+JUSTIFICATION: <a sentence or two — whether the threat's route is closed by the code, and why that is the level>
 LEVEL: weak | adequate | strong
 EVIDENCE: <file:line ANYWHERE in the tree — the delta is not the boundary; cite the untouched guard that closes the route, or the surviving path that leaves it open; — when nothing closes it>
 RESIDUAL PATH: <for `weak` — the concrete route by which the threat can still be realized, and the change that would close it; — otherwise>

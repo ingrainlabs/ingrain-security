@@ -22,7 +22,7 @@ description: >-
 > - **Recommended model:** the cheap tier — this is a narrow, bounded read-only analysis.
 >   (Advisory — applied only where the platform supports per-subagent model selection.)
 > - **Hand-off contract:** return to the orchestrator, in this order, ONLY: your
->   **JUSTIFICATION** (≤256 chars — the reasoning), then your **ADHERENCE** verdict
+>   **JUSTIFICATION** (a sentence or two — the reasoning), then your **ADHERENCE** verdict
 >   (`followed` | `not-followed`), then one line of **EVIDENCE** (`file:line` ANYWHERE in the tree;
 >   on `not-followed` there is no line to cite, so name where you looked and found nothing).
 >   The justification comes first on purpose: it is what the orchestrator weighs, and it is
@@ -97,7 +97,7 @@ Return exactly this shape. The justification leads because it is what the orches
 it re-derives the verdict from the reasoning and the evidence you cite:
 
 ```
-JUSTIFICATION: <≤256 chars — whether the control this rule prescribes is present, and why that is the verdict>
+JUSTIFICATION: <a sentence or two — whether the control this rule prescribes is present, and why that is the verdict>
 ADHERENCE: followed | not-followed
 EVIDENCE: <file:line ANYWHERE in the tree where the control is present — shared middleware this change never touched still counts. When it is ABSENT there is no line to cite: name the place you looked and found nothing (`checked routes/*.ts — no auth guard`); — when you found neither>
 ```

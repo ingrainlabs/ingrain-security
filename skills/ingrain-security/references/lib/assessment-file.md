@@ -231,13 +231,13 @@ an older plugin carries no markers at all and is read field-by-field as it alway
 | **Vector** | `gen` | string |
 | **Description** | `gen` | string |
 | **Assumptions** | `gen` | string |
-| **Justification** | `score` | string, **≤ 256 characters** |
+| **Justification** | `score` | string — **a sentence or two** on why the score lands where it does *for this change*. Reasoning, never a restatement of the fields above it. |
 | **Impact** | `score` | `critical` \| `high` \| `medium` \| `low` |
 | **Likelihood** | `score` | `very high` \| `high` \| `medium` \| `low` |
 | **Risk score** | `score` | integer `0`–`100` |
 | **Criticality** | `score` | `low` \| `medium` \| `high` \| `critical` |
 | **Selection** | `usergate` | `selected` \| `excluded` \| `undecided` (the block is empty until the **threat gate**) |
-| **Robustness justification** | `test` | string, **≤ 256 characters** — the reasoning behind **Robustness**, concluded by the Testing orchestrator from the verifier's evidence. Deliberately **not** named `Justification`: on this entry that name already means the risk-scoring rationale, and one name for two rationales is what makes them get interleaved. |
+| **Robustness justification** | `test` | string — **a sentence or two** on what the code shows and why that is the level, concluded by the Testing orchestrator from the verifier's evidence. Where the argument runs longer, the part about *what to do* belongs in **Residual path**; this field stays the reason. Deliberately **not** named `Justification`: on this entry that name already means the risk-scoring rationale, and one name for two rationales is what makes them get interleaved. |
 | **Robustness** | `test` | `weak` \| `adequate` \| `strong` — how well this threat is closed in the implementation: `weak` = the threat can still be realized (a route survives, or the analysis leaves its closure unestablished); `adequate` = its realization routes are closed; `strong` = closed broadly **plus** artefacts that would fail if the control regressed. Concluded by the Testing pass from negative testing against the implementation. Normative definitions: `references/testing/verification-pass.md` → **Robustness levels**. **Set it from that verification's verdict.** |
 | **Residual path** | `test` | string — for a `weak` verdict, the concrete route by which the threat can still be realized and the change that would close it. The actionable half of the verification. `—` for any other verdict, where there is no surviving route to name. |
 | **Evidence** | `test` | *optional* — where the threat is closed or left open (`file:line`) — **anywhere in the tree, not only in the changed files**: a control that closes this threat counts wherever it lives, and a route that leaves it open counts wherever it survives. Advisory and volatile: line numbers drift as the code moves on, so treat it as a pointer, never as a claim the reader can re-verify later. `—` when the verifier cited none. |
@@ -418,7 +418,7 @@ Justification: …
 | **id** (in the heading) | the full org rule id, verbatim — the same id keying its `## Org rules` entry |
 | **title** (in the heading) | the rule title, after the ` — `, copied from `## Org rules` |
 | **Adherence** | `followed` \| `not-followed` (`—` until the Testing pass runs) |
-| **Justification** | string, **≤ 256 characters** — why the rule reads as it does, naming the evidence it rests on |
+| **Justification** | string — **a sentence or two** on why the rule reads as it does, naming the evidence it rests on |
 
 **Scope is the rules the user *selected*, and nothing else.** One entry per `selected`
 `## Org rules` entry — **including a rule no guidance ended up driving**, which is precisely

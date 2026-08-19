@@ -318,16 +318,22 @@ Deno.test("assessment-file.md: defines the Justification + Robustness fields", a
   // verifiers return JUSTIFICATION first, and `Concluding the Robustness` opens with "read the
   // justification before you look at the level". Reversing it back re-opens that split.
   assertStringIncludes(md, "Robustness justification: …\nRobustness: adequate");
-  // Every reasoning field in the file carries the same 256-char cap: the threat's scoring
+  // Every reasoning field in the file carries the same STYLE: the threat's scoring
   // Justification, its Robustness justification, and the rule adherence Justification. A
-  // tripwire, deliberately a bare count — a fourth reasoning field added without a cap, or an
-  // existing cap dropped, both land here. (The guidance Justification left with the verdict
-  // pair: the vessel has no reasoning to record, because it concludes nothing.)
+  // tripwire, deliberately a bare count — a fourth reasoning field added without direction, or
+  // an existing one losing it, both land here. (The guidance Justification left with the
+  // verdict pair: the vessel has no reasoning to record, because it concludes nothing.)
+  //
+  // This used to count a `≤ 256 characters` cap. The cap was inherited from a custom agent's
+  // formatted-output contract that no longer exists, and enforcing prose length in a schema
+  // makes a well-reasoned verdict a validation failure. The skill owns how a justification
+  // reads, so it directs the writing instead — and the wire keeps only a runaway backstop,
+  // far above anything a writer produces.
   assertEquals(
-    [...md.matchAll(/≤ 256 characters/g)].length,
+    [...md.matchAll(/a sentence or two/g)].length,
     3,
-    "all three reasoning fields must be capped: threat Justification, threat Robustness " +
-      "justification, rule adherence Justification",
+    "all three reasoning fields must carry the style direction: threat Justification, threat " +
+      "Robustness justification, rule adherence Justification",
   );
   // One artifact: the org rules are a section of THIS file, and the sidecar reference is gone.
   assertStringIncludes(md, "### `## Org rules`");

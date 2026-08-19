@@ -91,12 +91,12 @@ Surfaces:
      order, each a \"#### <name>\" line with its own fields beneath it, one per line:
 
      #### gen      — threat generator:  Asset, Vector, Description, Assumptions
-     #### score    — risk scorer:       Justification (≤256 chars),
+     #### score    — risk scorer:       Justification (a sentence or two),
                      Impact (critical|high|medium|low),
                      Likelihood (very high|high|medium|low), Risk score (0-100),
                      Criticality (low|medium|high|critical)
      #### usergate — threat gate:       Selection (selected|excluded|undecided)
-     #### test     — verification pass: Robustness justification (≤256 chars — the
+     #### test     — verification pass: Robustness justification (a sentence or two — the
                      reasoning behind Robustness; the risk-scoring rationale is a
                      separate field, over in #### score),
                      Robustness (weak|adequate|strong),
@@ -156,7 +156,7 @@ Criticality:
      which is exactly what a security owner needs judged. An excluded rule was deemed
      inapplicable and gets NO entry. Each entry is a \"### <rule-id> — <title>\" heading (the
      full id and title, verbatim from Org rules), then: Adherence (followed|not-followed),
-     Justification (≤256 chars). Both read \"—\" until the verification pass runs.
+     Justification (a sentence or two). Both read \"—\" until the verification pass runs.
      One verdict per rule, judged against the code — not per driving entry, and never derived
      from a threat's Robustness or from what became of the guidance that drives it. -->
 
