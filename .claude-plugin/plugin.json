@@ -1,7 +1,7 @@
 {
   "name": "ingrain-security",
   "version": "0.2.6",
-  "description": "Threat assessment for coding agents when planning implementation.",
+  "description": "Finds the security holes in a change while they are still cheap to fix, then verifies the implementation actually closed them.",
   "author": {
     "name": "Ingrain Labs"
   },
