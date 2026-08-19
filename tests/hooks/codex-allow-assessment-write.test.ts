@@ -24,8 +24,7 @@ import { fromFileUrl } from "@std/path";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const HOOK = `${ROOT}hooks/codex/allow-assessment-write`;
-const MINT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
-const MINT_RULES = `${ROOT}skills/ingrain-security/scripts/rules-path`;
+const MINT = `${ROOT}skills/ingrain-security/scripts/assessment-mint`;
 
 interface IHookResult {
   code: number;
@@ -143,7 +142,7 @@ Deno.test("allow: the path the minter actually produces", async () => {
     // naming or location, the whole feature silently stops working and this is the test
     // that catches it. `codex` is the minter's own host argument.
     const out = await new Deno.Command("bash", {
-      args: [MINT, "codex", "mint", "--title", "Add authn"],
+      args: [MINT, "codex", "--title", "Add authn"],
       cwd: dir,
       clearEnv: true,
       env: { PATH: Deno.env.get("PATH") ?? "", HOME: Deno.env.get("HOME") ?? "" },
@@ -165,8 +164,6 @@ Deno.test("allow: add and update, on both naming forms and every matcher alias",
         const name of [
           "assessment.md",
           "assessment-main-add-authn.md",
-          "rules.md",
-          "rules-main-add-authn.md",
         ]
       ) {
         const target = `${dir}/.ingrain-security/${name}`;
@@ -179,34 +176,17 @@ Deno.test("allow: add and update, on both naming forms and every matcher alias",
   });
 });
 
-Deno.test("allow: the rules sidecar path the minter actually produces", async () => {
+Deno.test("allow: one patch touching the assessment twice, add and update together", async () => {
   await withProject(async (dir) => {
-    const out = await new Deno.Command("bash", {
-      args: [MINT_RULES, "codex", "mint", "--title", "Add authn"],
-      cwd: dir,
-      clearEnv: true,
-      env: { PATH: Deno.env.get("PATH") ?? "", HOME: Deno.env.get("HOME") ?? "" },
-      stdout: "piped",
-      stderr: "piped",
-    }).output();
-    const minted = JSON.parse(new TextDecoder().decode(out.stdout)) as { rules_abs: string };
-
-    const res = await runHook(payload("apply_patch", addFile(minted.rules_abs), dir), dir);
-    assertEquals(res.allowed, true);
-  });
-});
-
-Deno.test("allow: one patch touching BOTH the assessment and its rules sidecar", async () => {
-  await withProject(async (dir) => {
-    // The planning-time write pattern: the mitigation-generator writes the assessment's
-    // Mitigations rows AND the rules sidecar. Both are grantable, so the whole patch is.
+    // The planning-time write pattern, now that one artifact carries the whole analysis: a
+    // patch may touch the assessment more than once and stays grantable throughout.
     const patch = [
       "*** Begin Patch",
       `*** Update File: ${dir}/.ingrain-security/assessment.md`,
       "@@",
-      "+r-auth-01",
-      `*** Add File: ${dir}/.ingrain-security/rules-main-add-authn.md`,
-      "+# Org rules",
+      "+Selection: selected",
+      `*** Add File: ${dir}/.ingrain-security/assessment-main-add-authn.md`,
+      "+# Security assessment",
       "*** End Patch",
     ].join("\n");
     const res = await runHook(payload("apply_patch", patch, dir), dir);
@@ -371,14 +351,14 @@ Deno.test("defer: a file in the folder that is neither an assessment nor a rules
   });
 });
 
-Deno.test("defer: a patch touching a rules file AND a source file", async () => {
+Deno.test("defer: a patch touching the assessment AND a source file", async () => {
   await withProject(async (dir) => {
-    // The all-or-nothing guard must hold for the rules prefix too: one grantable file does
-    // not launder a src/ write riding in the same atomic patch.
+    // The all-or-nothing guard: one grantable file does not launder a src/ write riding in
+    // the same atomic patch.
     const patch = [
       "*** Begin Patch",
-      `*** Add File: ${dir}/.ingrain-security/rules-main-add-authn.md`,
-      "+# Org rules",
+      `*** Add File: ${dir}/.ingrain-security/assessment-main-add-authn.md`,
+      "+# Security assessment",
       `*** Add File: ${dir}/src/app.ts`,
       "+export const backdoor = true;",
       "*** End Patch",
@@ -388,14 +368,19 @@ Deno.test("defer: a patch touching a rules file AND a source file", async () => 
   });
 });
 
-Deno.test("defer: a symlinked rules-* target", async () => {
+Deno.test("defer: a rules-* name, now that one artifact carries the analysis", async () => {
   await withProject(async (dir) => {
-    await sh(`ln -s /etc/passwd "${dir}/.ingrain-security/rules-evil.md"`);
-    const res = await runHook(
-      payload("apply_patch", updateFile(`${dir}/.ingrain-security/rules-evil.md`), dir),
-      dir,
-    );
-    assertEquals(res.allowed, false);
+    // The org rules ride in the assessment's own `## Org rules` section, so the grant
+    // covers `assessment*.md` alone. Plain regular files, deliberately: the symlink guard
+    // defers ANY symlinked target regardless of basename (covered below), so a symlinked
+    // `rules-*` would still defer with the old `rules*.md` arm restored.
+    for (const name of ["rules.md", "rules-main-add-authn.md"]) {
+      const res = await runHook(
+        payload("apply_patch", updateFile(`${dir}/.ingrain-security/${name}`), dir),
+        dir,
+      );
+      assertEquals(res.allowed, false, `${name} must no longer be auto-approved`);
+    }
   });
 });
 

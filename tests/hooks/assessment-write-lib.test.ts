@@ -1,6 +1,6 @@
 /**
  * Behavioral tests for the path canonicalizers in
- * `skills/ingrain-security/scripts/lib/assessment-write.sh` — the library both
+ * `hooks/scripts/lib/assessment-write.sh` — the library both
  * allow-assessment-write hooks SOURCE rather than execute. The sibling
  * project-root-lib.test.ts covers normalize_dir/resolve_project_root the same way.
  *
@@ -28,7 +28,9 @@ import { assertEquals } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
-const LIB = `${ROOT}skills/ingrain-security/scripts/lib`;
+const SKILL_LIB = `${ROOT}skills/ingrain-security/scripts/lib`;
+/** assessment-write.sh is hook-only code, so it lives in the hook tree. */
+const HOOK_LIB = `${ROOT}hooks/scripts/lib`;
 
 interface IProbe {
   /** What the bare call printed — the resolved path. */
@@ -38,7 +40,8 @@ interface IProbe {
 }
 
 /**
- * Source both libs (assessment-write.sh needs resolve_project_root), `cd` into `cwd`, then
+ * Source the three libs the hooks source — in any order now, since each is flat and none
+ * reaches into another; the hook is what composes them — `cd` into `cwd`, then
  * run `call` BARE in the current shell and report what it printed alongside the shell's $PWD
  * either side of it.
  *
@@ -53,8 +56,9 @@ async function probe(
 ): Promise<IProbe> {
   const script = `
     set -uo pipefail
-    . "${LIB}/project-root.sh"
-    . "${LIB}/assessment-write.sh"
+    . "${SKILL_LIB}/project-root.sh"
+    . "${SKILL_LIB}/assessment-dir.sh"
+    . "${HOOK_LIB}/assessment-write.sh"
     printf 'BEFORE:%s\\n' "\${PWD}"
     printf 'OUT:'
     ${call}
@@ -144,11 +148,12 @@ Deno.test("canonical_assessment_dir: a bare call leaves the caller's $PWD alone"
   await withProject(async (dir) => {
     // The call the Codex hook makes right before it absolutizes a relative patch path
     // against ${cwd:-$PWD}. Its own `physical_dir` call is bare, so it inherits the leak.
-    const res = await probe("canonical_assessment_dir claude", {
-      cwd: `${dir}/src`,
-      target: dir,
-      projectDir: dir,
-    });
+    // Composed the way the hook composes it: the folder arrives as a path, because
+    // assessment-write.sh no longer reaches into project-root.sh or assessment-dir.sh.
+    const res = await probe(
+      'canonical_assessment_dir "$(resolve_project_root claude)/${ASSESSMENT_DIR_NAME}"',
+      { cwd: `${dir}/src`, target: dir, projectDir: dir },
+    );
 
     assertEquals(
       res.pwdAfter,

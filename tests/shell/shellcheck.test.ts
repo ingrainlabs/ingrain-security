@@ -1,6 +1,6 @@
 /**
  * Runs ShellCheck over every shell script committed to the repo — the hooks, the
- * assessment-path minter and the release scripts. Offline, no model calls.
+ * assessment mint and the release scripts. Offline, no model calls.
  *
  * Discovery is shebang-based rather than extension-based on purpose: the hook scripts
  * are deliberately extensionless (see `hooks/run-hook.cmd` for why), so a `*.sh` glob
@@ -25,16 +25,28 @@ const EXCLUDED = new Set(["hooks/run-hook.cmd"]);
 /**
  * Scripts that must always be linted. Guards against a discovery bug quietly
  * shrinking the set to nothing and leaving the suite green but vacuous.
+ *
+ * Discovery is `git ls-files`, so this list can only name TRACKED files — which is also the
+ * gap it once could not close: discovery was `git ls-files`, so an unstaged or freshly renamed
+ * script was silently unlinted and equally absent from here. Discovery now walks the tree, so
+ * this list names every script regardless of index state — and a file dropping out of it is a
+ * real regression rather than a staging artifact.
  */
 const EXPECTED = [
   ".github/release.sh",
   "hooks/claude/allow-assessment-write",
-  "hooks/start/session-start",
+  "hooks/codex/allow-assessment-write",
+  "hooks/scripts/lib/assessment-write.sh",
+  "hooks/scripts/ensure-assessment-dir",
+  "hooks/scripts/session-start",
+  "skills/ingrain-security/scripts/assessment-mint",
+  "skills/ingrain-security/scripts/branch-delta",
   "skills/ingrain-security/scripts/lib/artifact-template.sh",
+  "skills/ingrain-security/scripts/lib/assessment-dir.sh",
+  "skills/ingrain-security/scripts/lib/fork-point.sh",
+  "skills/ingrain-security/scripts/lib/json.sh",
+  "skills/ingrain-security/scripts/lib/mint.sh",
   "skills/ingrain-security/scripts/lib/project-root.sh",
-  "skills/ingrain-security/scripts/lib/mint-path.sh",
-  "skills/ingrain-security/scripts/rules-path",
-  "skills/ingrain-security/scripts/branch-diff",
 ];
 
 /**
@@ -78,22 +90,31 @@ async function runShellCheck(path: string): Promise<{ code: number; report: stri
 }
 
 /**
- * Every shell script tracked by git. Using `git ls-files` keeps the lint contract at
- * "what is committed", so gitignored scratch scripts under `.helpers/` and
- * `tests/.variant-runs/` are excluded for free.
+ * Every shell script in the tree — walked from disk, not asked of git.
+ *
+ * It used to be `git ls-files`, which scoped the lint contract to "what is committed". That
+ * quietly excluded exactly the code most worth linting: a NEW script is unlinted until it is
+ * staged, and a RENAMED one is unlinted under both names at once — git tracks the old path as
+ * deleted and the new one not at all. Four of the newest files, ~350 lines carrying all of the
+ * argv parsing and JSON assembly, were invisible here while the suite reported green.
+ *
+ * The walk is what `parity/sourceGraph.test.ts` already does, which is why that tier covered
+ * them throughout. `SKIPPED_DIRS` replaces what gitignore used to do for free.
  */
-async function discoverShellScripts(): Promise<string[]> {
-  const { stdout } = await new Deno.Command("git", {
-    args: ["ls-files"],
-    cwd: ROOT,
-  }).output();
+const SKIPPED_DIRS = new Set([".git", "node_modules", ".helpers", ".variant-runs"]);
 
-  const tracked = new TextDecoder().decode(stdout).split("\n").filter(Boolean);
-
+async function discoverShellScripts(dir = ROOT, prefix = ""): Promise<string[]> {
   const scripts: string[] = [];
-  for (const path of tracked) {
-    if (EXCLUDED.has(path)) continue;
-    if (await isShellScript(path)) scripts.push(path);
+  for await (const entry of Deno.readDir(dir)) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory) {
+      if (SKIPPED_DIRS.has(entry.name)) continue;
+      scripts.push(...await discoverShellScripts(`${dir}${entry.name}/`, rel));
+      continue;
+    }
+    if (!entry.isFile) continue;
+    if (EXCLUDED.has(rel)) continue;
+    if (await isShellScript(rel)) scripts.push(rel);
   }
   return scripts.sort();
 }

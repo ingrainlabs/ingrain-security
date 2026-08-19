@@ -8,12 +8,12 @@
 
 import { fromFileUrl } from "@std/path";
 import type { RunOptions, RunResult, StreamEvent } from "./types.ts";
+import { isWorker } from "./workers.ts";
 
 /** Repo root = two levels up from this file (tests/lib/claudeRunner.ts). */
 export const PLUGIN_DIR = fromFileUrl(new URL("../..", import.meta.url));
 
 /** Per-call timeouts (ms). */
-export const TRIAGE_TIMEOUT_MS = 90_000; // triage — fast
 export const AGENT_TIMEOUT_MS = 120_000; // single-agent default
 export const SESSION_TIMEOUT_MS = 180_000; // full session (skill + agents)
 export const ORCHESTRATION_TIMEOUT_MS = 600_000; // full gated cycle
@@ -70,16 +70,6 @@ export const streamText = (events: StreamEvent[]): string => {
   return parts.join("\n");
 };
 
-/** The six worker skills the orchestrator dispatches. */
-export const WORKERS = [
-  "ingrain-relevance-triage",
-  "ingrain-threat-generator",
-  "ingrain-threat-critic",
-  "ingrain-risk-scorer",
-  "ingrain-mitigation-generator",
-  "ingrain-mitigation-critic",
-] as const;
-
 /**
  * Workers dispatched by the orchestrator, in order of appearance.
  *
@@ -95,14 +85,14 @@ export const dispatchedWorkers = (events: StreamEvent[]): string[] => {
   for (const block of toolUses(events)) {
     if (block.name === "Task" && typeof block.input?.prompt === "string") {
       const m = block.input.prompt.match(/references\/development\/([a-z-]+)\.md/);
-      if (m && (WORKERS as readonly string[]).includes(m[1])) {
+      if (m && isWorker(m[1])) {
         workers.push(m[1]);
         continue;
       }
     }
     if (block.name === "Skill" && typeof block.input?.skill === "string") {
       const skill = block.input.skill.split(":").pop() ?? "";
-      if ((WORKERS as readonly string[]).includes(skill)) workers.push(skill);
+      if (isWorker(skill)) workers.push(skill);
     }
   }
   return workers;
@@ -115,7 +105,7 @@ export const dispatchedWorkers = (events: StreamEvent[]): string[] => {
  * isolation without a platform-native agent definition.
  *
  * `assessmentAbs` supplies the per-run write target the orchestrator pastes into
- * every dispatch (SKILL.md § How to dispatch a worker). It is the one thing a worker
+ * every dispatch (references/development/flow.md § How to dispatch a worker). It is the one thing a worker
  * cannot learn from its own reference file, so without it the worker has nowhere to
  * write and answers inline instead.
  */
@@ -133,7 +123,7 @@ export const workerDispatchPrompt = async (
       "",
       `Your ONE permitted write is your own section of the stored analysis file for`,
       `this run at ${assessmentAbs}, written to the schema in`,
-      `references/formatting/assessment-file.md — use exactly its fields and enum values.`,
+      `references/lib/assessment-file.md — use exactly its fields and enum values.`,
       `Write to that exact absolute path, character for character as pasted above.`,
     ]
     : [];
@@ -150,8 +140,8 @@ export const workerDispatchPrompt = async (
   ].join("\n");
 };
 
-/** Path to the bundled assessment-path minter, the single source of truth for the file's name. */
-const MINT_SCRIPT = `${PLUGIN_DIR}/skills/ingrain-security/scripts/assessment-path`;
+/** Path to the bundled assessment mint, the single source of truth for the file's name. */
+const MINT_SCRIPT = `${PLUGIN_DIR}/skills/ingrain-security/scripts/assessment-mint`;
 
 /**
  * Mint a real assessment file in a throwaway project dir and return both paths.
@@ -164,7 +154,7 @@ export const mintAssessment = async (
   title: string,
 ): Promise<{ assessmentAbs: string }> => {
   const out = await new Deno.Command("bash", {
-    args: [MINT_SCRIPT, "claude", "mint", "--title", title],
+    args: [MINT_SCRIPT, "claude", "--title", title],
     clearEnv: true,
     env: {
       PATH: Deno.env.get("PATH") ?? "",

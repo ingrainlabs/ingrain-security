@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # PostToolUse hook for ExitPlanMode in the ingrain-security plugin.
 #
-# Fires after a plan is approved (ExitPlanMode succeeds) and injects a
-# simple instruction telling the agent to run the ingrain-security skill.
+# Fires after a plan is approved (ExitPlanMode succeeds) and injects an instruction
+# telling the agent to run the ingrain-security skill.
+#
+# This is a BACKSTOP for a session that ignored the skill description, not the moment the
+# skill specifies — that is "before you present it", which is PreToolUse. Kept on PostToolUse
+# deliberately: moving it earlier would only relocate a nudge, and actually gating the review
+# would mean DENYING ExitPlanMode, which blocks the user's plan from reaching them. So the
+# injection instead names the already-reviewed case, because re-entry on an approved plan
+# lands in Phase select case 3 and re-runs the whole review by default.
 
 set -euo pipefail
 
-context="<EXTREMELY_IMPORTANT>\nBefore writing any code, run the 'ingrain-security' skill via the Skill tool.\n</EXTREMELY_IMPORTANT>"
+context="<EXTREMELY_IMPORTANT>\nBefore writing any code, run the 'ingrain-security' skill via the Skill tool. If this plan was ALREADY reviewed in this session, say so and carry on — the skill routes an already-reviewed plan back into Development, so re-invoking it repeats the whole review over a plan that has one.\n</EXTREMELY_IMPORTANT>"
 
 # Output context injection as JSON in the Claude Code shape
 # (hookSpecificOutput.additionalContext).

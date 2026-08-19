@@ -72,3 +72,9 @@ together — there's no separate drift check on normal commits.
 
 To cut a release: open a PR into the default branch, add the `release:*` label for the bump size you
 want (or `release:skip` to leave the version untouched), and merge.
+
+**If the PR changes the assessment schema**, it must also bump `Schema version` in
+`references/lib/assessment-file.md` and `scripts/lib/artifact-template.sh`, and fill the new
+row of the schema-version table in `README.md` with the version the bump produced. Consumers branch
+on that number to decide which fields they may rely on, so a release that ships a new format
+without recording which release it was leaves them guessing from a date.
