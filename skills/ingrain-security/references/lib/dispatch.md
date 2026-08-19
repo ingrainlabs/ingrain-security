@@ -1,22 +1,31 @@
-# Development dispatch reference
+# Dispatch reference — the host mechanism, for both phases
 
-Each of the six Development workers is dispatched as a **fresh worker subagent** told to read
-its reference file at `references/development/<name>.md` and follow it. That abstraction maps
-differently onto each host. The dispatch *prompt* is always the same; only the *mechanism* below
-changes.
+Every worker and every verifier is dispatched as a **fresh worker subagent** told to read its
+reference file — `<plugin_root>/skills/ingrain-security/references/development/<name>.md` for a
+Development worker, `<plugin_root>/skills/ingrain-security/references/testing/<name>.md` for a
+Testing verifier — and follow it. That abstraction maps differently onto each host.
 
-Always restate the worker's write target inline in the dispatch: "your one write is your own
-section of the stored analysis file at the path this dispatch names."
+**This file owns the MECHANISM only.** The dispatch *prompt* belongs to the phase that sends it:
+`flow.md` § How to dispatch a worker, `verification-pass.md` § How to dispatch a verifier. Phase
+neutral, so it sits in `references/lib/` beside the other utilities both phases reach for.
 
-Your own writes as orchestrator — finalizing the assessment file, and the two plan-file writes at
-Gate 1 and Gate 2 — happen strictly between worker steps, once the worker has returned.
+Always restate a **Development worker's** write target inline in the dispatch: "your one write
+is your own section of the stored analysis file at the path this dispatch names."
+
+**A Testing verifier has no write target and is never given one.** Its whole output is what it
+returns; the orchestrator re-derives the verdict and owns every write to the file. A verifier
+handed a write target writes the level it led with, pre-empting the conclusion the Testing pass
+exists to reach.
+
+Your own writes as orchestrator — pruning and finalizing the assessment file, and the plan write
+at Finalize — happen strictly between worker steps, once the worker has returned.
 
 ## This skill is built for an agent-based host
 
 **Every Development worker and every Testing verifier runs as a fresh subagent — that is the
 designed mode.** It gives each worker clean context and its own **Recommended model** tier, and it
 keeps the orchestrator holding just compact statuses and pointers (SKILL.md § Context-window
-discipline). Run the six Development workers and the per-threat verifiers as subagents wherever the
+discipline). Run the seven Development workers and the Testing verifiers as subagents wherever the
 host allows.
 
 The sequential in-context fallback below is a **degraded mode**: one shared context across every
@@ -29,14 +38,16 @@ Anything with no data dependency on anything else in flight is issued **together
 block** — not one per turn. Each extra turn is a round-trip the run pays for and nothing gains.
 This covers:
 
-- **The three bundled scripts at Phase select** — `assessment-path mint`, `rules-path mint` and
-  `branch-diff` are read-only and deterministic, and none reads another's output. One block, and
-  the values are reused for the whole run; no later step re-mints.
-- **The Testing verifiers** — one per selected threat, mutually independent (see
-  `references/testing/verification-pass.md` § How to dispatch a verifier).
+- **The two bundled scripts at Phase select** — `assessment-mint` and `branch-delta` are
+  read-only and deterministic, and neither reads the other's output. One block, and the values
+  are reused for the whole run; no later step re-mints.
+- **The two driver chains after the review question** — the threat chain and the broad rule retrieval have no
+  data dependency on each other, so they run in parallel and join at the guidance generator.
+- **The Testing verifiers** — one per selected threat and one per selected rule, mutually
+  independent (see `references/testing/verification-pass.md` § How to dispatch a verifier).
 
 The converse still holds: a step that consumes the previous worker's section waits for it. The
-pipeline order in SKILL.md's flow is a real data dependency, not a formality.
+pipeline order in `references/development/flow.md` is a real data dependency, not a formality.
 
 ## Writing the assessment file
 
@@ -47,18 +58,25 @@ this plugin's read-only scripts and the `ingrain` CLI, and never edits the asses
 
 Every field is its own line, but **a write is one call**. A worker writes its whole section in a
 single Write or Edit, and a stage filling fields into entries that already exist makes **one Edit
-per entry** — replacing that entry's contiguous block of field lines, never one Edit per field. A
-block Edit shows the same before/after a per-line one would, so the reviewable change costs one
-call rather than one per line.
+per entry** — replacing the run between its own phase marker and the next, never one Edit per
+field. A block Edit shows the same before/after a per-line one would, so the reviewable change
+costs one call rather than one per line.
+
+An entry's field lines are **not** one contiguous run: `## Threats` entries are divided into
+`#### ` phase blocks, one per writing stage, and replacing first-field-to-last would swallow the
+markers between them. The `ingrain-risk-scorer` is the single exception to writing inside one
+block — re-tagging reorders entries, so it rewrites them whole and carries every block it does
+not own across verbatim; its own reference states that, and this file does not restate it.
 
 **The file tells you its own shape.** The mint seeds a **field card** under every section, and that
-card is the write contract — write from it. `references/formatting/assessment-file.md` is for what
+card is the write contract — write from it. `references/lib/assessment-file.md` is for what
 a field *means*, not for learning its shape.
 
 ## Host with a subagent / task primitive
 
 Use the host's subagent / task primitive, passing the dispatch prompt and telling
-the subagent to read the worker reference file from `references/development/<name>.md`. Dispatch one
+the subagent to read the worker reference file from
+`<plugin_root>/skills/ingrain-security/references/development/<name>.md`. Dispatch one
 worker per call and read the returned text. Where the host supports a per-subagent
 model, set the worker's recommended tier; otherwise ignore it (advisory).
 
@@ -71,7 +89,7 @@ obtain that request. The sequential fallback below covers a different case — a
 is the main session.
 
 **Ask the user to allow the subagent flow, before the first dispatch of the run** — Development
-Step 0's triage, or Testing's verifier fan-out. Ask once, up front: one answer covers the whole run,
+Step 1a's threat generator, or Testing's verifier fan-out. Ask once, up front: one answer covers the whole run,
 where a mid-flow ask splits it across two modes. State the rule and the trade-off in one short
 message, then put the choice to the user with the host's question or selection primitive (plain
 text elsewhere), **allow as the recommended option**:
@@ -118,16 +136,23 @@ command?") straight to the user, so the fetch retries in place.
 **Every Development worker is dispatched with exactly five tools: Read, Grep, Glob, Edit and
 Write** — it inspects the plan and repo with the first three, and writes its own section of
 the assessment file with Edit or Write, which `allow-assessment-write` pre-approves for that
-path. It works from the rules already on disk; the sidecar's path is what you pass them.
+path. It works from the rules already on disk — they are in the assessment's own `## Org rules`
+section, so the assessment path you already pass is the only path a worker needs.
 
-**No worker carries a shell**, so a worker that needs the file changed changes it with Edit or
-Write. There is no fallback where it stages the text somewhere else for you to transplant.
+**No Development worker carries a shell**, so a worker that needs the file changed changes it
+with Edit or Write. There is no fallback where it stages the text somewhere else for you to
+transplant.
 
-## Selection windows (Gate 1 and Gate 2)
+**A Testing verifier is the mirror image: Read, Grep, Glob and Bash — no Edit, no Write.** It
+needs the shell for one thing only, the bundled `branch-delta <host> diff` command its dispatch
+carries, which is how it reads the change without hand-writing git. Grant it nothing that could
+write the assessment: the orchestrator is the file's single writer during Testing.
 
-**The gate procedure — display the table first, then ask — lives in SKILL.md →
-How to ask the user. Only the mechanism below is host-specific.** This section owns *how* to
-show a selection on this host; SKILL.md owns *what* a gate does.
+## Selection windows (the threat gate and the rule gate)
+
+**What a gate decides, and the display-the-table-first rule, lives in `flow.md` → How to ask
+the user — the only phase that gates.** This section owns *how* to show a
+selection on this host, and nothing about what the answer means.
 
 The primitive is generic; only the mechanism changes per host:
 
@@ -136,7 +161,8 @@ The primitive is generic; only the mechanism changes per host:
   many windows it can show per call, present consecutive batches in the order the table
   displayed them — which is highest-priority-first — e.g. the first four, then the next
   four — and merge the choices.
-  Zero-selection is inherent — the user reaches it by excluding every window, so
-  the windows themselves carry the **"None"** case.
+  Zero-selection needs no window of its own: the user reaches it by excluding every one.
+  The rule gate's accept-all is one window **ahead** of the per-rule ones, which follow only
+  if it is declined — `flow.md` § 4b owns why that is the default.
 - **Text fallback** — where the host lacks a windowed primitive, ask the user to
   reply with the ids to include (e.g. `T01 T03`) or `none`.

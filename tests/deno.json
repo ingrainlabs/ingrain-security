@@ -3,10 +3,11 @@
   "workspace": [],
   "tasks": {
     "test:offline": "deno task test:ts && deno task test:shell",
-    "test:ts": "deno task test:static && deno task test:hooks",
+    "test:ts": "deno task test:static && deno task test:parity && deno task test:hooks",
     "test:static": "deno test --allow-read static/",
+    "test:parity": "deno test --allow-run=bash --allow-read --allow-write --allow-env parity/",
     "test:hooks": "deno test --allow-run=bash --allow-read --allow-write --allow-env hooks/",
-    "test:shell": "deno test --allow-run=git,shellcheck --allow-read shell/",
+    "test:shell": "deno test --allow-run=git,shellcheck,bash --allow-read --allow-write --allow-env shell/",
     "test:agent": "deno test --allow-run=claude,bash --allow-read --allow-write --allow-env agents/ skill/trigger.test.ts",
     "test:integration": "INTEGRATION=1 deno test --allow-run=claude,bash --allow-read --allow-env --allow-write .",
     "ci": "deno task lint && deno task fmt:check && deno task test:offline",

@@ -19,10 +19,12 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Project-root resolution and the .gitignore seed are shared with the PreToolUse hook
-# and with scripts/assessment-path, alongside which the lib lives. A missing lib is a
+# and with scripts/assessment-mint, alongside which the lib lives. A missing lib is a
 # silent no-op: this hook must never abort the user's session.
 # shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
 . "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null || exit 0
+# shellcheck source=../../skills/ingrain-security/scripts/lib/assessment-dir.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/assessment-dir.sh" 2>/dev/null || exit 0
 
 # Seed README.md on first creation only — never clobber a user-edited one.
 # printf (not a heredoc) — documented bash 5.3 heredoc hang.
@@ -55,19 +57,15 @@ main() {
     local host="${1:-}" project_root assessment_dir
     project_root="$(resolve_project_root "${host}")"
     [ -n "${project_root}" ] || return 0
-    assessment_dir="${project_root}/.ingrain-security"
 
-    # Never follow a pre-placed symlink at the target — a crafted repo could point
-    # it outside the tree. Silent no-op; this hook must not abort the session (M4).
-    [ -L "${assessment_dir}" ] && return 0
+    # Symlink guard, mkdir and the .gitignore seed are the shared step in project-root.sh.
+    # Our policy on failure is silence: this hook must never abort the session (M4), so
+    # every non-zero code — crafted symlink or plain I/O — takes the same quiet exit.
+    assessment_dir="$(ensure_assessment_dir "${project_root}")" || return 0
 
-    # Create the folder on first run.
-    if [ ! -d "${assessment_dir}" ]; then
-        mkdir -p "${assessment_dir}" 2>/dev/null || return 0
-    fi
-
+    # The README is this hook's alone: it explains the folder to a HUMAN who finds it, and
+    # nothing the minter does needs it.
     seed_readme "${assessment_dir}"
-    seed_gitignore "${assessment_dir}"
 }
 
 # No stdout on purpose (see header).

@@ -1,0 +1,342 @@
+#!/usr/bin/env bash
+# The assessment mint for the ingrain-security plugin.
+#
+# Single source of truth for the review's assessment-file path, so the orchestrator
+# never hand-builds it. The file is written directly into `.ingrain-security/` at the
+# project root and is BOTH the living working copy (workers write it during the run)
+# and its persisted record — there is no separate temp file and no finalize copy.
+# Emits ONE JSON object on stdout; diagnostics go to stderr.
+#
+# `assessment_abs` (absolute) is the CANONICAL write target: it is what every worker
+# dispatch and every Write/Edit must use. `assessment_path` is a display-only relative
+# form for prose and links. The emitted `instruction` field restates this, with the
+# path interpolated.
+#
+# Usage:
+#   assessment-mint <host> --title "<task title>"
+#   assessment-mint --help
+#
+#   <host>  the host's config dotfolder base name — "claude" (Claude Code), "codex"
+#           (Codex), or any future coding agent's token. It no longer appears in the
+#           assessment path (that always lives at `.ingrain-security/…`); it only
+#           selects project-root resolution, exactly like `ensure-assessment-dir`.
+#
+# The project root is resolved from the git repo root, so running this from any
+# subdirectory still anchors the folder at the top of the repo.
+#
+# The path is deterministic in the branch + task, so it doubles as the task identity:
+#   .ingrain-security/assessment-<branch-slug>-<task-slug>.md
+# Re-reviewing the SAME task on the SAME branch resolves to the SAME file (the run
+# resumes/updates it in place — `has_content` reports this); a different task or branch
+# resolves to a different file. No timestamp, no random token.
+#
+# Minting also SEEDS the file with its empty skeleton (lib/artifact-template.sh) when it is
+# absent, so the first writer fills a correctly shaped page instead of reproducing the schema
+# from prose. An existing file is never rewritten. Since a mint always leaves a file behind,
+# an untouched skeleton reads as `has_content: false` — which is what keeps Phase select and
+# the resume check working.
+#
+# Exit codes: 0 ok · 2 usage error (bad host or flag) · 1 runtime error.
+#
+# The keys below are this script's AGENT-FACING CONTRACT: the ones the docs must declare,
+# because an agent acts on them. Every other key is diagnostic — emitted for whoever is
+# reading a surprising result, and named in no reference file. Membership says nothing about
+# how long to hold a key: SKILL.md's own list is what says "keep these for the whole run",
+# and `template_seeded`/`template_only` describe a single moment.
+#
+# Declared here rather than inferred, because "which of these 20 keys matter" is a decision,
+# not a fact about the printf. tests/parity/ holds all three ends to it: each name is really
+# emitted, each is really documented, and the docs name no emitted key this list omits.
+# CONTRACT KEYS BEGIN
+#   assessment_abs assessment_path plugin_root branch_slug phase phase_reason
+#   has_content selected_threats selected_rules siblings instruction
+#   template_seeded template_only
+# CONTRACT KEYS END
+#
+# Bundled with the skill and run directly by the orchestrator (which already has a
+# bash shell — the ready-to-run command, with plugin root + host substituted, is
+# injected by the session-start hook). Uses `set -uo pipefail` WITHOUT `-e`: git
+# lookups on a non-git or detached-HEAD checkout must degrade to an "unknown branch"
+# result, not abort the script.
+
+set -uo pipefail
+
+usage() {
+    cat <<'EOF'
+Mint the ingrain-security assessment-file path. Prints one JSON object to stdout.
+
+Usage:
+  assessment-mint <host> --title "<task title>"
+  assessment-mint --help
+
+Arguments:
+  <host>              config dotfolder base name: claude | codex | <future token>
+                      (selects project-root resolution only; not part of the path)
+
+flags:
+  --title T           the ## Task title; slugified into the filename (optional).
+
+Output (assessment_abs is CANONICAL — the one path to write to; assessment_path is the
+relative display form for prose and links). The `instruction` field restates this with
+the path interpolated. The project root comes from the git repo root, so mint may be run
+from any subdirectory:
+  <project_root>/.ingrain-security/assessment-<branch-slug>-<task-slug>.md
+  Fallbacks: no branch -> assessment-<task-slug>.md; no title -> assessment-<branch-slug>.md;
+  both absent -> assessment.md. The `assessment-` prefix always leads.
+
+Minting also SEEDS the file with its empty skeleton (section headings and each section's
+field card — no content) when it does not exist yet, so no writer starts from a blank page; an
+existing file is never rewritten. `has_content` is true only when the file already holds
+written analysis — the run resumes the same task's prior work.
+
+Routing. The mint resolves Phase select's verdict, so a caller reads it rather than deriving it:
+  phase               development | testing | requires_judgement
+  phase_reason        fresh_task | resume_analysis | implementation_ahead | verify_now
+                      | siblings_present | delta_unreliable
+  selected_threats    gated drivers on the threat axis (feeds `phase`)
+  selected_rules      gated drivers on the rule axis (feeds `phase`)
+  siblings            written assessments on this branch that THIS title did not mint.
+                      Non-empty is what makes `phase` requires_judgement/siblings_present:
+                      a paraphrased title looks exactly like a fresh task, and only the
+                      recorded `## Task` Titles tell them apart. Reported, never chosen.
+`template_seeded` is true when this mint wrote the skeleton; `template_only` is
+true whenever the file is still an untouched skeleton.
+
+Exit codes: 0 ok · 2 usage error · 1 runtime error.
+EOF
+}
+
+# --- helpers ----------------------------------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Load map — every lib below is FLAT: none sources or calls another, so the order here is
+# free and this script is the only thing that composes them.
+#   json.sh              escape_for_json
+#   project-root.sh      resolve_project_root · resolve_branch
+#   assessment-dir.sh    ensure_assessment_dir · ASSESSMENT_DIR_NAME
+#   artifact-template.sh seed_artifact_template
+#   fork-point.sh      resolve_delta_facts · is_delta_unreliable
+#   mint.sh              slugify · count_selected_in_section · resolve_phase
+# shellcheck source=lib/json.sh
+if ! . "${SCRIPT_DIR}/lib/json.sh" 2>/dev/null; then
+    printf 'assessment-mint: cannot load lib/json.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/project-root.sh
+if ! . "${SCRIPT_DIR}/lib/project-root.sh" 2>/dev/null; then
+    printf 'assessment-mint: cannot load lib/project-root.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/assessment-dir.sh
+if ! . "${SCRIPT_DIR}/lib/assessment-dir.sh" 2>/dev/null; then
+    printf 'assessment-mint: cannot load lib/assessment-dir.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/artifact-template.sh
+if ! . "${SCRIPT_DIR}/lib/artifact-template.sh" 2>/dev/null; then
+    printf 'assessment-mint: cannot load lib/artifact-template.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/fork-point.sh
+if ! . "${SCRIPT_DIR}/lib/fork-point.sh" 2>/dev/null; then
+    printf 'assessment-mint: cannot load lib/fork-point.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/mint.sh
+if ! . "${SCRIPT_DIR}/lib/mint.sh" 2>/dev/null; then
+    printf 'assessment-mint: cannot load lib/mint.sh\n' >&2
+    exit 1
+fi
+
+# --- main -------------------------------------------------------------------------
+
+# Compose the mint: resolve where the assessment lives, seed it, read what it holds, resolve
+# the delta, decide the route, and emit the one JSON object.
+#
+# The COMPOSITION lives here, not in a lib. Five libs are chained — project-root, assessment-dir,
+# artifact-template, fork-point and mint — and a lib that reached across to four siblings
+# carried a sourcing order nothing declared and no reader could see. Each lib is now flat and
+# this script is what wires them, mirroring branch-delta's `emit_delta_facts`.
+#
+# $1 host (selects project-root resolution only), $2 label. Emits ONE JSON object on stdout;
+# diagnostics go to stderr. Exits 2 on a usage error, 1 on a runtime error, 0 on ok.
+emit_mint_facts() {
+    local host="$1" label="$2"
+    shift 2
+
+    local title=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --title)
+                [ $# -ge 2 ] || { printf '%s-mint: --title needs a value\n' "${label}" >&2; return 2; }
+                title="$2"
+                shift 2
+                ;;
+            *)
+                printf '%s-mint: unknown mint flag "%s"\n' "${label}" "$1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    local project_root
+    project_root="$(resolve_project_root "${host}")"
+    [ -n "${project_root}" ] || { printf '%s-mint: could not resolve project root\n' "${label}" >&2; return 1; }
+
+    # The PLUGIN's root, which is not the project root and cannot be derived from it.
+    # A dispatched subagent's cwd is the user's project, so a relative `references/…` in a
+    # worker dispatch resolves to <project>/references/… and the read fails outright. This
+    # is what lets the orchestrator absolutise that path, the same way it already
+    # absolutises the write target. Walked from SCRIPT_DIR, which this script already
+    # resolved: scripts -> skill -> skills -> plugin root.
+    local plugin_root
+    plugin_root="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+    local host_slug
+    host_slug="$(slugify "${host}")"
+    [ -n "${host_slug}" ] || { printf '%s-mint: invalid host token "%s"\n' "${label}" "${host}" >&2; return 2; }
+
+    # The real ref, read once and used three ways: reported verbatim, slugified into the
+    # filename, and handed to the delta below. One source, so the name in the path and the
+    # branch the route was measured on can never disagree.
+    local branch branch_slug branch_known
+    branch="$(resolve_branch "${project_root}")"
+    branch_slug="$(slugify "${branch}")"
+    if [ -n "${branch_slug}" ]; then branch_known="true"; else branch_known="false"; fi
+
+    local task_slug
+    task_slug="$(slugify "${title}")"
+
+    local target_dir="${ASSESSMENT_DIR_NAME}"
+
+    # Symlink guard, mkdir and the .gitignore seed are one shared step — see
+    # project-root.sh. Only the reporting is ours: the two codes separate a crafted repo
+    # from an ordinary I/O failure, which read very differently to whoever hits them.
+    ensure_assessment_dir "${project_root}" >/dev/null
+    case $? in
+        2) printf '%s-mint: %s is a symlink; refusing\n' "${label}" "${target_dir}" >&2; return 1 ;;
+        0) ;;
+        *) printf '%s-mint: could not create %s\n' "${label}" "${target_dir}" >&2; return 1 ;;
+    esac
+
+    local name="${label}"
+    [ "${branch_known}" = "true" ] && name="${name}-${branch_slug}"
+    [ -n "${task_slug}" ] && name="${name}-${task_slug}"
+    local basename="${name}.md"
+    local path_rel="${target_dir}/${basename}"
+    local path_abs="${project_root}/${path_rel}"
+
+    # Seed the empty skeleton so no writer starts from a blank page, then read back what the
+    # file holds. A mint always leaves a file behind, so presence answers nothing — comparing
+    # against the skeleton is what lets Phase select and the resume check tell a fresh review
+    # from a resumption.
+    # `local` on its own line: folding the substitution into it would replace the exit
+    # status of seed_artifact_template with `local`'s own, swallowing a failed write.
+    local seed_state
+    seed_state="$(seed_artifact_template "${title}" "${path_abs}")" \
+        || { printf '%s-mint: could not write %s\n' "${label}" "${path_abs}" >&2; return 1; }
+    local has_content template_seeded template_only
+    case "${seed_state}" in
+        seeded)        has_content="false" template_seeded="true"  template_only="true"  ;;
+        template_only) has_content="false" template_seeded="false" template_only="true"  ;;
+        *)             has_content="true"  template_seeded="false" template_only="false" ;;
+    esac
+
+    # Selected drivers per axis — the third Phase-select signal, counted here rather than read
+    # by the router, since this function already has the file open. Anchored on the LINE START
+    # so the field cards, which spell the allowed values as `Selection (selected|excluded)`,
+    # cannot be mistaken for a decision; and scoped to the owning `## ` section so a threat's
+    # decision is never counted as a rule's. Zero on an untouched skeleton, which has no entries.
+    local selected_threats=0 selected_rules=0
+    if [ "${has_content}" = "true" ]; then
+        selected_threats="$(count_selected_in_section "${path_abs}" '## Threats')"
+        selected_rules="$(count_selected_in_section "${path_abs}" '## Org rules')"
+    fi
+
+    # Sibling assessments on this branch that this title did NOT mint. The mint is
+    # deterministic in branch + title, so a later session paraphrasing the title resolves
+    # to a fresh path and reports has_content:false — Phase select then routes an already
+    # implemented change back into plan review, silently. Listing what is there lets the
+    # router ask "is one of these yours?" WITHOUT the minter guessing: a fuzzy match that
+    # picked wrong would write into another task's assessment, which is the harm the
+    # never-glob rule exists to prevent. Empty on the common path, so it costs nothing.
+    local siblings="" sibling_file sibling_base sibling_title sibling_lead
+    if [ "${has_content}" = "false" ]; then
+        # Scoped to this branch when one is known: an assessment on another branch is
+        # another unit of work, and offering it would be noise the router has to reject.
+        sibling_lead="${label}"
+        [ "${branch_known}" = "true" ] && sibling_lead="${label}-${branch_slug}"
+        for sibling_file in "${project_root}/${target_dir}/${sibling_lead}"*.md; do
+            [ -f "${sibling_file}" ] || continue
+            sibling_base="$(basename "${sibling_file}")"
+            [ "${sibling_base}" = "${basename}" ] && continue
+            # Written content only — an untouched skeleton is "no assessment", the same
+            # thing has_content reports, so offering one would send the router to an empty
+            # file. Judged by the one predicate that owns the question rather than a second
+            # copy of it; the file exists, so this call cannot write.
+            sibling_title="$(sed -n 's/^Title: //p' "${sibling_file}" | head -1)"
+            [ "$(seed_artifact_template "${sibling_title}" "${sibling_file}")" = "written" ] || continue
+            siblings="${siblings}${siblings:+,}\"$(escape_for_json "${sibling_base}")\""
+        done
+    fi
+
+    # The route itself. Needs the delta, so resolve it here from the branch we already have
+    # — branch-delta resolves the same facts for its own output, and both read one lib so
+    # the two answers cannot drift.
+    resolve_delta_facts "${project_root}" "${branch}"
+    local phase phase_reason
+    local delta_unreliable="false"
+    is_delta_unreliable && delta_unreliable="true"
+    resolve_phase "${has_content}" "$((selected_threats + selected_rules))" "${siblings}" \
+        "${DELTA_EMPTY}" "${delta_unreliable}"
+
+    # Carried in the JSON so the absolute path and the rule governing it arrive together,
+    # in the same tool result, at the moment the agent is about to write. A static sentence
+    # in SKILL.md is read thousands of tokens earlier and gets lost; this one is unmissable
+    # and already has the path substituted in.
+    local instruction
+    instruction="Write the assessment ONLY to assessment_abs (${path_abs}). That folder is this repository's single .ingrain-security/ directory and it already exists — never create an .ingrain-security/ folder anywhere else, and never resolve the path against the file you happen to be editing. Pass assessment_abs verbatim to every worker dispatch and to every Write/Edit call; assessment_path is a display-only form for prose and links. The file already holds the correct empty skeleton — fill its sections in place rather than re-creating the page or restating its table headers."
+    if [ -n "${siblings}" ]; then
+        instruction="${instruction} No file exists for this title, but this branch already carries other assessments — see siblings. If one of them is this same task under different wording, open it, read its \`## Task\` Title, and re-run this mint with that Title VERBATIM rather than starting a fresh review; a paraphrase mints a different file and loses the prior analysis."
+    fi
+
+    printf '{"host":"%s","plugin_root":"%s","project_root":"%s","branch":"%s","branch_slug":"%s","branch_known":%s,"task_slug":"%s","%s_dir":"%s","%s_path":"%s","%s_abs":"%s","basename":"%s","has_content":%s,"selected_threats":%s,"selected_rules":%s,"phase":"%s","phase_reason":"%s","template_seeded":%s,"template_only":%s,"siblings":[%s],"instruction":"%s"}\n' \
+        "$(escape_for_json "${host_slug}")" \
+        "$(escape_for_json "${plugin_root}")" \
+        "$(escape_for_json "${project_root}")" \
+        "$(escape_for_json "${branch}")" \
+        "${branch_slug}" \
+        "${branch_known}" \
+        "${task_slug}" \
+        "${label}" "${target_dir}" \
+        "${label}" "$(escape_for_json "${path_rel}")" \
+        "${label}" "$(escape_for_json "${path_abs}")" \
+        "${basename}" \
+        "${has_content}" \
+        "${selected_threats}" \
+        "${selected_rules}" \
+        "${phase}" \
+        "${phase_reason}" \
+        "${template_seeded}" \
+        "${template_only}" \
+        "${siblings}" \
+        "$(escape_for_json "${instruction}")"
+}
+
+case "${1:-}" in
+    -h|--help)
+        usage
+        exit 0
+        ;;
+    "")
+        printf 'assessment-mint: missing <host>. Try --help.\n' >&2
+        exit 2
+        ;;
+esac
+
+host="$1"
+shift
+
+# `assessment` is the label: the filename lead, the JSON field prefix and the diagnostic
+# program token. An unrecognized flag after <host> exits 2 through the parser above.
+emit_mint_facts "${host}" assessment "$@"

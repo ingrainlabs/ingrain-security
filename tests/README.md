@@ -1,9 +1,9 @@
 # Tests
 
 Test suite for the `ingrain-security` plugin — the `ingrain-security` orchestrator skill and its
-worker roles: six in Development, plus Testing's `ingrain-threat-verifier`. Built on Deno's test
-runner; it drives the `claude` CLI in headless mode and can exercise each worker in isolation by
-dispatching it the way the orchestrator does (its
+worker roles: seven in Development, plus Testing's `ingrain-threat-verifier` and
+`ingrain-rule-verifier`. Built on Deno's test runner; it drives the `claude` CLI in headless mode
+and can exercise each worker in isolation by dispatching it the way the orchestrator does (its
 `skills/ingrain-security/references/development/<name>.md` body as the system prompt, plus the
 assessment file it writes its section into).
 
@@ -12,12 +12,12 @@ assessment file it writes its section into).
 The skill's reference files are grouped by the phase that reads them, so a file's phase is visible
 from its path:
 
-| Folder                    | Holds                                                                      |
-| ------------------------- | -------------------------------------------------------------------------- |
-| `references/development/` | The six Development worker roles, `ingrain-<role>.md`, and `dispatch.md`   |
-| `references/testing/`     | `verification-pass.md` (the Testing flow) and `ingrain-threat-verifier.md` |
-| `references/lib/`         | `ingrain-cli.md`, `branch-diff.md` — phase-neutral utilities               |
-| `references/formatting/`  | `assessment-file.md`, `rules-file.md` — file schemas, read by both phases  |
+| Folder                    | Holds                                                                                               |
+| ------------------------- | --------------------------------------------------------------------------------------------------- |
+| `references/development/` | The seven Development worker roles, `ingrain-<role>.md`, and `flow.md`                              |
+| `references/testing/`     | `verification-pass.md` (the Testing flow), `ingrain-threat-verifier.md`, `ingrain-rule-verifier.md` |
+| `references/lib/`         | `ingrain-cli.md`, `branch-delta.md`, `dispatch.md` — phase-neutral, read by both phases             |
+| `references/lib/`         | `assessment-file.md` — the one artifact's schema, read by both phases                               |
 
 A worker's filename stem equals its frontmatter `name:`, so the static tests derive a worker's path
 from its name — keep the two in step when adding a worker.
@@ -38,7 +38,8 @@ Run all commands from this `tests/` directory.
 ```
 lib/      claudeRunner.ts (spawn helper) · matchers.ts (assertions) · sampleInputs.ts (canned plans) · reporter.ts (input/output printer)
 static/   offline lint of worker-reference frontmatter + advisory ROLE + skill/hook structure (no model calls)
-hooks/    assessment-hooks.test.ts · assessment-path.test.ts · rules-path.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts · assessment-write-lib.test.ts · project-root-lib.test.ts — run the hook/path scripts and their shared libs under bash against a throwaway project (no model calls)
+parity/   scriptInvocations.test.ts · scriptOutputFields.test.ts · sourceGraph.test.ts — hold the scripts and the docs/headers that describe them to each other (no model calls)
+hooks/    assessment-hooks.test.ts · assessment-mint.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts · assessment-write-lib.test.ts · project-root-lib.test.ts — run the hook/path scripts and their shared libs under bash against a throwaway project (no model calls)
 shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
 agents/   agents.test.ts — table-driven live tests, one case per worker scenario (dispatched via its reference file)
 skill/    trigger.test.ts (review starts / minor stops) · orchestration.test.ts (gated)
@@ -50,12 +51,12 @@ Every **live** test prints a block as it runs, so you can validate the model's a
 eye alongside the automated verdict:
 
 ```
-===== ingrain-relevance-triage :: major plan =====
+===== ingrain-threat-generator :: major plan =====
 INPUT:
     <the exact prompt sent>
 OUTPUT:
     <the model's full response>
-DISPATCHED: [ingrain-relevance-triage]        # skill/orchestration tests only
+DISPATCHED: [ingrain-threat-generator]       # skill/orchestration tests only
 VERDICT: ok  (exit 0, 3.1s)
 ```
 
@@ -71,17 +72,31 @@ This is always on for the live tiers — Deno streams each test's output live (w
   assessment file; a read-only clause there contradicts their hand-off contract). Also the
   orchestrator's step ordering, announce/stop phrases, the read-reference dispatch mechanism, and a
   valid SessionStart hook.
+- **parity/** — the tier for facts stated in two places. A script and the docs describing it are
+  edited independently, so a renamed subcommand, a renamed JSON key or a stale dependency comment
+  each go unnoticed on both sides — the script keeps passing its own tests and the markdown keeps
+  rendering. Three checks, each deriving both ends rather than pinning a literal:
+  `scriptInvocations` **executes** every command inside an `ingrain-script` fence (the tag is the
+  contract: a fence claims "runnable", prose about a script does not) against a throwaway git repo
+  and requires exit 0 plus parseable JSON; `scriptOutputFields` reads each script's `CONTRACT KEYS`
+  header block and checks every declared key is both really emitted and really documented, plus the
+  `phase`/`phase_reason` enum in both directions; `sourceGraph` derives the shell dependency graph
+  from the `.` commands and cross-file symbol use, and holds each lib's "Sourced by" and "Requires
+  …" headers to it — including the ShellCheck directive beside each source line, whose drift
+  silently un-lints a file. Adding a contract key, a route or a script means touching **both** ends
+  or this tier fails.
 - **hooks/** — offline, no model calls, but unlike `static/` it **executes** the
-  `hooks/start/ensure-assessment-dir` SessionStart hook under `bash` against a `Deno.makeTempDir()`
-  project, asserting the durable folder/README/`.gitignore` are seeded and the `CLAUDE_PROJECT_DIR`
-  / `$PWD` resolution behaves. (The finalize snapshot is now written by the orchestrator via its
-  file tools, not a hook script, so it has no bash test here.) It also executes both auto-approval
-  hooks, piping each one real hook payloads — `hooks/claude/allow-assessment-write` (**PreToolUse**,
-  target named in `tool_input.file_path`) and `hooks/codex/allow-assessment-write`
-  (**PermissionRequest**, targets read out of an `apply_patch` patch): the assessment file must be
-  auto-approved, while every other path — and every malformed, multi-file or decoy payload — must
-  fall back to the user's normal permission prompt. Needs `bash` + coreutils (macOS/Linux); the
-  Windows `cd && pwd` normalization can't be exercised on Unix and stays a manual check.
+  `hooks/scripts/ensure-assessment-dir` SessionStart hook under `bash` against a
+  `Deno.makeTempDir()` project, asserting the durable folder/README/`.gitignore` are seeded and the
+  `CLAUDE_PROJECT_DIR` / `$PWD` resolution behaves. (The finalize snapshot is now written by the
+  orchestrator via its file tools, not a hook script, so it has no bash test here.) It also executes
+  both auto-approval hooks, piping each one real hook payloads —
+  `hooks/claude/allow-assessment-write` (**PreToolUse**, target named in `tool_input.file_path`) and
+  `hooks/codex/allow-assessment-write` (**PermissionRequest**, targets read out of an `apply_patch`
+  patch): the assessment file must be auto-approved, while every other path — and every malformed,
+  multi-file or decoy payload — must fall back to the user's normal permission prompt. Needs
+  `bash` + coreutils (macOS/Linux); the Windows `cd && pwd` normalization can't be exercised on Unix
+  and stays a manual check.
 - **shell/** — runs the real `shellcheck` binary once per shell script tracked by git. Discovery is
   **shebang-based, not a `*.sh` glob**: the hooks are deliberately extensionless (see
   `hooks/run-hook.cmd`), so a glob would silently lint the three release scripts and skip every
@@ -94,16 +109,17 @@ This is always on for the live tiers — Deno streams each test's output live (w
 - **agents/** — dispatches one worker per case the way the orchestrator does: its
   `skills/ingrain-security/references/development/<name>.md` body as the system prompt with
   `--allowed-tools Read,Grep,Glob,Write,Edit`. Each case mints a real assessment file in a throwaway
-  project dir (via the bundled `scripts/assessment-path`) and hands the worker that absolute path as
+  project dir (via the bundled `scripts/assessment-mint`) and hands the worker that absolute path as
   its write target, then asserts the worker actually modified the seeded file and checks the
   output's _shape_ (a verdict keyword, a 0–100 score, risk descending by threat tag, required
   fields) over the return and the file together. Assertions are loose because live output varies.
-  The table has seven cases over six workers (`ingrain-relevance-triage` runs twice, on a major and
-  a minor plan).
+  The table has six cases over six workers. It once opened with two `ingrain-relevance-triage`
+  cases; that worker was replaced by a question the orchestrator asks the user, which has no
+  subagent to run in isolation.
 - **skill/** — a full session (skill + agents + hook). `trigger.test.ts` checks a security-relevant
-  plan starts the review and a trivial one stops at triage. `orchestration.test.ts`
-  (integration-gated) checks the workers fire in order through risk scoring and the run halts at
-  Gate 1.
+  plan starts the review and a trivial one stops at the review question. `orchestration.test.ts`
+  (integration-gated) checks the workers fire in order through risk scoring and the run halts at the
+  user gates, on both driver axes.
 
 ## Running
 
@@ -114,22 +130,23 @@ which only `agents/` and `skill/` reach; `static/` and `hooks/` never do.
 **No agent** — deterministic, no auth, no network, sub-second:
 
 ```bash
-deno task test:offline       # the default tier — static + hooks + shell
+deno task test:offline       # the default tier — static + parity + hooks + shell
 deno task test:static        # just the offline lint of the skill/worker/hook files
+deno task test:parity        # just the script <-> docs/header contracts
 deno task test:hooks         # just the hook + path scripts, executed under bash
 deno task test:shell         # just the shell scripts, checked with shellcheck
-deno task test:ts            # the offline TS tests only — static + hooks, no shellcheck needed
+deno task test:ts            # the offline TS tests only — static + parity + hooks, no shellcheck needed
 deno task ci                 # what CI runs: lint + fmt:check + test:offline
 ```
 
 **Needs an agent** — spawns `claude`, requires auth, costs model calls, can flake:
 
 ```bash
-deno task test:agent         # 7 live worker cases (6 workers; triage runs twice) + the 2 skill trigger tests
+deno task test:agent         # 6 live worker cases (one per worker) + the 2 skill trigger tests
 deno task test:integration   # everything, incl. the full orchestration cycle (slow)
 
 # one worker only:
-deno test --allow-run=claude --allow-read --allow-env agents/ --filter ingrain-relevance-triage
+deno test --allow-run=claude --allow-read --allow-env agents/ --filter ingrain-threat-generator
 ```
 
 Each tier's Deno permissions double as a capability tag: `test:static` gets `--allow-read` only and
@@ -143,8 +160,8 @@ invocations rather than merging their permission sets.
 
 `.github/workflows/ci.yml` runs the **no-agent** tier on pull requests into `main` and
 `development`, and on pushes to `main`, as a single `deno task ci` (from `tests/`) — lint +
-fmt:check + static + hooks + shell. CI runs the same command you do, so it holds no test logic of
-its own that could drift from this suite.
+fmt:check + static + parity + hooks + shell. CI runs the same command you do, so it holds no test
+logic of its own that could drift from this suite.
 
 Its only other step installs **ShellCheck** at a pinned version, because `shell/shellcheck.test.ts`
 shells out to it. Pinning keeps the lint reproducible: the runner image's preinstalled copy could
@@ -180,8 +197,8 @@ _whether_, _at what point_, and _with what wording_ each variant triggers its re
    `variant: baseline·normal ·
    SKILL.md`, `variant: SKILL2·plan · SKILL2.md`), so the header
    names both the mode and the skill file under test. Each is a real interactive `claude` session
-   preloaded with the task — drive the Gate 1 / Gate 2 prompts yourself and compare what each window
-   shows.
+   preloaded with the task — drive the threat-gate and rule-gate prompts yourself and compare what
+   each window shows.
 
 Each variant runs against a **staged throwaway plugin dir** (the variant swapped in as the target
 `SKILL.md`, so both the `SessionStart` hook injection and the skill description come from it).
@@ -200,16 +217,17 @@ earlier mode's transcript in its own subdir.
 
 ## Tiers & rough cost
 
-| Command                  | Needs an agent? | Model calls             | Time      | Auth |
-| ------------------------ | --------------- | ----------------------- | --------- | ---- |
-| `test:static`            | no              | 0                       | < 1s      | no   |
-| `test:hooks`             | no              | 0                       | < 1s      | no   |
-| `test:shell`             | no              | 0                       | < 1s      | no   |
-| `test:ts`                | no              | 0                       | < 1s      | no   |
-| `test:offline`           | no              | 0                       | < 1s      | no   |
-| `ci` (+ lint, fmt:check) | no              | 0                       | a few s   | no   |
-| `test:agent`             | yes             | ~9 (7 worker cases + 2) | a few min | yes  |
-| `test:integration`       | yes             | + full cycle to Gate 1  | 5–20 min  | yes  |
+| Command                  | Needs an agent? | Model calls               | Time      | Auth |
+| ------------------------ | --------------- | ------------------------- | --------- | ---- |
+| `test:static`            | no              | 0                         | < 1s      | no   |
+| `test:parity`            | no              | 0                         | < 1s      | no   |
+| `test:hooks`             | no              | 0                         | < 1s      | no   |
+| `test:shell`             | no              | 0                         | < 1s      | no   |
+| `test:ts`                | no              | 0                         | < 1s      | no   |
+| `test:offline`           | no              | 0                         | < 1s      | no   |
+| `ci` (+ lint, fmt:check) | no              | 0                         | a few s   | no   |
+| `test:agent`             | yes             | ~10 (8 worker cases + 2)  | a few min | yes  |
+| `test:integration`       | yes             | + full cycle to the gates | 5–20 min  | yes  |
 
 ## Notes
 
@@ -217,7 +235,8 @@ earlier mode's transcript in its own subdir.
   `--filter`. Assertions check shape, not exact wording, to minimize this.
 - Each worker is dispatched by inlining its
   `skills/ingrain-security/references/development/<name>.md` body (via `workerDispatchPrompt` in
-  `lib/claudeRunner.ts`) and restricting tools to `Read,Grep,Glob`; the plugin is loaded via
-  `--plugin-dir` pointing at the repo root (computed automatically).
-- The orchestration test deliberately does **not** answer the interactive Gate 1/Gate 2 prompts —
-  headless mode has no human — so it asserts the run _reaches_ Gate 1 and stops.
+  `lib/claudeRunner.ts`) and restricting tools to `Read,Grep,Glob,Write,Edit`; the plugin is loaded
+  via `--plugin-dir` pointing at the repo root (computed automatically).
+- The orchestration test deliberately does **not** answer the interactive gate prompts — headless
+  mode has no human — so it asserts the run _reaches_ the user gates and stops there, on the threat
+  axis and the rule axis alike.

@@ -1,4 +1,4 @@
-# Shared project-root helpers for the ingrain-security plugin.
+# Project and git location resolution for the ingrain-security plugin.
 #
 # The dialect is declared here rather than by a shebang, because this file is sourced,
 # not executed — ShellCheck has no other way to know it is bash.
@@ -9,11 +9,18 @@
 # detached-HEAD checkout must degrade to an empty result, not abort), and
 # sourcing must not change that.
 #
+# Flat: nothing here calls a sibling lib, and no sibling calls in. Every consumer is a
+# top-level script, which is where composing two libs belongs.
+#
 # Sourced by:
-#   hooks/start/ensure-assessment-dir            (SessionStart, both hosts)
+#   hooks/scripts/ensure-assessment-dir            (SessionStart, both hosts)
 #   hooks/claude/allow-assessment-write          (PreToolUse, Claude only)
-#   skills/ingrain-security/scripts/assessment-path   (the sibling minter)
-#   skills/ingrain-security/scripts/branch-diff       (the fork-point resolver)
+#   hooks/codex/allow-assessment-write           (PermissionRequest, Codex only)
+#   skills/ingrain-security/scripts/assessment-mint   (the mint)
+#   skills/ingrain-security/scripts/branch-delta       (the fork-point resolver)
+#
+# This file resolves LOCATIONS only. The assessment folder is lib/assessment-dir.sh's, and
+# JSON escaping — which lived here and has nothing to do with either — is lib/json.sh's.
 #
 # Every function echoes empty and returns non-zero on failure, so callers can
 # fall through to the next candidate rather than risk acting on a bad path.
@@ -34,6 +41,8 @@ normalize_dir() {
     (cd "$1" 2>/dev/null && pwd)
 }
 
+# INTERNAL to this file — `resolve_project_root` is its only caller.
+#
 # The root of the git repository containing the current directory; empty when outside a
 # repo. `rev-parse --show-toplevel` answers from ANY subdirectory, which is what pins the
 # assessment folder to the top of the repo even when the host starts us in one of its
@@ -79,32 +88,4 @@ resolve_project_root() {
         return 0
     }
     normalize_dir "$PWD"
-}
-
-# Idempotently ensure the assessment folder's self-ignoring .gitignore, so a routine
-# `git add -A` cannot sweep up an assessment — which can contain analysis of a private
-# codebase — into a commit. The bare `*` matches this file too, so the whole folder,
-# ignore file included, stays out of `git status`; `git add -f <file>` remains the
-# explicit escape hatch for sharing one.
-#
-# printf (not a heredoc) — documented bash 5.3 heredoc hang.
-seed_gitignore() {
-    local ignore="$1/.gitignore"
-    [ -f "${ignore}" ] && return 0
-    printf '%s\n' \
-        '# Assessments here can contain analysis of a private codebase, so they' \
-        '# are ignored by default. Share one explicitly with: git add -f <file>' \
-        '*' \
-        > "${ignore}" 2>/dev/null || true
-}
-
-# Single-pass JSON string escape. Orders of magnitude faster than a char-by-char loop.
-escape_for_json() {
-    local s="$1"
-    s="${s//\\/\\\\}"
-    s="${s//\"/\\\"}"
-    s="${s//$'\n'/\\n}"
-    s="${s//$'\r'/\\r}"
-    s="${s//$'\t'/\\t}"
-    printf '%s' "${s}"
 }

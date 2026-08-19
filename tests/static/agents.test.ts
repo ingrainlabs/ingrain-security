@@ -1,5 +1,5 @@
 /**
- * Static lint of the 6 worker reference files. No model calls, no auth, no
+ * Static lint of the worker reference files. No model calls, no auth, no
  * network — pure file reads.
  *
  * Workers are reference files under the single ingrain-security skill now
@@ -19,19 +19,11 @@
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 import { parseFrontmatter } from "../lib/matchers.ts";
+import { VERIFIERS, WORKERS } from "../lib/workers.ts";
 
 const REFERENCES_DIR = fromFileUrl(
   new URL("../../skills/ingrain-security/references/development/", import.meta.url),
 );
-
-const WORKERS = [
-  "ingrain-relevance-triage",
-  "ingrain-threat-generator",
-  "ingrain-threat-critic",
-  "ingrain-risk-scorer",
-  "ingrain-mitigation-generator",
-  "ingrain-mitigation-critic",
-] as const;
 
 const splitFrontmatter = (md: string): string => md.replace(/^---\n[\s\S]*?\n---\n/, "");
 
@@ -100,6 +92,73 @@ for (const name of WORKERS) {
         prose,
         "the orchestrator drives the review loop and dispatches every other worker",
       );
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// The Testing verifiers — dispatched exactly as the seven above are, and until
+// 2026-08-10 linted by nothing at all. `WORKERS` carries only the Development
+// flow order and `REFERENCES_DIR` only `references/development/`, so both files
+// fell outside the loop while this suite read as though it covered every worker.
+// That blind spot is how the relative-reference-path defect (audit B1) was copied
+// into `ingrain-rule-verifier`'s dispatch months after being filed.
+//
+// They are the inverse worker: read-only, writing nothing, returning a verdict the
+// orchestrator records. So the assertions that make sense for them are the
+// mirror image of the ones above — a write target would be the defect here.
+// ---------------------------------------------------------------------------
+
+const TESTING_DIR = fromFileUrl(
+  new URL("../../skills/ingrain-security/references/testing/", import.meta.url),
+);
+
+for (const name of VERIFIERS) {
+  Deno.test(`verifier ${name}: frontmatter and read-only ROLE`, async (t) => {
+    const md = await Deno.readTextFile(`${TESTING_DIR}${name}.md`);
+    const fm = parseFrontmatter(md);
+    const prose = flattenProse(splitFrontmatter(md));
+
+    await t.step("name matches reference file", () => {
+      assertEquals(fm.name, name);
+    });
+
+    await t.step("description is non-empty and anti-trigger", () => {
+      assertExists(fm.description);
+      const description = String(fm.description);
+      assertEquals(description.trim().length > 0, true);
+      assertStringIncludes(description, "INTERNAL");
+      assertStringIncludes(description.toLowerCase(), "reachable solely through a dispatch");
+    });
+
+    await t.step("ROLE header states the read-only toolset", () => {
+      // The exact inverse of the Development assertion. A verifier that grew a write
+      // target could edit the assessment mid-verification — the orchestrator concludes
+      // both dimensions and owns every write to the file.
+      assertStringIncludes(prose, "Read-only on the codebase");
+      // Every git command the review runs comes from the bundled script, so a verifier
+      // brewing its own is the drift this prohibition exists to stop: the orchestrator and
+      // each verifier would read different changes while the run reports one.
+      assertStringIncludes(prose, "never write a git command of your own");
+    });
+
+    await t.step("ROLE header claims no write target", () => {
+      assertEquals(
+        prose.includes("stored analysis file"),
+        false,
+        "a verifier returns its verdict; the orchestrator records it. A write target here " +
+          "would let a verifier edit the file the orchestrator is concluding into.",
+      );
+      assertStringIncludes(prose, "Your entire output is the verdict you return");
+    });
+
+    await t.step("ROLE header carries a recommended model", () => {
+      assertStringIncludes(prose, "Recommended model:");
+    });
+
+    await t.step("ROLE header places the verifier inside a pipeline", () => {
+      assertStringIncludes(prose, "orchestrator dispatched you to");
+      assertStringIncludes(prose, "dispatches every other worker");
     });
   });
 }

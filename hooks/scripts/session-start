@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# SessionStart hook for the ingrain-security plugin.
+#
+# Injects the ingrain-security skill into the session context so the
+# agent knows to run the security review loop as a step of implementation
+# planning -- while forming the plan, folding the results into it -- and to run
+# the skill again (its Testing verification) once the code is written.
+
+set -euo pipefail
+
+# The host is passed as $1 by each hook.json ("claude" | "codex" | <future token>),
+# matching ensure-assessment-dir. It selects the assessment-mint invocation below.
+HOST="${1:-claude}"
+
+# Determine plugin root directory. This script lives at hooks/scripts/session-start,
+# so the plugin root is two levels up.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# Read the ingrain-security skill content
+skill_path="${PLUGIN_ROOT}/skills/ingrain-security/SKILL.md"
+review_skill_content=$(cat "$skill_path" 2>&1 || echo "Error reading ingrain-security skill at ${skill_path}")
+
+# shellcheck source=../../skills/ingrain-security/scripts/lib/json.sh
+if ! . "${PLUGIN_ROOT}/skills/ingrain-security/scripts/lib/json.sh" 2>/dev/null; then
+    printf 'session-start: cannot load lib/json.sh\n' >&2
+    exit 0
+fi
+
+# Concrete, ready-to-run commands (plugin root + host already substituted) so the
+# orchestrator never hand-builds either path. It runs the bundled skill scripts and uses their
+# JSON. The orchestrator's own shell is bash, so it invokes them directly — no run-hook.cmd
+# wrapper, which only serves host-invoked hook commands.
+#   assessment-mint  mints the assessment file and resolves the route (SKILL.md → Phase select)
+#   branch-delta      mints nothing; it resolves the DIFF BASIS Testing diffs against
+#                    (verification-pass.md → The diff under review)
+mint_runner="bash \"${PLUGIN_ROOT}/skills/ingrain-security/scripts/assessment-mint\" ${HOST}"
+diff_runner="bash \"${PLUGIN_ROOT}/skills/ingrain-security/scripts/branch-delta\" ${HOST}"
+
+# The injected context, written as PLAIN TEXT — one line per argument, real newlines, real
+# quotes — and JSON-escaped exactly once at the end.
+#
+# It used to be authored in its already-escaped form: a single 3000-character line carrying
+# literal `\n` separators and `\\\"` quotes, where every edit meant hand-counting backslashes.
+# A heredoc would be the obvious fix and is the one thing ruled out here (bash 5.3+ hang, see
+# the printf below), so this uses the same `printf '%s\n'` list the folder seeders use.
+# Escaping is a per-character mapping, so escaping the whole assembled string once is
+# identical to escaping each part — which is what makes the raw form safe to author.
+paths_context=$(printf '%s\n' \
+    '<INGRAIN-ASSESSMENT-PATHS>' \
+    'Do NOT hand-build the assessment-file path. Run this script once at review start and use its JSON output:' \
+    '' \
+    "  ${mint_runner} --title \"<task title>\"" \
+    '' \
+    '-> Use **assessment_abs** (the ABSOLUTE path) as the ONE file for every worker dispatch, every Write/Edit, and at finalize. Obey the JSON'"'"'s "instruction" field. Never create an .ingrain-security/ folder anywhere else — the script already created the only one, at the repo root. assessment_path is the relative display form; use it in prose and links, never as a write target.' \
+    '' \
+    '-> **phase** is the resolved route: development | testing | requires_judgement. Read it and act; only requires_judgement needs you to decide anything, and phase_reason names which judgement is owed.' \
+    '' \
+    'The file is both the working copy and its persisted record — there is no separate temp file and no copy step.' \
+    '' \
+    'ONE artifact carries the whole analysis — the org rules ride in the assessment'"'"'s own ## Org rules section, so there is no second file to mint or keep in step.' \
+    '' \
+    'The implementing agent maintaining an assessment later must re-run the command above and write to the assessment_abs it returns, rather than trusting a path stored in a plan file.' \
+    '' \
+    'Do NOT hand-roll a merge-base loop to work out what to diff. Run this read-only script — in the SAME block as the mint above, since both are read-only, deterministic and mutually independent, so issuing them together costs ONE round-trip instead of two — to resolve the BRANCH DELTA — everything this branch added since it diverged from the branch it was cut from, committed AND uncommitted:' \
+    '' \
+    "  ${diff_runner}" \
+    '' \
+    '-> **delta_empty** already fed the mint'"'"'s phase, so Phase select needs nothing from it here. Read it for context only: false means there is code on this branch (commits since the fork point, or an uncommitted change, or both), and a clean working tree is NOT evidence that no code exists.' \
+    '-> For Testing, keep **base_ref** (the parent branch, for the report) and **diff_ref** (the merge-base commit — what you actually diff against). diff_ref is the run'"'"'s fixed basis: pass it verbatim to every verifier, never re-derive it per dispatch and never substitute HEAD. When fallback=true, diff_ref is HEAD and the JSON'"'"'s "reason" says why; obey the "instruction" field, which states whether that narrows the review.' \
+    '</INGRAIN-ASSESSMENT-PATHS>')
+
+session_context_raw=$(printf '%s\n' \
+    '<EXTREMELY_IMPORTANT>' \
+    'This project treats security analysis as the final step of implementation planning. **Once your implementation plan is comprehensive and detailed enough — but before you present it or write any code — you MUST run the '"'"'ingrain-security'"'"' skill on the finished plan and fold its results back into it.** Then run the same skill **again after the code is written** — its Testing verification — to check that the selected threats were closed and the accepted org rules followed, before you present or commit the change. The skill auto-detects which phase to run from repo state. Invoke it via the Skill tool. Its full content is reproduced below so you know what it does:' \
+    '' \
+    "${review_skill_content}" \
+    '' \
+    "${paths_context}" \
+    '</EXTREMELY_IMPORTANT>')
+
+session_context=$(escape_for_json "${session_context_raw}")
+
+# Output context injection as JSON in the Claude Code shape
+# (hookSpecificOutput.additionalContext).
+#
+# Uses printf instead of heredoc to work around bash 5.3+ heredoc hang.
+printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$session_context"
+
+exit 0

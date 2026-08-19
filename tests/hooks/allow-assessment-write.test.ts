@@ -22,8 +22,7 @@ import { fromFileUrl } from "@std/path";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
 const HOOK = `${ROOT}hooks/claude/allow-assessment-write`;
-const MINT = `${ROOT}skills/ingrain-security/scripts/assessment-path`;
-const MINT_RULES = `${ROOT}skills/ingrain-security/scripts/rules-path`;
+const MINT = `${ROOT}skills/ingrain-security/scripts/assessment-mint`;
 
 interface IHookResult {
   code: number;
@@ -125,7 +124,7 @@ Deno.test("allow: the path the minter actually produces", async () => {
     // disagree on naming or location, the whole feature silently stops working and
     // this is the test that catches it.
     const out = await new Deno.Command("bash", {
-      args: [MINT, "claude", "mint", "--title", "Add authn"],
+      args: [MINT, "claude", "--title", "Add authn"],
       clearEnv: true,
       env: {
         PATH: Deno.env.get("PATH") ?? "",
@@ -151,8 +150,6 @@ Deno.test("allow: every file-editing tool, on both naming forms", async () => {
         const name of [
           "assessment.md",
           "assessment-main-add-authn.md",
-          "rules.md",
-          "rules-main-add-authn.md",
         ]
       ) {
         const res = await runHook(
@@ -162,28 +159,6 @@ Deno.test("allow: every file-editing tool, on both naming forms", async () => {
         assertEquals(res.allowed, true, `${tool} on ${name} should be allowed`);
       }
     }
-  });
-});
-
-Deno.test("allow: the rules sidecar path the minter actually produces", async () => {
-  await withProject(async (dir) => {
-    // Same contract as the assessment case: drive the REAL rules-path minter so a naming
-    // drift between the minter and the grant is caught here.
-    const out = await new Deno.Command("bash", {
-      args: [MINT_RULES, "claude", "mint", "--title", "Add authn"],
-      clearEnv: true,
-      env: {
-        PATH: Deno.env.get("PATH") ?? "",
-        HOME: Deno.env.get("HOME") ?? "",
-        CLAUDE_PROJECT_DIR: dir,
-      },
-      stdout: "piped",
-      stderr: "piped",
-    }).output();
-    const minted = JSON.parse(new TextDecoder().decode(out.stdout)) as { rules_abs: string };
-
-    const res = await runHook(payload("Write", minted.rules_abs, dir), { projectDir: dir });
-    assertEquals(res.allowed, true);
   });
 });
 
@@ -215,8 +190,8 @@ Deno.test("allow: project root from the git root when CLAUDE_PROJECT_DIR is unse
 
 Deno.test("defer: a file in the folder that is neither an assessment nor a rules file", async () => {
   await withProject(async (dir) => {
-    // The grant covers only assessment*.md and rules*.md — a `.bak` suffix, a decoy
-    // basename, or an unrelated name must all still fall through to the user's prompt.
+    // The grant covers only assessment*.md — a `.bak` suffix, a decoy basename, or an
+    // unrelated name must all still fall through to the user's prompt.
     for (
       const name of [
         "README.md",
@@ -294,15 +269,22 @@ Deno.test("defer: the target is a symlink", async () => {
   });
 });
 
-Deno.test("defer: a symlinked rules-* target", async () => {
+Deno.test("defer: a rules-* name, now that one artifact carries the analysis", async () => {
   await withProject(async (dir) => {
-    // The widened grant must apply the same symlink guard to rules*.md as to assessment*.md.
-    await sh(`ln -s /etc/passwd "${dir}/.ingrain-security/rules-evil.md"`);
-    const res = await runHook(
-      payload("Write", `${dir}/.ingrain-security/rules-evil.md`, dir),
-      { projectDir: dir },
-    );
-    assertEquals(res.allowed, false);
+    // The org rules ride in the assessment's own `## Org rules` section, so the grant
+    // covers `assessment*.md` alone. A `rules-*` write is no longer this plugin's to
+    // auto-approve.
+    //
+    // Plain regular files, deliberately: the symlink guard defers ANY symlinked target
+    // regardless of basename (covered above), so a symlinked `rules-*` would still defer
+    // with the old `rules*.md` arm restored — proving nothing about the narrowing.
+    for (const name of ["rules.md", "rules-main-add-authn.md"]) {
+      const res = await runHook(
+        payload("Write", `${dir}/.ingrain-security/${name}`, dir),
+        { projectDir: dir },
+      );
+      assertEquals(res.allowed, false, `${name} must no longer be auto-approved`);
+    }
   });
 });
 
