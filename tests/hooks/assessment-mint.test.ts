@@ -23,11 +23,24 @@ interface IResult {
   stderr: string;
 }
 
-/** Base env: PATH for coreutils/git, HOME so git has somewhere to look for config. */
+/**
+ * Base env: PATH for coreutils/git, HOME for the tools that expect one — and git's
+ * identity and config supplied by the test rather than by the machine.
+ *
+ * A bare `git commit` takes its author from `~/.gitconfig`, which a developer has and a
+ * CI runner does not, so it passes here and fails there with "Author identity unknown".
+ * The repository under test is disposable; the config git reads about it has to be too.
+ */
 function baseEnv(projectDir?: string): Record<string, string> {
   return {
     PATH: Deno.env.get("PATH") ?? "",
     HOME: Deno.env.get("HOME") ?? "",
+    GIT_AUTHOR_NAME: "Test",
+    GIT_AUTHOR_EMAIL: "test@example.com",
+    GIT_COMMITTER_NAME: "Test",
+    GIT_COMMITTER_EMAIL: "test@example.com",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_SYSTEM: "/dev/null",
     ...(projectDir ? { CLAUDE_PROJECT_DIR: projectDir } : {}),
   };
 }
@@ -431,8 +444,7 @@ Deno.test("mint: a detached HEAD drops the branch segment", async () => {
   await withProject(async (dir) => {
     // One commit to detach onto, then check out its SHA -> HEAD is detached.
     await sh(
-      `${gitRepo("main")} && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init` +
-        ` && git checkout -q --detach HEAD`,
+      `${gitRepo("main")} && git commit -q --allow-empty -m init && git checkout -q --detach HEAD`,
       dir,
     );
     const j = await runJson(["claude", "--title", "Add JWT auth"], { projectDir: dir });
