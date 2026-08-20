@@ -1,7 +1,7 @@
 {
   "name": "ingrain-security",
-  "version": "0.2.6",
-  "description": "Threat assessment for coding agents when planning implementation.",
+  "version": "1.0.0",
+  "description": "Finds the security holes in a change while they are still cheap to fix, then verifies the implementation actually closed them.",
   "author": { "name": "Ingrain Labs", "email": "markus.minkkinen@ingrainlabs.dev" },
   "repository": "https://github.com/ingrainlabs/ingrain-security",
   "license": "MIT",
@@ -10,8 +10,8 @@
   "hooks": "./hooks/codex/hook.json",
   "interface": {
     "displayName": "Ingrain Security",
-    "shortDescription": "Threat assessment for coding agents.",
-    "longDescription": "Assesses potential security risks in code and design before implementation, and grounds its implementation guidance in your organization's own security rules retrieved through the ingrain CLI.",
+    "shortDescription": "Finds the security holes in your plan, then verifies the code closed them.",
+    "longDescription": "Finds the security holes in a change while they are still cheap to fix — at the plan, before any code exists — and ranks each one so you can decide what is worth acting on. What you accept becomes concrete work in the plan, grounded in your organization's own security rules rather than generic advice. Run it again once the code is written and it verifies the implementation actually closed them.",
     "developerName": "Ingrain Labs",
     "category": "Security",
     "capabilities": ["Read", "Write"],

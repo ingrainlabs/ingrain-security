@@ -66,10 +66,11 @@ Deno.test("SKILL.md: the description carries both phase triggers", async () => {
   // Testing: the verification trigger — after code.
   assertStringIncludes(description, "AFTER you have implemented code");
   assertStringIncludes(description, "before you present or commit it");
-  // Both phases are labeled, and the description states they are mutually exclusive.
-  assertStringIncludes(description, "Development");
-  assertStringIncludes(description, "Testing");
-  assertStringIncludes(description, "Each phase owns one moment");
+  // Both moments are labeled — in the reader's terms rather than the flow's phase names, which
+  // mean nothing to someone deciding whether to run this — and stated as mutually exclusive.
+  assertStringIncludes(description, "Before you build");
+  assertStringIncludes(description, "After you build");
+  assertStringIncludes(description, "mutually exclusive");
 });
 
 Deno.test("SKILL.md: routes to a phase from repo state, then points at the reference", async () => {

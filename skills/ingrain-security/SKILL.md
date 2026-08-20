@@ -1,19 +1,15 @@
 ---
 name: ingrain-security
 description: >-
-  Use at BOTH ends of a security-relevant change; it detects which phase to run from repo
-  state, so invoke it at either moment. Each phase owns one moment: Development runs before
-  code for the task exists, Testing after it.
-  **Development — plan review:** run AS THE FINAL STEP of building an implementation plan,
-  ad-hoc inline or in a formal plan-mode / design-doc session — once the plan is comprehensive
-  and detailed (affected files, concrete implementations, tests), but before you present it or
-  write any code. It folds the selected threats, the accepted org rules and the implementation
-  guidance back into that plan.
-  **Testing — verification:** run AFTER you have implemented code for that plan, but before
-  you present or commit it. It judges each selected threat's robustness and each selected org
-  rule's adherence against the branch diff, and reports; the coding agent implements.
-  If there is even a 1% chance the change touches security, invoke it — it opens by asking
-  you whether a full review is warranted.
+  Finds the security holes in a change while they are still cheap to fix, then verifies the
+  implementation actually closed them.
+  **Before you build** — run it AS THE FINAL STEP of building an implementation plan, before
+  you present it or write any code. It works out what could go wrong, ranks it by risk, and
+  asks you what is worth acting on. What you pick becomes work in the plan.
+  **After you build** — run it AFTER you have implemented code for that plan, but before you
+  present or commit it. It checks the code against those decisions and reports which ones held.
+  The two are mutually exclusive, and it works out which applies. Use it on any change that
+  might touch security — it opens by asking whether a review is warranted.
 license: MIT
 compatibility: >-
   Built for agent hosts that can dispatch subagents (Claude Code, Codex). Requires bash, git and
