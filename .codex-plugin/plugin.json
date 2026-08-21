@@ -1,6 +1,6 @@
 {
   "name": "ingrain-security",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Finds the security holes in a change while they are still cheap to fix, then verifies the implementation actually closed them.",
   "author": { "name": "Ingrain Labs", "email": "markus.minkkinen@ingrainlabs.dev" },
   "repository": "https://github.com/ingrainlabs/ingrain-security",
