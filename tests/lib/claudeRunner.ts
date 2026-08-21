@@ -18,8 +18,19 @@ export const AGENT_TIMEOUT_MS = 120_000; // single-agent default
 export const SESSION_TIMEOUT_MS = 180_000; // full session (skill + agents)
 export const ORCHESTRATION_TIMEOUT_MS = 600_000; // full gated cycle
 
-/** Turn caps. */
-export const SESSION_MAX_TURNS = 4;
+/**
+ * Turn caps. These bound a run so a trigger test cannot wander into the whole review cycle;
+ * they are not an assertion about how FEW turns the skill should need.
+ *
+ * `SESSION_MAX_TURNS` was 4, calibrated when the SessionStart hook inlined `SKILL.md` and the
+ * agent could route straight from context. It no longer does — that payload ran to 21,994
+ * characters against the hosts' 10,000-character cap, so the hook now injects a directive and
+ * the skill body arrives when the Skill tool loads it. That is one extra round trip before the
+ * run can reach a verdict, and at 4 the minor-plan test ran out of turns mid-tool-call and
+ * returned no text at all. The cap absorbs the round trip; the cycle guard still holds at a
+ * quarter of ORCHESTRATION_MAX_TURNS.
+ */
+export const SESSION_MAX_TURNS = 8;
 export const ORCHESTRATION_MAX_TURNS = 30;
 
 /** Flatten all tool_use content blocks across assistant events. */

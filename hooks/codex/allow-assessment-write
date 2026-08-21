@@ -15,8 +15,10 @@
 #
 # Codex edits files through a single `apply_patch` tool whose patch text arrives in
 # `tool_input.command` — there is no `file_path` field, and ONE patch can touch SEVERAL
-# files. So the targets are read out of the patch envelope, and the approval is all-or-
-# nothing: a patch that edits the assessment and a source file in one shot is deferred
+# files. So the targets are read out of the patch envelope by `collect_patch_paths` — in the
+# shared lib, not here, because the review gate parses the same envelope to reach the opposite
+# verdict and two copies could disagree about which files one patch touches. The approval is
+# all-or-nothing: a patch that edits the assessment and a source file in one shot is deferred
 # whole, because Codex applies it atomically and a partial grant is not available to us.
 #
 # The grant is deliberately narrow. A patch is approved only when ALL hold:
@@ -50,83 +52,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # signal. Every rejection path in this hook routes here.
 defer() {
     exit 0
-}
-
-# Collect the paths an apply_patch command touches, one per line, or return non-zero when
-# the command is anything other than a pure add/update patch.
-#
-# The patch body is attacker-influenceable text, so the parse keys on structure the body
-# cannot forge: envelope lines sit at column 0, while every line of a hunk is prefixed
-# (` `, `+`, `-`). A decoy `*** Add File: /etc/passwd` written INTO an assessment is
-# therefore a `+`-prefixed content line, and is ignored — as it should be, since what the
-# assessment says is none of this hook's business.
-#
-# Anything unrecognized is a refusal, not a skip: an envelope verb this hook does not know
-# is exactly the case where it must not be guessing.
-collect_patch_paths() {
-    local patch="$1" line region="prefix" count=0 opener_re
-    local saw_opener=0 terminator="" closed=0
-
-    # `apply_patch`, optionally opening a heredoc: `apply_patch <<'EOF'`, `<<-"PATCH"`, …
-    # Group 2 captures the delimiter, so the suffix can be held to the one actually opened.
-    opener_re="^apply_patch([[:space:]]+<<-?[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?)?[[:space:]]*\$"
-
-    while IFS= read -r line; do
-        line="${line%$'\r'}"
-
-        case "${region}" in
-            # Before the patch: ONE wrapper line, and only the wrapper Codex may put there —
-            # bare `apply_patch`, or `apply_patch <<'EOF'`. Nothing else, which is what stops
-            # a chained shell command from being approved along with the patch.
-            prefix)
-                [ -z "${line}" ] && continue
-                if [ "${line}" = "*** Begin Patch" ]; then
-                    region="body"
-                    continue
-                fi
-                [ "${saw_opener}" -eq 0 ] || return 1
-                [[ "${line}" =~ ${opener_re} ]] || return 1
-                saw_opener=1
-                terminator="${BASH_REMATCH[2]}"
-                ;;
-
-            body)
-                if [ "${line}" = "*** End Patch" ]; then
-                    region="suffix"
-                    continue
-                fi
-                # A hunk's own lines are prefixed, so an unprefixed `*** …` is an envelope
-                # line and must be one this hook understands.
-                case "${line}" in
-                    '*** Add File: '* | '*** Update File: '*)
-                        printf '%s\n' "${line#*File: }"
-                        count=$((count + 1))
-                        ;;
-                    '*** End of File') ;;
-                    '***'*) return 1 ;;
-                esac
-                ;;
-
-            # After the patch: EXACTLY the delimiter the wrapper opened, once, and nothing
-            # after it. A wrapper that opened no heredoc leaves nothing legal here at all —
-            # otherwise a bareword line like `reboot`, which needs no argument and so carries
-            # none of the spaces the envelope check would catch, is a second shell command
-            # riding along on the patch's approval.
-            suffix)
-                [ -z "${line}" ] && continue
-                [ -n "${terminator}" ] || return 1
-                [ "${closed}" -eq 0 ] || return 1
-                [ "${line}" = "${terminator}" ] || return 1
-                closed=1
-                ;;
-        esac
-    done < <(printf '%s\n' "${patch}")
-
-    # A truncated patch, or one that touches nothing, is not something to approve.
-    [ "${region}" = "suffix" ] || return 1
-    [ "${count}" -gt 0 ] || return 1
-    # Likewise a heredoc that was opened and never closed: a truncated command, not a patch.
-    [ -z "${terminator}" ] || [ "${closed}" -eq 1 ] || return 1
 }
 
 main() {

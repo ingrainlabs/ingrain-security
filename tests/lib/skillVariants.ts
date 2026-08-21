@@ -6,9 +6,15 @@
  * `SKILL.md` is the baseline; alternates live alongside it as `SKILL1.md …
  * SKILLN.md` (case-sensitive, dev-only scratch files, git-ignored). To trigger-test a variant we
  * stage a throwaway copy of the plugin whose target `SKILL.md` is the variant's
- * content, then point `claude --plugin-dir` at it — so both the `SessionStart`
- * hook injection (`hooks/scripts/session-start` reads the file at runtime) and the skill
- * description come from the variant.
+ * content, then point `claude --plugin-dir` at it — so the skill description and the body the
+ * Skill tool loads on invoke both come from the variant.
+ *
+ * The `SessionStart` hook is NOT one of those channels. It used to inline `SKILL.md`, but that
+ * drove its payload past the hosts' 10,000-character `additionalContext` cap, and it now injects
+ * only a directive. So a variant reaches the model through its frontmatter description at session
+ * start and through its body once the skill is invoked — which is the path production takes too,
+ * making this harness a narrower but truer measure than when it staged a body no host could
+ * fully deliver.
  */
 
 import { copy } from "@std/fs";

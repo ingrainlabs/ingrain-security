@@ -1,0 +1,193 @@
+#!/usr/bin/env bash
+# PreToolUse hook for the ingrain-security plugin — ONE script, BOTH hosts.
+#
+# Blocks a code write on a branch where the user has never been asked whether this change needs
+# a security review, and points the agent at the skill instead of letting the write through.
+#
+# WHY IT EXISTS. Two routes reach code. A finished plan is caught by hooks/claude/exit-plan-mode,
+# which nudges after ExitPlanMode — Claude-only, because Codex has no such event. The other route
+# is ad-hoc: investigate, decide, edit, with no plan step to hang a hook on. That route had no
+# trigger on either host and it is the common one. This is its backstop, and it is Codex's only
+# mechanical trigger of any kind.
+#
+# IT READS ONE FIELD. `## Triage` → `Verdict:` records the user's answer to the review question
+# that opens a run. Absent means the question was never put → deny. `minor` (declined) and
+# `major` (accepted) both mean it WAS put → stand aside. → hooks/scripts/lib/review-state.sh,
+# which owns that read and why no other field can stand in for it.
+#
+# HOW TO DECLINE. There is deliberately no opt-out flag, env var or sentinel file. Declining is
+# in-band: run the skill, answer the review question "not security-relevant", and the recorded
+# `Verdict: minor` opens this gate permanently for the branch. One source of truth, and the
+# decline is recorded rather than silent. The denial text says this outright, because a gate
+# whose only visible exit is "run the review" reads as a wall to a user who does not want one.
+#
+# A WORKFLOW GUARDRAIL, NOT A SECURITY BOUNDARY. It matches the file-editing tools and not Bash,
+# so `cat > file` walks straight past it. The agent here is a collaborator to be held to a
+# process, not an adversary to be contained. Accordingly every ambiguity FAILS OPEN — malformed
+# payload, missing jq, unresolvable branch, missing assessment folder — because a guardrail that
+# strands a session is worse than one that misses a nudge. The EXIT trap below is what makes
+# that structural rather than a rule each branch has to remember.
+#
+# NOTE THE INVERTED INVARIANT. hooks/{claude,codex}/allow-assessment-write document "never
+# introduce a block" as a core property. That is a property of THOSE hooks, whose job is removing
+# a prompt — it is not a property of this hook tree. This one exists to introduce exactly one
+# block, and it never emits "allow": it denies or it says nothing, so it can never widen a grant.
+#
+# THE TWO PreToolUse HOOKS DO NOT INTERFERE. On Claude both match the same tools, but they never
+# both express an opinion on one call: allow-assessment-write defers on everything that is not
+# the assessment file, and this defers on everything that is.
+#
+# Registered on PreToolUse in BOTH hook.jsons, dispatched via hooks/run-hook.cmd. Denial is the
+# one decision whose JSON is identical across the hosts — Codex supports neither "allow" nor
+# "ask" on PreToolUse, which is why allow-assessment-write needs a per-host twin and this does
+# not.
+
+set -uo pipefail
+
+# Silence and status 0 are how this hook says "no opinion, carry on", and the trap makes that the
+# default for EVERY way out: a `return` from main, a lib that fails to source, an unset-variable
+# abort under `set -u`, any unforeseen error. Fail-open is the hook's core safety property, and a
+# trap holds it in one line where the alternative — a `defer` helper each branch must remember to
+# call — held it only on the paths somebody thought of. It also covers the paths that helper
+# could not reach: an abort mid-script used to exit non-zero and risk breaking the tool call.
+#
+# It is set BEFORE the sourcing below for the same reason: a broken lib must leave the user's
+# edit untouched, not take the session down with it.
+trap 'exit 0' EXIT
+
+# The host is passed as $1 by each hook.json ("claude" | "codex"), matching session-start and
+# ensure-assessment-dir. Here it selects BOTH project-root resolution and the payload shape:
+# Claude names one target in `tool_input.file_path`; Codex hands over an apply_patch envelope in
+# `tool_input.command` that may name several. Dispatching on the host rather than on the tool
+# name is deliberate — `Edit` and `Write` are matcher aliases on BOTH hosts, so the tool name
+# alone cannot say which payload to expect.
+HOST="${1:-claude}"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../../skills/ingrain-security/scripts/lib/json.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/json.sh" 2>/dev/null || exit
+# shellcheck source=../../skills/ingrain-security/scripts/lib/project-root.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/project-root.sh" 2>/dev/null || exit
+# shellcheck source=../../skills/ingrain-security/scripts/lib/assessment-dir.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/assessment-dir.sh" 2>/dev/null || exit
+# shellcheck source=../../skills/ingrain-security/scripts/lib/mint.sh
+. "${SCRIPT_DIR}/../../skills/ingrain-security/scripts/lib/mint.sh" 2>/dev/null || exit
+# shellcheck source=lib/assessment-write.sh
+. "${SCRIPT_DIR}/lib/assessment-write.sh" 2>/dev/null || exit
+# shellcheck source=lib/review-state.sh
+. "${SCRIPT_DIR}/lib/review-state.sh" 2>/dev/null || exit
+
+# True when EVERY target looks like an assessment artifact.
+#
+# All-or-nothing, matching the Codex allow-hook: a patch touching the assessment AND a source
+# file is a code write, and gets the code write's treatment. Skipping the gate for the whole
+# patch because part of it was the assessment would make "edit the assessment too" a bypass.
+#
+# Uses the LEXICAL `looks_like_assessment_path`, not the allow-hooks' `is_assessment_target`.
+# That is deliberate — see the two functions' comments in lib/assessment-write.sh. The strict
+# test asks "may I grant this write?"; here the question is "should I stay out of the way?",
+# and answering it strictly denied workers writing an assessment that sat outside the caller's
+# resolved root, deadlocking the review this hook exists to route toward.
+all_assessment_targets() {
+    local list="$1" path
+    while IFS= read -r path; do
+        [ -n "${path}" ] || continue
+        looks_like_assessment_path "${path}" || return 1
+    done < <(printf '%s\n' "${list}")
+    return 0
+}
+
+# The one block this hook can emit. `permissionDecisionReason` is what the HOST shows the user;
+# `additionalContext` is what reaches the agent — on Claude the reason alone never does, so both
+# are set and they say different things to their different readers.
+deny() {
+    local slug="$1"
+
+    local reason="ingrain-security: no security review is recorded on this branch, so the review question has not been put to you yet. The agent has been asked to run the review before writing code."
+
+    local context
+    context="$(printf '%s' \
+        "BLOCKED by the ingrain-security review gate: no assessment on branch '${slug}' records a " \
+        "Triage Verdict, so the user has NOT been asked whether this change needs a security review. " \
+        "Invoke the 'ingrain-security' skill via the Skill tool now, before writing any code. " \
+        "Do not work around this gate by other means. If the user does not want a review, that is " \
+        "still answered inside the skill: run it and answer the review question with 'No — this " \
+        "change is not security-relevant'. That records Verdict: minor and opens this gate " \
+        "permanently for this branch. Writes to the assessment file itself are never blocked.")"
+
+    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s","additionalContext":"%s"}}\n' \
+        "$(escape_for_json "${reason}")" "$(escape_for_json "${context}")"
+}
+
+# A bare `return` anywhere below means "no opinion": nothing printed, and the EXIT trap supplies
+# the 0.
+#
+# Every `local` is declared bare and assigned on the NEXT line, never `local x="$(cmd)"`. That
+# form returns `local`'s own status rather than the command substitution's, so the `|| return`
+# after it would never fire and a failed extraction would read as a successful empty one — the
+# fail-open path quietly becoming a fail-shut one (ShellCheck SC2155).
+main() {
+    local payload
+    payload="$(cat)" || return
+    [ -n "${payload}" ] || return
+
+    local tool
+    tool="$(extract_string "${payload}" ".tool_name")" || return
+
+    # Declared before the case because both branches assign it and everything below reads it;
+    # a `local` inside a branch only executes if that branch runs.
+    local targets
+
+    # The hook.json matcher is a convenience filter, not a boundary — re-check, per host.
+    case "${HOST}" in
+        codex)
+            case "${tool}" in
+                apply_patch | Edit | Write) ;;
+                *) return ;;
+            esac
+            local patch
+            patch="$(extract_string "${payload}" ".tool_input.command")" || return
+            [ -n "${patch}" ] || return
+            # An envelope this parser cannot read exactly is a payload we cannot judge.
+            targets="$(collect_patch_paths "${patch}")" || return
+            ;;
+        *)
+            case "${tool}" in
+                Write | Edit | MultiEdit | NotebookEdit) ;;
+                *) return ;;
+            esac
+            targets="$(extract_string "${payload}" ".tool_input.file_path")" || return
+            ;;
+    esac
+    [ -n "${targets}" ] || return
+
+    # The skill's own writes are never gated: it must be able to record the very Verdict this
+    # gate reads, and blocking that would deadlock the flow a denial routes to. Checked FIRST,
+    # before any project root is resolved, because that is what makes the exemption hold for an
+    # assessment wherever it lives — a dispatched worker's tree, a second checkout, a worktree.
+    # Resolving a root first is what previously made this exemption conditional on the write
+    # happening to land under it.
+    all_assessment_targets "${targets}" && return
+
+    local project_root
+    project_root="$(resolve_project_root "${HOST}")" || return
+    [ -n "${project_root}" ] || return
+
+    local canon_dir
+    canon_dir="$(canonical_assessment_dir "${project_root}/${ASSESSMENT_DIR_NAME}")" || canon_dir=""
+
+    # An unresolvable branch — detached HEAD, or no git at all — is "cannot tell", never
+    # "not reviewed". Blocking on doubt is the failure mode this whole hook must not have.
+    local branch slug
+    branch="$(resolve_branch "${project_root}")"
+    slug="$(slugify "${branch}")"
+    [ -n "${slug}" ] || return
+
+    # A missing folder leaves canon_dir empty, which reads as not-recorded — correct: no
+    # folder means no review has ever run here.
+    branch_review_recorded "${canon_dir}" "${slug}" && return
+
+    deny "${slug}"
+}
+
+main "$@"

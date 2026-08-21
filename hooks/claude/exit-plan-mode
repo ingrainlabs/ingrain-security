@@ -10,6 +10,16 @@
 # would mean DENYING ExitPlanMode, which blocks the user's plan from reaching them. So the
 # injection instead names the already-reviewed case, because re-entry on an approved plan
 # lands in Phase select case 3 and re-runs the whole review by default.
+#
+# The gating this hook declines to do lives in hooks/scripts/require-review-before-write, and
+# the difference is WHAT gets blocked. Denying ExitPlanMode withholds the user's own plan from
+# them, which is their work; denying the first unreviewed code write withholds nothing they
+# have asked to see, and the plan is already in their hands by then. So this stays a nudge and
+# the block sits one step later, on the tool call that actually writes code.
+#
+# The two also cover different routes: this one only exists on Claude, since Codex has no
+# ExitPlanMode event, and it only fires when a plan was formed at all. The gate covers the
+# ad-hoc route on both hosts, which is the one with no plan step to hang a hook on.
 
 set -euo pipefail
 
