@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # SessionStart hook for the ingrain-security plugin.
 #
-# Injects the ingrain-security skill into the session context so the
-# agent knows to run the security review loop as a step of implementation
-# planning -- while forming the plan, folding the results into it -- and to run
-# the skill again (its Testing verification) once the code is written.
+# Injects a DIRECTIVE -- when to run the ingrain-security skill, and the two script commands it
+# cannot build for itself. NOT the skill itself: the Skill tool loads SKILL.md on invoke, so
+# inlining its 18,903 bytes here bought a second copy and cost everything past the host's
+# 10,000-character additionalContext cap. What that evicted was the paths block below -- the one
+# part with nowhere else to live, since plugin_root only resolves at runtime.
 
 set -euo pipefail
 
@@ -16,10 +17,6 @@ HOST="${1:-claude}"
 # so the plugin root is two levels up.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-
-# Read the ingrain-security skill content
-skill_path="${PLUGIN_ROOT}/skills/ingrain-security/SKILL.md"
-review_skill_content=$(cat "$skill_path" 2>&1 || echo "Error reading ingrain-security skill at ${skill_path}")
 
 # shellcheck source=../../skills/ingrain-security/scripts/lib/json.sh
 if ! . "${PLUGIN_ROOT}/skills/ingrain-security/scripts/lib/json.sh" 2>/dev/null; then
@@ -70,14 +67,40 @@ paths_context=$(printf '%s\n' \
     '-> For Testing, keep **base_ref** (the parent branch, for the report) and **diff_ref** (the merge-base commit — what you actually diff against). diff_ref is the run'"'"'s fixed basis: pass it verbatim to every verifier, never re-derive it per dispatch and never substitute HEAD. When fallback=true, diff_ref is HEAD and the JSON'"'"'s "reason" says why; obey the "instruction" field, which states whether that narrows the review.' \
     '</INGRAIN-ASSESSMENT-PATHS>')
 
-session_context_raw=$(printf '%s\n' \
-    '<EXTREMELY_IMPORTANT>' \
-    'This project treats security analysis as the final step of implementation planning. **Once your implementation plan is comprehensive and detailed enough — but before you present it or write any code — you MUST run the '"'"'ingrain-security'"'"' skill on the finished plan and fold its results back into it.** Then run the same skill **again after the code is written** — its Testing verification — to check that the selected threats were closed and the accepted org rules followed, before you present or commit the change. The skill auto-detects which phase to run from repo state. Invoke it via the Skill tool. Its full content is reproduced below so you know what it does:' \
+preamble=$(printf '%s\n' \
+    'This project treats security analysis as the final step of PLANNING, not a review after the fact. Run the '"'"'ingrain-security'"'"' skill via the Skill tool at whichever of these two moments comes FIRST:' \
     '' \
-    "${review_skill_content}" \
+    '  1. **A plan is finished** — worked out in plan mode or ad-hoc in the conversation — and you are about to present it. Run the skill on that plan BEFORE you present it or write any code, and fold its results back into it.' \
+    '  2. **You are about to edit code** and no review has run for this change yet. You have gathered enough to know what you are going to change, and the next step is a write. Run the skill BEFORE that first edit, not after it.' \
     '' \
-    "${paths_context}" \
-    '</EXTREMELY_IMPORTANT>')
+    'Then run the same skill **again once the code is written** — its Testing verification — to check that the selected threats were closed and the accepted org rules followed, before you present or commit the change.' \
+    '' \
+    'The skill works out which phase to run from repo state, and its FIRST act is to ask whether this change warrants a review at all — so running it on something harmless costs one question. Invoke it via the Skill tool; its full instructions load then.')
+
+# Assembled by a function because the budget check below rebuilds the same block.
+assemble_context() {
+    printf '%s\n' \
+        '<EXTREMELY_IMPORTANT>' \
+        "$1" \
+        '' \
+        "${paths_context}" \
+        '</EXTREMELY_IMPORTANT>'
+}
+
+# Hosts cap a hook's additionalContext at 10,000 characters, and the two halves of this block do
+# NOT have equal standing. `paths_context` carries the only copy of the substituted script
+# commands; the preamble is prose SKILL.md states again in full on invoke. So the preamble is what
+# gives way and paths_context is never trimmed — the overflow this replaces did exactly the
+# reverse, evicting the irreplaceable half and keeping the restatable one.
+CONTEXT_BUDGET=9000
+session_context_raw="$(assemble_context "${preamble}")"
+
+if [ "${#session_context_raw}" -gt "${CONTEXT_BUDGET}" ]; then
+    room=$(( ${#preamble} - (${#session_context_raw} - CONTEXT_BUDGET) ))
+    if [ "${room}" -lt 0 ]; then room=0; fi
+    printf 'session-start: injected context over budget; truncating the preamble\n' >&2
+    session_context_raw="$(assemble_context "${preamble:0:room}")"
+fi
 
 session_context=$(escape_for_json "${session_context_raw}")
 

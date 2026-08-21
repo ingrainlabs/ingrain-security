@@ -18,6 +18,7 @@
 #   hooks/codex/allow-assessment-write           (PermissionRequest, Codex only)
 #   skills/ingrain-security/scripts/assessment-mint   (the mint)
 #   skills/ingrain-security/scripts/branch-delta       (the fork-point resolver)
+#   hooks/scripts/require-review-before-write          (PreToolUse, both hosts — root + branch)
 #
 # This file resolves LOCATIONS only. The assessment folder is lib/assessment-dir.sh's, and
 # JSON escaping — which lived here and has nothing to do with either — is lib/json.sh's.

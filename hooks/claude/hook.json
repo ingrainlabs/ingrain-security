@@ -27,6 +27,16 @@
             "async": false
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" scripts/require-review-before-write claude",
+            "async": false
+          }
+        ]
       }
     ],
     "PostToolUse": [

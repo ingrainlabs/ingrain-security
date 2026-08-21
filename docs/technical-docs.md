@@ -178,13 +178,76 @@ checklist rather than enforced as a validation rule.
 
 ---
 
+## The trigger layer
+
+The review is worth nothing if it runs after the code. Three mechanisms fire before it, in
+ascending order of how much they can be relied on.
+
+| # | Moment | Mechanism | Hosts |
+|---|---|---|---|
+| 1 | Session start | `SessionStart` → a directive naming both trigger moments, plus the substituted script commands | both |
+| 2 | Plan approved | `PostToolUse`/`ExitPlanMode` → a nudge | Claude only |
+| 3 | First unreviewed code write | `PreToolUse` → **deny**, routing the agent into the skill | both |
+
+**1 and 2 are advice; only 3 is mechanical.** That matters most on Codex, which has no
+`ExitPlanMode` event at all — mechanism 3 is the only trigger it can have.
+
+**Why the directive no longer carries `SKILL.md`.** It used to. Hosts cap a hook's output
+strings at 10,000 characters, and the payload had grown to 21,994 — so everything past the cap
+was dropped, including the `<INGRAIN-ASSESSMENT-PATHS>` block at character 19,429. That block is
+the one part that *cannot* live in `SKILL.md`, because `plugin_root` only resolves at runtime,
+and Phase select tells the orchestrator to expect it. The inlined copy was redundant — the Skill
+tool loads `SKILL.md` on invoke — so it was the copy that went. The hook now budgets itself to
+9,000 characters and trims the *preamble* if it ever runs over, never the paths block.
+
+**What the gate reads.** One field: `## Triage` → `Verdict:`, which records the user's answer to
+the review question that opens a run. Absent → the question was never put → deny. `minor`
+(declined) or `major` (accepted) → it was → stand aside. Nothing else in the artifact carries
+that fact: `has_content` flips on the first byte any stage writes, and `Latest stage` says how
+far the analysis got — neither says whether the user was *asked*.
+
+The lookup is **branch-scoped**, because a `PreToolUse` hook sees a file write, not a task, and
+the mint keys a path on branch **+ task title**. Branch is the finest identity available there.
+It is also **section-scoped and line-anchored**, for the same reason `count_selected_in_section`
+is: the field card under `## Triage` spells out `Verdict (minor|major)` in its own prose, so a
+loose match would read the card as a decision and report every untouched skeleton as reviewed —
+inverting the gate.
+
+**No dependency may be able to make it fail shut.** A hook that reads "cannot tell" as "not
+reviewed" blocks every write, and the in-band escape cannot help — answering the review question
+writes a `Verdict` the hook still cannot read. So both section-scoped parsers, the gate's
+`branch_review_recorded` and the mint's `count_selected_in_section`, are **bash builtins only**;
+retiring that one `awk` call removed the last runtime dependency whose absence flipped the gate
+from fail-open to fail-shut. Everything else the gate touches degrades the safe way: no `jq`, no
+`git`, no `tr` all end in standing aside. When adding to this path, check which way a missing
+binary sends it.
+
+**A guardrail, not a boundary.** The gate matches the file-editing tools and not `Bash`, so
+`cat > file` walks past it, and every ambiguity — malformed payload, missing `jq`, detached
+HEAD, non-git tree — fails **open**. The agent is a collaborator to be held to a process, not an
+adversary to be contained, and a guardrail that strands a session is worse than one that misses
+a nudge.
+
+**The invariant that inverted.** `allow-assessment-write` documents "never introduce a block" as
+a core property. That is a property of *those hooks*, whose job is removing a prompt — not of
+the hook tree. What holds tree-wide is the **separation**: the hooks that can lift a prompt
+cannot block, and the hook that can block cannot lift one. Both halves are asserted on the
+sources in `tests/static/skill.test.ts`.
+
+The two `PreToolUse` hooks never both express an opinion on one call: `allow-assessment-write`
+defers on everything that is not the assessment file, and the gate defers on everything that is.
+That carve-out is also what stops the gate deadlocking the flow it routes to — the skill has to
+write the very `Verdict` the gate reads.
+
+---
+
 ## Testing tiers
 
 | Task | Tier | Runs in CI |
 |---|---|---|
 | `deno task test:static` | prose and wiring assertions, no model calls | yes |
 | `deno task test:parity` | script output contracts, both directions | yes |
-| `deno task test:hooks` | the mint, the write grant, the folder hook | yes |
+| `deno task test:hooks` | the mint, the write grant, the folder hook, the injected directive, the review gate | yes |
 | `deno task test:shell` | `branch-delta` behaviour + shellcheck | yes |
 | `deno task test:agent` | **live model calls** — one dispatch per worker | no |
 | `deno task test:integration` | full orchestration | no |

@@ -17,6 +17,7 @@
 #   skills/ingrain-security/scripts/assessment-mint    (for lib/mint.sh)
 #   hooks/claude/allow-assessment-write                (for hooks/scripts/lib/assessment-write.sh)
 #   hooks/codex/allow-assessment-write                 (for hooks/scripts/lib/assessment-write.sh)
+#   hooks/scripts/require-review-before-write          (names the folder the gate reads)
 
 # INTERNAL to this file — `ensure_assessment_dir` is its only caller.
 #
