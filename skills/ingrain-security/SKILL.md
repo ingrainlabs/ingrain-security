@@ -12,8 +12,9 @@ description: >-
   might touch security — it opens by asking whether a review is warranted.
 license: MIT
 compatibility: >-
-  Built for agent hosts that can dispatch subagents (Claude Code, Codex). Requires bash, git and
-  jq; on Windows, Git for Windows supplies the bash the hooks run through. The optional `ingrain`
+  Built for agent hosts that can dispatch subagents (Claude Code, Codex). Requires bash, git, jq
+  and the usual POSIX text tools (grep, sed, coreutils); on Windows, Git for Windows supplies the
+  bash the hooks run through. The optional `ingrain`
   CLI, plus network access to reach the platform, adds org-rule retrieval and assessment syncing;
   without it the review runs on the threat axis alone.
 metadata:
@@ -253,3 +254,4 @@ procedure; these are what it cannot infer.
 | The `ingrain` fetch was sandbox-blocked | The retrieval (`flow.md` Step 1b) runs in the main session — re-run and let the host's native prompt reach the user. Continue without rules only once they decline. |
 | A guidance entry names no threat | Fine **if** it names a `selected` org rule — that is rule-driven guidance, fully anchored. An entry naming neither is refused by the CLI and by the platform. |
 | The threat gate selected nothing but a rule was accepted | Proceed to guidance. Selected rules alone sustain a round; only *both* gates empty ends the review. |
+| A code write was **denied** by the review gate | Not a permissions fault. No assessment on this branch records a `## Triage` Verdict, so the user has never been asked. Run this skill — the denial is routing you here. If they do not want a review, answer Step 0's question `No`: the recorded `Verdict: minor` opens the gate for the branch. Never route around the block. |

@@ -218,11 +218,12 @@ async function injectedCommands(project: string): Promise<string[]> {
     stderr: "piped",
   }).output();
 
-  // The hook emits JSON whose context block carries BOTH its own substituted commands and
-  // `SKILL.md` verbatim — and SKILL.md holds the `<plugin>`-placeholder fences the tests above
-  // already execute. Only the substituted ones belong here, so the filter demands a resolved
-  // path and rejects anything still holding a placeholder. Matching on the script path rather
-  // than on the block's framing keeps this working if the surrounding prose is reworded.
+  // The hook's context block carries its two substituted commands and nothing else — it no
+  // longer inlines `SKILL.md`, whose `<plugin>`-placeholder fences the tests above already
+  // execute on their own. The placeholder filter is kept regardless: it costs nothing, and it is
+  // what stops a re-inlined SKILL.md from quietly feeding unsubstituted fences into this
+  // harness. Matching on the script path rather than on the block's framing keeps this working
+  // if the surrounding prose is reworded.
   return new TextDecoder().decode(stdout)
     .split("\\n")
     .map((l) => l.replaceAll('\\"', '"').trim())

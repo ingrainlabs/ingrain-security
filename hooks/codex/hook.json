@@ -28,6 +28,18 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/hooks/run-hook.cmd\" scripts/require-review-before-write codex",
+            "statusMessage": "Checking for a security review"
+          }
+        ]
+      }
     ]
   }
 }

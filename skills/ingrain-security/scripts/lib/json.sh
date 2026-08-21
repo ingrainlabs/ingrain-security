@@ -16,6 +16,7 @@
 #   hooks/scripts/session-start                          (the injected context block)
 #   skills/ingrain-security/scripts/assessment-mint    (the mint's JSON)
 #   skills/ingrain-security/scripts/branch-delta        (the delta's JSON)
+#   hooks/scripts/require-review-before-write            (the review gate's denial JSON)
 
 # Single-pass JSON string escape. Orders of magnitude faster than a char-by-char loop.
 #

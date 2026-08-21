@@ -37,6 +37,7 @@ const SESSION_START = `${ROOT}hooks/scripts/session-start`;
 const ALLOW_HOOK = `${ROOT}hooks/claude/allow-assessment-write`;
 const CODEX_ALLOW_HOOK = `${ROOT}hooks/codex/allow-assessment-write`;
 const ALLOW_LIB = `${ROOT}hooks/scripts/lib/assessment-write.sh`;
+const REVIEW_GATE = `${ROOT}hooks/scripts/require-review-before-write`;
 const ENSURE_DIR = `${ROOT}hooks/scripts/ensure-assessment-dir`;
 const PROJECT_ROOT_LIB = `${ROOT}skills/ingrain-security/scripts/lib/project-root.sh`;
 const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-mint`;
@@ -853,10 +854,52 @@ Deno.test("hook.json: Codex registers the PermissionRequest auto-approve hook", 
   }
 });
 
+Deno.test("hook.json: both hosts register the review gate on PreToolUse", async () => {
+  // The gate is the ad-hoc route's only backstop, and on Codex it is the only mechanical
+  // trigger of any kind — Codex has no ExitPlanMode event, so nothing else there fires before
+  // code is written. Unregistered, it is a script nobody runs and no other test would notice.
+  for (
+    const [path, tools] of [
+      [HOOK_JSON, ["Write", "Edit", "MultiEdit", "NotebookEdit"]],
+      [CODEX_HOOK_JSON, ["apply_patch", "Edit", "Write"]],
+    ] as const
+  ) {
+    const hook = JSON.parse(await Deno.readTextFile(path));
+    const pre = hook.hooks?.PreToolUse;
+    assertEquals(Array.isArray(pre), true, `${path}: PreToolUse must be registered`);
+    const serialized = JSON.stringify(pre);
+    assertStringIncludes(serialized, "require-review-before-write");
+    // Denial is the one decision whose shape is identical on both hosts, which is why this is
+    // ONE script on ONE event rather than a per-host twin like allow-assessment-write.
+    assertStringIncludes(serialized, "scripts/require-review-before-write");
+    // The matcher must cover every tool name the script itself accepts for that host.
+    for (const tool of tools) assertStringIncludes(serialized, tool);
+  }
+});
+
+Deno.test("review gate: is the only hook that may block, and always exits 0", async () => {
+  // The counterpart to the allow-hooks' invariant below. Stated as its own property so the
+  // two cannot quietly swap powers: this one denies or says nothing, and never allows.
+  const gate = await Deno.readTextFile(REVIEW_GATE);
+  assertStringIncludes(gate, '"permissionDecision":"deny"');
+  assertEquals(gate.includes('"permissionDecision":"allow"'), false);
+  assertEquals(gate.includes('"behavior":"allow"'), false);
+
+  // Fail-open is the gate's whole safety story — a guardrail that strands a session is worse
+  // than one that misses a nudge. The EXIT trap is what makes it structural: it covers a bare
+  // `return`, a lib that fails to source, and an abort under `set -u` alike, so no future
+  // branch can forget to fail open. Pinned here because dropping the trap would leave every
+  // existing test passing while the hook started exiting non-zero on the paths nobody tests.
+  assertStringIncludes(gate, "trap 'exit 0' EXIT");
+});
+
 Deno.test("allow-assessment-write: both hooks only ever allow, never deny", async () => {
-  // The hooks' core safety property, asserted on the sources themselves: they can remove a
-  // permission prompt but must never introduce a block. A "deny" verdict appearing here
-  // would mean the plugin can silently veto a user's edit.
+  // The core safety property of THESE TWO hooks, asserted on the sources themselves: they can
+  // remove a permission prompt but must never introduce a block. Scoped deliberately — since
+  // the review gate landed, "never blocks" is no longer a property of the hook tree as a
+  // whole, and reading it as one would make the gate look like a violation instead of the one
+  // sanctioned exception. What must hold is the separation: the hooks that can lift a prompt
+  // cannot block, and the hook that can block cannot lift one.
   const claude = await Deno.readTextFile(ALLOW_HOOK);
   assertStringIncludes(claude, '"permissionDecision":"allow"');
   assertEquals(claude.includes('"permissionDecision":"deny"'), false);

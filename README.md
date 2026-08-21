@@ -51,9 +51,12 @@ binary and configure its API token: **[Getting started](https://docs.ingrainlabs
 
 ## Usage
 
-- **Automatic.** The plugin puts the skill in the agent's context at the start of every session,
-  so the agent runs the review itself once it knows what it is about to build — in plan mode or
-  straight from the conversation.
+- **Automatic.** The agent runs the review itself once it knows what it is about to build — in
+  plan mode or straight from the conversation. If it starts writing code before that has
+  happened, the write is stopped and it runs the review first.
+- **Not every change needs one.** The review opens by asking whether this change is
+  security-relevant. Say no and it stops there — that answer is recorded, so the change reads as
+  assessed rather than skipped, and you are not asked about it again.
 - **Manual.** Invoke it via the Skill tool, or just ask — e.g.
   *"Use Ingrain Security to threat-model what we just worked out, before I write
   code."*
@@ -66,14 +69,15 @@ binary and configure its API token: **[Getting started](https://docs.ingrainlabs
 
 | Platform | Requirement |
 |----------|-------------|
-| macOS / Linux | System `bash` + coreutils — already present. |
+| macOS / Linux | System `bash`, `grep`, `sed` and coreutils — already present. |
 | **Windows** | **[Git for Windows](https://git-scm.com/download/win) is required.** |
 
 | Tool | Used for |
 |------|----------|
 | `bash` | every hook and skill script |
-| [`jq`](https://jqlang.github.io/jq/) | the two permission hooks that read the tool payload |
-| `git` | resolving the repo root and the branch delta to review |
+| [`jq`](https://jqlang.github.io/jq/) | the hooks that read the tool payload, to decide about a file write |
+| `git` | resolving the repo root, the branch, and the branch delta to review |
+| `grep`, `sed`, coreutils | resolving the fork point and reading a prior assessment's title |
 | `ingrain` CLI *(optional)* | org-rule retrieval and syncing to the platform |
 
 **Why Git for Windows.** The plugin's hooks are bash scripts run through
