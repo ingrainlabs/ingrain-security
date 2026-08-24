@@ -50,13 +50,12 @@ consumers must still handle.
 ---
 
 ## Phase blocks
-
 A `## Threats` entry groups its fields under four markers, one per stage that writes into it:
 
 | Block | Written by | Fields, in order |
 |---|---|---|
 | `#### gen` | `ingrain-threat-generator` | Asset, Vector, Description, Assumptions |
-| `#### score` | `ingrain-risk-scorer` | Justification, Impact, Likelihood, Risk score, Criticality |
+| `#### score` | the orchestrator, at its scoring step | Justification, Impact, Likelihood, Risk score, Criticality |
 | `#### usergate` | the orchestrator, at the threat gate | Selection |
 | `#### test` | the Testing verification pass | Robustness justification, Robustness, Residual path, Evidence |
 
@@ -76,9 +75,13 @@ findings between them.
 - An unrun stage leaves its marker with **no field lines under it**. That emptiness is the signal
   its stage has not run. Inside a block whose stage *has* run, `—` keeps its ordinary meaning: a
   field that does not apply.
-- **The risk scorer is the one exception.** Re-tagging reorders entries, so it rewrites them
-  whole — and must therefore carry every block it does not own across verbatim, including a prior
-  pass's `#### usergate` Selection and `#### test` verdicts on a re-assessment.
+- **There is no exception, and there used to be one.** Re-tagging reorders entries, so the risk
+  scorer rewrote them whole and had to carry every block it did not own across verbatim — a prior
+  pass's `#### usergate` Selection and `#### test` verdicts included. A live run came back having
+  flattened a populated `#### test` block, which reads downstream as "never verified". The re-tag
+  is [`scripts/threat-retag`](../skills/ingrain-security/scripts/threat-retag) now: it moves
+  entries by line span and never re-types a block, so the carve-out is gone rather than merely
+  discouraged. See **The re-tag** below.
 
 ### What decides "has this stage run?"
 
@@ -115,17 +118,49 @@ branch keyword plus a one-line pointer, never the content.
 |---|---|
 | `ingrain-threat-generator` | `## Threats` entries, `#### gen` |
 | `ingrain-threat-critic` | `## Threat critique` *(transient)* |
-| `ingrain-risk-scorer` | `#### score` + `## Risk score` |
 | `ingrain-rule-critic` | `## Rule critique` *(transient)* |
-| `ingrain-guidance-generator` | `## Implementation guidance` |
-| `ingrain-guidance-critic` | `## Guidance critique` *(transient)* |
 
 **Testing** — [`references/testing/`](../skills/ingrain-security/references/testing/):
 `ingrain-threat-verifier` and `ingrain-rule-verifier`, one per selected subject. Both are
 **read-only**: they return a justification and a verdict, and the orchestrator records.
 
-The three critique sections are iteration scratch and are deleted at finalize. Two steps are the
-orchestrator's alone and have no worker: the opening review question, and the org-rule retrieval.
+Both critique sections are iteration scratch and are deleted at finalize.
+
+**A step is a worker when it needs fresh eyes; it is the orchestrator's when it already holds the
+input.** A dispatch buys clean context and a cheaper model tier, and costs a wave — the subagent
+re-reads from disk what the orchestrator is holding, and the orchestrator cannot take a turn while
+suspended on it. So four steps have no worker: the opening review question, the org-rule
+retrieval, the **risk scoring** (over the `## Threats` slice the threat gate needs read anyway)
+and the **implementation guidance** (from two driver sets already in context).
+
+Three workers were retired on that reasoning — `ingrain-risk-scorer`,
+`ingrain-guidance-generator` and `ingrain-guidance-critic` — which removed three sequential waves
+from every Development run. The scoring worker also did one job that is not judgement at all:
+**the re-tag**, now [`scripts/threat-retag`](../skills/ingrain-security/scripts/threat-retag). See
+**The re-tag** below.
+
+---
+
+## The re-tag
+
+Sorting the scored threats into descending-risk order and renumbering them `T01…Tn` is a total
+order over four keys, so it is a script rather than a prompt:
+
+    threat-retag --assessment "<assessment_abs>"
+
+Risk score descending → impact → likelihood → the incoming id, which is unique, so the order is
+total and re-running it on an already-sorted section is a fixed point.
+
+**It is also what retired the block rule's one exception.** Moving an entry means moving it, and
+the worker that used to do this was told to rewrite `## Threats` wholesale and carry every block
+it did not own across verbatim — a live run came back having flattened a populated `#### test`
+block, erasing a prior pass's verdicts. The script moves entries by **line span** and rewrites
+nothing but the `T<nn>` token in each heading, so every other block survives byte for byte and no
+writer needs an exemption any more.
+
+**It refuses a half-scored section** (`retagged: false`, `reason: unscored-entries`) and leaves
+the file untouched: ids are permanent from here, so an order computed over entries the scoring
+step never reached would freeze the wrong priority with nothing downstream able to correct it.
 
 **Context discipline.** The orchestrator holds only compact statuses and pointers, and reads
 bounded slices of the assessment at the gates and at finalize. Retrieval is the single exception:

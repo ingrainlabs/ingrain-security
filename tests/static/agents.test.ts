@@ -14,6 +14,11 @@
  * header must not call itself read-only: a "read-only … whole toolset" clause next
  * to a write contract is the exact contradiction that stalled workers mid-dispatch.
  * The inverse assertion below is what keeps it from creeping back.
+ *
+ * The roster is deliberately short: a step is a worker only when it needs fresh
+ * eyes on the plan and the repo. Scoring the threats the orchestrator is about to
+ * gate, and writing guidance from two driver sets it already holds, are not that —
+ * they are its own steps, asserted in `static/skill.test.ts` rather than here.
  */
 
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
@@ -97,7 +102,7 @@ for (const name of WORKERS) {
 }
 
 // ---------------------------------------------------------------------------
-// The Testing verifiers — dispatched exactly as the seven above are, and until
+// The Testing verifiers — dispatched exactly as the three above are, and until
 // 2026-08-10 linted by nothing at all. `WORKERS` carries only the Development
 // flow order and `REFERENCES_DIR` only `references/development/`, so both files
 // fell outside the loop while this suite read as though it covered every worker.

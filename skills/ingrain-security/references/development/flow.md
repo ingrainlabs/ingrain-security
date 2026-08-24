@@ -5,17 +5,23 @@ the two user gates.
 
 **Announce:** open with "Using ingrain-security to assess this plan."
 
-You orchestrate six worker roles, each defined by a reference file at
+You orchestrate three worker roles, each defined by a reference file at
 `references/development/<name>.md` (`ingrain-threat-generator`,
-`ingrain-threat-critic`, `ingrain-risk-scorer`, `ingrain-rule-critic`,
-`ingrain-guidance-generator`, `ingrain-guidance-critic`). You dispatch each as a fresh subagent,
-holding the state between steps yourself. Two steps are yours alone: Step 0's review question,
-including the prior-analysis lookup behind it, and the broad org-rule retrieval,
-**forked alongside the threat chain rather than after a gate** — Step 1 states exactly what that
-overlap is and is not.
+`ingrain-threat-critic`, `ingrain-rule-critic`). You dispatch each as a fresh subagent, holding
+the state between steps yourself. **Everything else in this phase is yours**: Step 0's review
+question and the prior-analysis lookup behind it, the broad org-rule retrieval — **forked
+alongside the threat chain rather than after a gate**, and Step 1 states exactly what that overlap
+is and is not — the risk scoring at Step 3, and the implementation guidance at Step 5.
+
+Each of those three needs fresh eyes on the plan and the repo, which is what a dispatch buys and
+what it is worth a wave for — SKILL.md § Security review loop states the rule. Scoring the threats
+you are about to gate, and writing guidance from two driver sets already in your context, are not
+that.
 
 This phase produces exactly **two things**: the **assessment file** (the hand-off medium the
-workers write section by section, and you finalize) and the modifications to the active **plan** (formal or ad-hoc), carrying the selected threats, the accepted org rules and **all** critiqued guidance.
+workers and you write section by section, and you finalize) and the modifications to the active
+**plan** (formal or ad-hoc), carrying the selected threats, the accepted org rules and **all** the
+guidance.
 
 ## How to dispatch a worker
 
@@ -39,9 +45,7 @@ owns, and leave every other block exactly as you found it — markers included, 
 one still empty: that emptiness is how the stage owning it is known not to have run yet.
 Write that section in ONE call — a single Write or Edit carrying every entry. Where you are
 filling fields into entries that already exist, it is one Edit per ENTRY, replacing the run
-between your own marker and the next; never one Edit per field. (The risk scorer is the
-one exception — its reference tells it to rewrite entries whole, because re-tagging moves
-them — and it carries every block it does not own across verbatim.)
+between your own marker and the next; never one Edit per field.
 The card is the write contract — read
 <plugin_root>/skills/ingrain-security/references/lib/assessment-file.md
 only if you need what a field MEANS.
@@ -96,31 +100,19 @@ then carry the **section pointer** and let every later reader open it for itself
 
 ## Development — the flow
 
-Each step is one dispatch; you hold the state between them. The tracker is **Development —
-checklist** at the end of this file.
+You hold the state between steps. The tracker is **Development — checklist** at the end of this
+file.
 
-0. **The review question — yours, no worker.** Two things, in this order: find any prior analysis
-   of this task, then ask the user whether to review this change. The answer *is* the verdict,
-   which is why the field's values stay two.
+0. **The review question — yours, no worker, and the FIRST thing you do.** Put it before any read,
+   any write and any lookup. Everything else in this step exists to feed Step 1, which a `No`
+   never reaches, so doing any of it first only spends the user's time on a review they have not
+   asked for. The answer *is* the verdict, which is why the field's values stay two.
 
-   **Find the prior analysis first.** The mint handed you a **`siblings`** list — the assessments
-   already on this branch that this run's title did not produce, already filtered to written files
-   and already excluding the file this run is about to write. Read those candidates as absolute
-   paths (prefix each with `<project_root>/.ingrain-security/`). **Do not glob the folder**: a glob
-   returns this run's own file, so you would report the analysis about to be overwritten as prior
-   work.
-   - **Match on the task, strictly.** A shared branch may hold several concurrent tasks'
-     assessments, so the list can hold files belonging to *other* work. For each candidate read its
-     `## Task` Title and compare the branch and the title against the current plan — a match needs
-     the same branch **and** a title describing the *same* work. On ties prefer the most recently
-     modified. Anything looser is `none` and starts fresh: a sibling task's analysis would mislead
-     every stage downstream, so starting fresh is strictly safer.
-   - **A matched snapshot whose `## Threats` section is non-empty** is your **Prior analysis**
-     pointer — its path and threat count. Step 1a hands it to the threat generator, which seeds
-     from it. Nothing matched, or no candidate carries threats → `none`.
+   **One thing may precede it, and it is routing rather than analysis:** a run that arrived as
+   `phase: requires_judgement` / `siblings_present` resolves its siblings first, because that
+   decides which file this run writes into. Nothing else goes ahead of the question.
 
-   **Then ask the user.** One single-choice window, worded so the answer stands on its own as a
-   record:
+   One single-choice window, worded so the answer stands on its own as a record:
 
    > **Run a security review for this change?**
    > - **Yes — it touches a security surface**
@@ -150,13 +142,13 @@ checklist** at the end of this file.
    → `references/lib/dispatch.md` § Selection windows for the host mechanism.
 
    **Write `## Triage` yourself** from the answer — `Verdict: major` + `Security relevant: true`,
-   or `Verdict: minor` + `Security relevant: false` — plus the `Prior analysis` line from the
-   lookup above (the pointer, or `none`). Then take that branch:
+   or `Verdict: minor` + `Security relevant: false`. Then take that branch:
 
    - `minor` → **record it, then stop.** Open the assessment at `assessment_abs` and write
      `## Task` → `Description` (one line on what this change does) beside the `## Triage` you just
-     wrote; the file is otherwise left as seeded. Then sync it — best-effort, exactly like
-     the Development finalize: `ingrain record design --assessment "<assessment_abs>"`.
+     wrote, with `Prior analysis: none` — no lookup ran, and none was owed. The file is otherwise
+     left as seeded. Then sync it — best-effort, exactly like the Development finalize:
+     `ingrain record design --assessment "<assessment_abs>"`.
      Then state "no security review needed — minor change" and **STOP**; the question is the whole
      pipeline for a minor change, so carry on building the plan.
 
@@ -168,17 +160,34 @@ checklist** at the end of this file.
      a later `minor` answer can never wipe a real analysis.
      → `references/lib/ingrain-cli.md` § Recording the assessment. A failed sync never fails the
      review: one line and carry on.
-   - `major` → keep any **Prior analysis pointer** for Step 1, then
-     **open the assessment file** at `assessment_abs` — the mint already seeded its title, banner
-     and every empty section, so fill the `## Task` fields in place rather than writing the page
-     over. **Write `Description`** there — one line on what this change does, in your own words;
-     it is yours alone to record, and no later stage fills it. Leave `Schema version` as seeded.
-     Then **write `Surfaces`** into `## Triage`, beside the verdict you already wrote — a short
-     bullet list naming the security-relevant aspects the plan touches ("new file-upload endpoint",
-     "adds JWT verification", "raw SQL with user input"). They feed **both** driver chains — the
-     threat generator seeds its list from them and the broad rule retrieval keys its queries on
-     them. Name security **features**, since that is what a rule query matches on, as well as the
-     ways the change could go wrong.
+   - `major` → two things, in this order.
+
+     **Find the prior analysis first.** The mint handed you a **`siblings`** list — the assessments
+     already on this branch that this run's title did not produce, already filtered to written
+     files and already excluding the file this run is about to write. Read those candidates as
+     absolute paths (prefix each with `<project_root>/.ingrain-security/`).
+     **Do not glob the folder**: a glob returns this run's own file, so you would report the
+     analysis about to be overwritten as prior work.
+     - **Match on the task, strictly.** A shared branch may hold several concurrent tasks'
+       assessments, so the list can hold files belonging to *other* work. For each candidate read
+       its `## Task` Title and compare the branch and the title against the current plan — a match
+       needs the same branch **and** a title describing the *same* work. On ties prefer the most
+       recently modified. Anything looser is `none` and starts fresh: a sibling task's analysis
+       would mislead every stage downstream, so starting fresh is strictly safer.
+     - **A matched snapshot whose `## Threats` section is non-empty** is your **Prior analysis**
+       pointer — its path and threat count. Step 1a hands it to the threat generator, which seeds
+       from it. Nothing matched, or no candidate carries threats → `none`.
+
+     Then **open the assessment file** at `assessment_abs` — the mint already seeded its title,
+     banner and every empty section, so fill the `## Task` fields in place rather than writing the
+     page over. **Write `Description`** there — one line on what this change does, in your own
+     words; it is yours alone to record, and no later stage fills it. Leave `Schema version` as
+     seeded. Then **write `Prior analysis`** into `## Triage` — the pointer from the lookup above,
+     or `none` — and **`Surfaces`** beside it: a short bullet list naming the security-relevant
+     aspects the plan touches ("new file-upload endpoint", "adds JWT verification", "raw SQL with
+     user input"). They feed **both** driver chains — the threat generator seeds its list from them
+     and the broad rule retrieval keys its queries on them. Name security **features**, since that
+     is what a rule query matches on, as well as the ways the change could go wrong.
      Then **write `## Affected paths`** — a bullet list of the repository-relative folders the
      plan says this change will touch. A prediction, not a measurement: the code does not exist
      yet, and this is the only record of where it will land. It scopes the org-rule
@@ -188,7 +197,7 @@ checklist** at the end of this file.
 
 1. **Fork the two driver chains — dispatch the threat generator in the same block as retrieval's
    first call.** They share no input, so nothing orders them. Both run recall → precision →
-   decision, and they join at the guidance generator, which needs both.
+   decision, and they join at the guidance step, which needs both.
 
    **What the fork actually buys, stated exactly.** Retrieval is *your* work, not a worker's, and
    it takes more than one turn: probe, then the queries, then the `## Org rules` write. You cannot
@@ -199,10 +208,10 @@ checklist** at the end of this file.
    between.
 
    **1a — Threats.** Dispatch `ingrain-threat-generator` at the plan **and the `## Triage` section**
-   (the Surfaces you wrote seed the search; extend beyond them). **If Step 0's lookup found a Prior
-   analysis pointer**,
-   also point it at that snapshot's `## Threats` and `## Implementation guidance` so it **seeds from
-   the prior analysis**, re-derived against the current plan. It writes one `### T<n>` entry per
+   (the Surfaces you wrote seed the search; extend beyond them).
+   **If Step 0's lookup left you a Prior analysis pointer**, also point it at that snapshot's
+   `## Threats` and `## Implementation guidance` so it **seeds from the prior analysis**,
+   re-derived against the current plan. It writes one `### T<n>` entry per
    threat into `## Threats` and returns a pointer. Ids are assigned in discovery order and are
    **provisional** — stable through the critique so its feedback keys line up, then re-tagged into
    risk order at Step 3.
@@ -236,7 +245,7 @@ checklist** at the end of this file.
      without rules once they decline.
    - **Genuine unavailability** — binary absent, unconfigured, or no matches — degrades gracefully:
      `## Org rules` stays empty, one line on why, carry on. The review then runs on the threat axis
-     alone, and the guidance stands on the workers' own analysis. **Take that line from stderr, not
+     alone, and the guidance stands on the analysis in hand. **Take that line from stderr, not
      from the empty array** — an empty result where the repository is not registered on the
      platform looks identical to one where no rule matched, and only stderr tells them apart. The
      first has a fix the user can act on; reported as the second it reads as "we have no rules".
@@ -268,13 +277,57 @@ checklist** at the end of this file.
    record. The accepted trade: a critic false-positive **you do not catch** is recoverable only by
    re-review, and that is what buys a curated set the user can vouch for wholesale.
 
-3. **Risk score** — dispatch `ingrain-risk-scorer` at the frozen `## Threats`. It fills each
-   entry's five scoring field lines, writes the plan-level residual into `## Risk score`, and
-   **re-tags the threats into descending-risk order** — reordering the entries and reassigning ids
-   contiguously from `T01`, the most dangerous threat. It is the last stage that can do so safely:
-   threat ids pick up their first references at Step 5, when guidance names them. From here
-   **the id is the priority** and is permanent: every stage that shows threats shows them in
-   **id order** — the ids are the sort.
+3. **Risk score — yours, no worker.** Judgement and bookkeeping, in that order: you score, then a
+   script re-tags. **Read the frozen `## Threats` slice once** — this is the bounded read the
+   context-window discipline permits, and it is the same one the threat gate needs, so it is made
+   here and serves both.
+
+   **Score every entry in the section, and only those.** The membership is settled. An entry whose
+   `#### usergate` block already records a `Selection` is a re-assessment carrying a prior pass's
+   decision — context travelling with the entry, never a filter on what you score.
+
+   For each threat, **reason before you score**, because the block is filled top-down and this
+   schema doubles as a reasoning schema:
+   - **Justification** — a sentence or two on how probable and how damaging this threat is *for
+     this change*. Reasoning, not a restatement of the fields above it. It drives the rest.
+   - **Impact** — how damaging it would be if realized.
+   - **Likelihood** — how probable it is to be realized for this change.
+   - **Risk score** — likelihood × impact, normalized to `0`–`100`; higher is more dangerous.
+   - **Criticality** — the band that score falls in.
+
+   Write them into each entry's **`#### score` block** — one Edit per entry, replacing the run
+   between that marker and the next, and leaving `#### gen`, `#### usergate` and `#### test`
+   untouched. Then write the **plan-level residual** into `## Risk score` — `Score` and
+   `Criticality` for the change as a whole. **Keep your one-line justification for that residual in
+   hand**: the section has no field for it, and the closing verdict is where it lands.
+
+   **Then re-tag, with the script — never by hand.** It sorts the entries into descending-risk
+   order and renumbers them contiguously from `T01`, the most dangerous threat. Unlike the Phase
+   select batch, SessionStart does not inject this one ready to run: paste `plugin_root` and
+   `assessment_abs` in from the mint JSON, both in full.
+
+   ```ingrain-script
+   bash <plugin>/skills/ingrain-security/scripts/threat-retag --assessment "<assessment_abs>"
+   ```
+
+   Entries move by line span, so every phase block travels with its threat byte for byte and only
+   the `T<nn>` token in a heading is rewritten. **Take the new ids from its JSON**, which is the
+   whole of what the threat gate's table needs beside the entry text you already read:
+
+   - **`retagged`** — `true` when the file was rewritten. Read it before anything else.
+   - **`threats`** — the new order, `T01` first. Each carries its new **`tag`**, the
+     **`previous_tag`** it had when you scored it, its **`title`**, **`risk_score`** and
+     **`criticality`**. **The ids you were holding are stale from here** — take every one from
+     this list.
+   - **`reason`** and **`malformed`** — why nothing was rewritten, when `retagged` is `false`.
+     `unscored-entries` means an entry has no readable `Risk score` and `malformed` names it:
+     fill that block and run the script again. Re-tagging a half-scored list would freeze the
+     wrong priority permanently, so it refuses whole rather than ordering what it can.
+   - Obey the `instruction` field, as with every bundled script.
+
+   **This is the last stage that may reorder.** Threat ids pick up their first references at
+   Step 5, when guidance names them. From here **the id is the priority** and is permanent:
+   every stage that shows threats shows them in **id order** — the ids are the sort.
 
 4. **The user gates — one moment, two axes.** Follow **How to ask the user**. Present the threat
    gate and then the rule gate in the **same message**: they are one decision point about one
@@ -283,15 +336,13 @@ checklist** at the end of this file.
    **4a — The threat gate: which threats to act on.** The user must understand each threat without
    re-reading the plan. In order:
 
-   1. **Read** the bounded `## Threats` slice — **required**, and exactly the read the
-      context-window discipline permits. **Run the three-check on it while it is in front of you.**
-      If the slice is empty, or the entries' `#### score` blocks are, re-dispatch
-      `ingrain-risk-scorer` (or `ingrain-threat-generator` where the entries themselves are
-      missing). A wrong enum or a missing field line goes back the same way, to the worker that
-      owns that block.
+   1. **Take** the scored threats from Step 3 — the entry text you read there, under the ids the
+      re-tag returned; no second read.
+      **Run the three-check on what Step 3 had in front of it.** Where the entries themselves are
+      missing, re-dispatch `ingrain-threat-generator`; where a `#### score` block is wrong or
+      incomplete, it is yours to fix — Step 3 wrote it.
    2. **Display** the scored threats as a Markdown table **in id order — `T01` first**, which the
-      scorer already re-tagged into descending risk. Take the ids as the order, and confirm the
-      risk scores descend down them; where a score rises, Step 3 goes back for the re-tag.
+      re-tag already sorted into descending risk. Take the ids as the order.
    3. **Present** one single-choice window per threat; mark high/critical recommended.
    4. **Record** each threat's `Selection` into its **`#### usergate` block** (act on it →
       `selected`, accept the risk → `excluded`; `undecided` only if the user is explicitly
@@ -304,10 +355,10 @@ checklist** at the end of this file.
    | **Threat** | id + short title (e.g. `T01 — unauthenticated token refresh`) |
    | **Risk** | risk criticality + 0–100 score (e.g. `high · 78`) |
    | **What can go wrong** | the concrete failure, from the threat's Vector/Description, in this change's terms |
-   | **Why it matters** | the consequence if realized, grounded in the scorer's impact and score |
+   | **Why it matters** | the consequence if realized, grounded in the impact and score you set |
    | **Local impact in the plan** | which specific part of *this* change the threat lands on |
 
-   Every cell traces back to an entry a worker wrote. Flag high/critical rows (e.g. `⚑ high · 78`)
+   Every cell traces back to an entry in the file. Flag high/critical rows (e.g. `⚑ high · 78`)
    so the table and the windows tell the same story.
 
    **4b — The rule gate: which org rules govern this change.** Present **only the curated set** —
@@ -347,40 +398,59 @@ checklist** at the end of this file.
    - **1+ selected on either axis** → proceed to Step 5. Name what was set aside in one line
      ("T02, T05 excluded — risk accepted; 1 rule deemed inapplicable"). **Selected rules alone
      sustain a guidance round** — a rules-only review is an ordinary outcome.
-   - **Both gates selected nothing** → skip Steps 5–6. State "no threats selected and no rules in
+   - **Both gates selected nothing** → skip Step 5. State "no threats selected and no rules in
      scope — review closed", close with a one-line verdict naming the accepted risks and the
      inapplicable rules, then **go to Finalize**. The all-`excluded` sections are the preserved
      context — the decisions *are* the record.
 
-5. **Guidance** — dispatch `ingrain-guidance-generator` with `assessment_abs` and pointers to
-   **both driver sections**: the **selected** `## Threats` entries and the **selected** `## Org
-   rules` entries. Excluded drivers on either axis are out of scope. It reads the rule bodies from
-   the section by pointer, exactly as it reads the threats — no inline paste.
+5. **Guidance — yours, no worker.** Write `## Implementation guidance` from **both selected driver
+   sets**: the `selected` `## Threats` entries you just gated, and the `selected` `## Org rules`
+   entries whose bodies are already in your context from the retrieval carve-out. Excluded drivers
+   on either axis are out of scope. Nothing here needs a fresh read, which is why nothing is
+   dispatched for it.
 
-   It writes `## Implementation guidance`, and **every entry names at least one driver**: the
-   threats it closes, the rules it implements, or both. An entry driven by a rule alone is ordinary
-   guidance, not a leftover category. **One entry may serve several threats *and* several rules —
-   written once, naming them all.**
+   One `### M<n> — <title>` entry per piece of **work**, to the field card under that heading:
 
-6. **Critique the guidance** *(single round)* — dispatch `ingrain-guidance-critic` at
-   `## Implementation guidance` **and `## Org rules`**, so it can judge each entry against its
-   drivers *and* report **selected** rules that no guidance implements. That gap is what this
-   critic exists to catch, and reporting it here — while the generator can still revise — is why
-   no coverage section is needed downstream.
-   - `needs-revision` → re-dispatch `ingrain-guidance-generator` **once**, then **freeze**.
-   - `approved` → **freeze** the guidance.
-   - Either way, surface anything the critique left unresolved.
+   - **Every entry names at least one driver.** `Threats` and `Rule refs` may each be `—`, but
+     **never both**: work that traces to no stated goal cannot be attributed, verified or governed,
+     and both the CLI and the platform refuse such a file outright.
+   - **`Rule refs` may only name a `selected` rule**, and each id is **copied whole and verbatim**
+     from `## Org rules` — never abbreviated to a prefix. An id is an exact-match key, so a
+     shortened copy silently names no rule at all.
+   - **One entry may serve several threats *and* several rules — write it once, naming them all.**
+     A single control routinely closes two threats *and* satisfies the rule that prescribes it.
+     Copying it per driver reads as several pieces of work everywhere downstream.
+   - **Rule-driven guidance is ordinary guidance.** An entry naming a rule and no threat is fully
+     anchored: it states how a standing org requirement becomes concrete in this change.
+   - **Ids are permanent**, assigned in the order you write them.
 
-   Then **go to Finalize**. There is no guidance gate: all critiqued guidance lands in the plan,
-   and the user refines it **there** — the plan is their editing surface, and verification catches
-   any drift by judging the code.
+   **Order the list by what an entry is worth, never by which axis drove it** — the two axes are
+   symmetric, and sorting rule-driven work to the bottom as a class contradicts that on the one
+   surface the user reads. Threat-driven entries rank by the **lowest threat id** each one closes
+   (the ids are in risk order, so that is the highest risk it addresses); a rule-driven-only entry
+   ranks by the **Yield** it claims, interleaved with them rather than appended after them; ties
+   break by higher Yield, then lower Effort.
+
+   **Then check your own coverage, before you leave this step.** Everything it needs is in front of
+   you, so it costs no read:
+   - every entry names ≥ 1 driver;
+   - every **selected** threat is named by some entry's `Threats`;
+   - every **selected** rule is named by some entry's `Rule refs`.
+
+   A gap is not a defect to hide: close it if the driver deserves work, and **name it in the
+   closing verdict** if it does not. An accepted rule that nothing implements is exactly what a
+   security owner needs to see, and Testing will read it as `not-followed` either way.
+
+   Then **go to Finalize**. There is no guidance gate: all the guidance lands in the plan, and the
+   user refines it **there** — the plan is their editing surface, and verification catches any
+   drift by judging the code.
 
 ## The plan file
 
 The review folds its results into **the plan file** — the implementation plan the coding agent
 edits and executes downstream. This is **distinct from the assessment file**: the assessment file
-is the security-analysis artifact the workers write; the plan file is where the selected threats,
-the accepted org rules and **all** critiqued implementation guidance land.
+is the security-analysis artifact this review writes; the plan file is where the selected threats,
+the accepted org rules and **all** the implementation guidance land.
 
 In **plan mode** it is a concrete on-disk file (e.g. `.${coding_agent_root}/plans/<name>.md`) whose
 path you already hold, since it is the file you are editing — **name it** when you reference it.
@@ -388,7 +458,7 @@ In **ad-hoc mode** it is the inline plan you are building in the conversation.
 
 ## Finalize
 
-Reached from the gates (both selected nothing) or from Step 6. Two writes and a closing verdict:
+Reached from the gates (both selected nothing) or from Step 5. Two writes and a closing verdict:
 
 **1. Finalize the assessment file in place.** Set `## Task` → `Latest stage: development`, then:
 
@@ -396,16 +466,16 @@ Reached from the gates (both selected nothing) or from Step 6. Two writes and a 
   the Testing pass reads as the rule's specification, whether or not any guidance drives it. An
   `excluded` entry keeps its heading and `Selection: excluded` line and **drops its body**: the
   decision is the record, the payload was provenance.
-- **Delete the three transient sections — `## Threat critique`, `## Rule critique` and
-  `## Guidance critique`** (heading and body): they are iteration scratch.
+- **Delete the two transient sections — `## Threat critique` and `## Rule critique`** (heading and
+  body): they are iteration scratch.
 - **Leave every field card where it is** — they are persistent, and the Testing pass runs in a
   later session with no reference in context.
 
 One write, to `assessment_abs`; the file already lives at its final path, so finalizing it in place
 *is* persisting it.
 
-**No coverage section is written.** An unaddressed selected driver was already reported by the
-guidance critic, when the generator could still revise, and Testing **proves** it afterwards — an
+**No coverage section is written.** Step 5's own check already found any unaddressed selected
+driver, while the guidance could still be changed, and Testing **proves** whatever survives — an
 unaddressed selected threat reads `weak`, an unimplemented selected rule reads `not-followed`.
 Name any that remain in the closing verdict below instead.
 
@@ -414,9 +484,9 @@ last thing the user reads, and the only place three otherwise-homeless statement
 
 - **any selected driver left unaddressed** — the replacement for the deleted `## Coverage`
   section, which is why it is a sentence rather than a section: no derived join to keep honest;
-- **the plan-level residual risk, with the scorer's one-line justification for it** — `## Risk
-  score` holds `Score` and `Criticality` and nothing else, so the justification the
-  `ingrain-risk-scorer` returned has no field to sit in and is said here or nowhere;
+- **the plan-level residual risk, with your one-line justification for it** — `## Risk score` holds
+  `Score` and `Criticality` and nothing else, so the reasoning you formed at Step 3 has no field to
+  sit in and is said here or nowhere;
 - **whether the sync landed**, in the same line if it did and one line of its own if it did not.
 
 The both-gates-empty route reaches this step too: there the verdict names the accepted risks and
@@ -444,7 +514,7 @@ taxonomy. **A failed sync never fails the review** — report it in one line and
 plan write; the assessment file is the output that matters.
 
 **2. Write the results into the plan file.** Incorporate the selected threats, the accepted org
-rules and **all critiqued guidance** — every entry, not a subset: there is no guidance gate, and
+rules and **all the guidance** — every entry, not a subset: there is no guidance gate, and
 the plan is where the user refines it. **Say so in one line**: tell them the guidance is theirs to
 edit here, and that verification later judges the code rather than this list. Plus two supporting
 things:
@@ -472,17 +542,16 @@ fork and run together, as do 2a and 2b.
 The three-check runs at the user gates and at finalize, on the reads those steps already make;
 never on a fresh read of `references/lib/assessment-file.md`.**
 
-- [ ] 0. Prior-analysis lookup, then the review question; `## Triage` + `Description` — `minor` → sync + stop; `major` → also `Surfaces` + `## Affected paths`
+- [ ] 0. Review question FIRST, before any lookup or write; `## Triage` + `Description`; `minor` → sync + stop; `major` → prior analysis, Surfaces, paths
 - [ ] 1a. Threats generated into `## Threats`, seeded from any prior analysis; all four phase markers seeded, only `#### gen` filled
 - [ ] 1b. Org rules retrieved by YOU, forked with 1a — keyed on plan/Surfaces/paths, not a gate; broad; ALL queries in ONE call; bodies verbatim, `Selection: —`
 - [ ] 2a. Threat critique dispatched — one revision at most, then threats frozen
 - [ ] 2b. Rule critique dispatched — YOU applied the prune, keeping any unfounded one; a pruned rule is never presented and never recorded
-- [ ] 3. Risk scored — each `#### score` filled, other blocks carried VERBATIM, plus the plan-level residual; threats re-tagged into risk order (`T01` first)
-- [ ] 4a. Threat gate — slice three-checked, table displayed FIRST, then one window per threat; `Selection` recorded into `#### usergate`
+- [ ] 3. Risk scored BY YOU — slice read once, every `#### score` filled, residual written, then `scripts/threat-retag` re-tagged (`T01` first)
+- [ ] 4a. Threat gate — table displayed FIRST, in the re-tag's id order, then one window per threat; `Selection` recorded into `#### usergate`
 - [ ] 4b. Rule gate, SAME user moment — curated set only, table FIRST, then accept-all and per-rule windows; `Selection` recorded on every entry
 - [ ] 4c. Routed on the OR of both gates — 1+ selected on either axis proceeds; only both empty ends the review
-- [ ] 5. Guidance generated from BOTH selected driver sets, by pointer; every entry names ≥1 driver; a multi-driver entry written ONCE
-- [ ] 6. Guidance critique pass done — selected rules left unapplied reported; guidance frozen. No guidance gate: it lands in the plan
-- [ ] Finalize — `Latest stage: development`, `## Org rules` pruned by Selection, all three critique sections deleted, cards kept, file three-checked
-- [ ] Plan written — ALL critiqued guidance, the assessment linked, Maintenance stated, and one line telling the user the guidance is theirs to refine here
+- [ ] 5. Guidance written BY YOU from BOTH selected driver sets; every entry names ≥1 driver; a multi-driver entry written ONCE; own coverage check run
+- [ ] Finalize — `Latest stage: development`, `## Org rules` pruned by Selection, both critique sections deleted, cards kept, file three-checked
+- [ ] Plan written — ALL the guidance, the assessment linked, Maintenance stated, and one line telling the user the guidance is theirs to refine here
 - [ ] Synced — `ingrain record design --assessment "<assessment_abs>"` AFTER that write; best-effort, so a failure is one line and never fails the review

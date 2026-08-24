@@ -1,7 +1,7 @@
 # Tests
 
 Test suite for the `ingrain-security` plugin — the `ingrain-security` orchestrator skill and its
-worker roles: seven in Development, plus Testing's `ingrain-threat-verifier` and
+worker roles: three in Development, plus Testing's `ingrain-threat-verifier` and
 `ingrain-rule-verifier`. Built on Deno's test runner; it drives the `claude` CLI in headless mode
 and can exercise each worker in isolation by dispatching it the way the orchestrator does (its
 `skills/ingrain-security/references/development/<name>.md` body as the system prompt, plus the
@@ -14,7 +14,7 @@ from its path:
 
 | Folder                    | Holds                                                                                               |
 | ------------------------- | --------------------------------------------------------------------------------------------------- |
-| `references/development/` | The seven Development worker roles, `ingrain-<role>.md`, and `flow.md`                              |
+| `references/development/` | The three Development worker roles, `ingrain-<role>.md`, and `flow.md`                              |
 | `references/testing/`     | `verification-pass.md` (the Testing flow), `ingrain-threat-verifier.md`, `ingrain-rule-verifier.md` |
 | `references/lib/`         | `ingrain-cli.md`, `branch-delta.md`, `dispatch.md` — phase-neutral, read by both phases             |
 | `references/lib/`         | `assessment-file.md` — the one artifact's schema, read by both phases                               |
@@ -39,7 +39,7 @@ Run all commands from this `tests/` directory.
 lib/      claudeRunner.ts (spawn helper) · matchers.ts (assertions) · sampleInputs.ts (canned plans) · reporter.ts (input/output printer)
 static/   offline lint of worker-reference frontmatter + advisory ROLE + skill/hook structure (no model calls)
 parity/   scriptInvocations.test.ts · scriptOutputFields.test.ts · sourceGraph.test.ts — hold the scripts and the docs/headers that describe them to each other (no model calls)
-hooks/    assessment-hooks.test.ts · assessment-mint.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts · assessment-write-lib.test.ts · project-root-lib.test.ts — run the hook/path scripts and their shared libs under bash against a throwaway project (no model calls)
+hooks/    assessment-hooks.test.ts · assessment-mint.test.ts · threat-retag.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts · assessment-write-lib.test.ts · project-root-lib.test.ts — run the hook/path/skill scripts and their shared libs under bash against a throwaway project (no model calls)
 shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
 agents/   agents.test.ts — table-driven live tests, one case per worker scenario (dispatched via its reference file)
 skill/    trigger.test.ts (review starts / minor stops) · orchestration.test.ts (gated)
@@ -85,10 +85,15 @@ This is always on for the live tiers — Deno streams each test's output live (w
   …" headers to it — including the ShellCheck directive beside each source line, whose drift
   silently un-lints a file. Adding a contract key, a route or a script means touching **both** ends
   or this tier fails.
-- **hooks/** — offline, no model calls, but unlike `static/` it **executes** the
-  `hooks/scripts/ensure-assessment-dir` SessionStart hook under `bash` against a
-  `Deno.makeTempDir()` project, asserting the durable folder/README/`.gitignore` are seeded and the
-  `CLAUDE_PROJECT_DIR` / `$PWD` resolution behaves. (The finalize snapshot is now written by the
+- **hooks/** — offline, no model calls, but unlike `static/` it **executes** the scripts. It also
+  covers `skills/ingrain-security/scripts/threat-retag`, which is not a hook but belongs to the same
+  tier for the same reason: it is a bundled script whose behaviour is deterministic, so it is run
+  rather than described. Its central case is the one the retired risk-scorer worker could only be
+  checked for loosely — that re-tagging moves entries **without** disturbing the phase blocks it
+  does not own — asserted as a multiset comparison over every non-heading line. The rest of this
+  tier **executes** the `hooks/scripts/ensure-assessment-dir` SessionStart hook under `bash` against
+  a `Deno.makeTempDir()` project, asserting the durable folder/README/`.gitignore` are seeded and
+  the `CLAUDE_PROJECT_DIR` / `$PWD` resolution behaves. (The finalize snapshot is now written by the
   orchestrator via its file tools, not a hook script, so it has no bash test here.) It also executes
   both auto-approval hooks, piping each one real hook payloads —
   `hooks/claude/allow-assessment-write` (**PreToolUse**, target named in `tool_input.file_path`) and
@@ -113,7 +118,7 @@ This is always on for the live tiers — Deno streams each test's output live (w
   its write target, then asserts the worker actually modified the seeded file and checks the
   output's _shape_ (a verdict keyword, a 0–100 score, risk descending by threat tag, required
   fields) over the return and the file together. Assertions are loose because live output varies.
-  The table has six cases over six workers. It once opened with two `ingrain-relevance-triage`
+  The table has three cases over three workers. It once opened with two `ingrain-relevance-triage`
   cases; that worker was replaced by a question the orchestrator asks the user, which has no
   subagent to run in isolation.
 - **skill/** — a full session (skill + agents + hook). `trigger.test.ts` checks a security-relevant
@@ -142,7 +147,7 @@ deno task ci                 # what CI runs: lint + fmt:check + test:offline
 **Needs an agent** — spawns `claude`, requires auth, costs model calls, can flake:
 
 ```bash
-deno task test:agent         # 6 live worker cases (one per worker) + the 2 skill trigger tests
+deno task test:agent         # 3 live worker cases (one per worker) + the 2 skill trigger tests
 deno task test:integration   # everything, incl. the full orchestration cycle (slow)
 
 # one worker only:
@@ -226,7 +231,7 @@ earlier mode's transcript in its own subdir.
 | `test:ts`                | no              | 0                         | < 1s      | no   |
 | `test:offline`           | no              | 0                         | < 1s      | no   |
 | `ci` (+ lint, fmt:check) | no              | 0                         | a few s   | no   |
-| `test:agent`             | yes             | ~10 (8 worker cases + 2)  | a few min | yes  |
+| `test:agent`             | yes             | ~5 (3 worker cases + 2)   | a few min | yes  |
 | `test:integration`       | yes             | + full cycle to the gates | 5–20 min  | yes  |
 
 ## Notes
@@ -240,3 +245,22 @@ earlier mode's transcript in its own subdir.
 - The orchestration test deliberately does **not** answer the interactive gate prompts — headless
   mode has no human — so it asserts the run _reaches_ the user gates and stops there, on the threat
   axis and the rule axis alike.
+- **It does answer two things up front, and neither is a gate.** The flow asks the subagent request
+  (`references/lib/dispatch.md`) and Step 0's review question _before_ the driver gates, and
+  headless has no reply channel for either — so an unanswered run stops there and the tier measures
+  a review that never started. The invoking prompt supplies both, which `dispatch.md` names as
+  sufficient for the first: a request already in the prompt _is_ the request.
+- **Even so, about half of headless runs stop before dispatching, and the tier announces that rather
+  than failing.** Whether a `--print` session acts on those answers or stops to ask them anyway is
+  model-dependent; measured on this exact prompt it is roughly 50/50. A skipped run prints several
+  lines naming which half it was, what still ran and what did not. The halt assertions run **first
+  and unconditionally** — they read the assessment file, so they hold either way — and only the
+  choreography half is skipped. One shape of it is **not** skipped: threats written with no subagent
+  tool seen means the work happened through something the harness does not recognise, which shouts
+  instead.
+- **The subagent tool's NAME is a live dependency of this suite.** `dispatchedWorkers` filters tool
+  calls by name, so a host rename empties it — turning every positive dispatch assertion red and
+  every negative one **vacuous**. It happened: the tool became `Agent` while the detector still
+  matched `Task`. `SUBAGENT_TOOLS` in `lib/claudeRunner.ts` now carries both, and the orchestration
+  tier opens with a canary that fails loudly, naming that constant, when a run used no subagent tool
+  at all.

@@ -12,26 +12,15 @@
 
 import { assertEquals } from "@std/assert";
 import {
-  assertBlockCarriedAcross,
   assertContainsAll,
   assertContainsAny,
   assertHasScore0to100,
   assertOnlyBlockFilled,
-  assertRiskDescendsByTag,
-  threatEntries,
 } from "../lib/matchers.ts";
 import { AGENT_TIMEOUT_MS, mintAssessment, workerDispatchPrompt } from "../lib/claudeRunner.ts";
 import type { RunResult } from "../lib/types.ts";
 import { runChecked } from "../lib/reporter.ts";
-import {
-  FROZEN_THREATS_BLOCKED,
-  MAJOR_PLAN,
-  RETRIEVED_RULES,
-  SELECTED_THREATS,
-  TASK_AND_THREATS_ON_DISK,
-  TASK_AND_WEAK_MODEL,
-  THREAT_AND_GUIDANCE,
-} from "../lib/sampleInputs.ts";
+import { MAJOR_PLAN, RETRIEVED_RULES, TASK_AND_WEAK_MODEL } from "../lib/sampleInputs.ts";
 
 /**
  * Tools every worker is dispatched with. Workers write their section of the assessment
@@ -51,14 +40,6 @@ interface AgentCase {
   timeoutMs: number;
   /** Shape assertions on the worker's response. */
   check: (r: RunResult) => void;
-  /**
-   * Optional: write into the minted skeleton before the dispatch.
-   *
-   * Some workers do not receive their input as prose — the risk scorer reads `## Threats`
-   * off disk, and its carry-across rule is only reachable if there are blocks on disk to
-   * carry. Seeding the file is what makes that case testable at all.
-   */
-  seedFile?: (assessmentAbs: string) => Promise<void>;
   /**
    * Optional: assertions over the file **as written**, rather than over the added lines.
    *
@@ -84,6 +65,13 @@ const addedLines = (written: string, seeded: string): string => {
 // subagent to run in isolation and nothing here to replace them with: a question's behaviour
 // is the orchestrator's, asserted statically over the flow file and end to end in
 // `skill/trigger.test.ts`.
+//
+// Three more left the same way in the speed-up — the risk scorer and the guidance
+// generator/critic, whose steps moved into the orchestrator. The scorer's case is the one
+// worth knowing where it went: its central assertion was that re-tagging moves entries
+// WITHOUT disturbing the blocks it does not own, and that is now a deterministic script with
+// a deterministic test (`hooks/threat-retag.test.ts`) rather than a live worker checked
+// loosely. The same property, pinned harder and for free.
 const CASES: AgentCase[] = [
   {
     // ingrain-threat-generator (sonnet): produces a threat list with stable tags T1, T2, …
@@ -109,50 +97,6 @@ const CASES: AgentCase[] = [
       assertOnlyBlockFilled(written, "gen", "the generator seeds four markers and fills gen"),
   },
   {
-    // ingrain-risk-scorer (sonnet): scores each threat likelihood x impact (0-100), with
-    // an overall criticality band, then re-tags the frozen list into descending-risk order.
-    // The fixture's incoming tags are deliberately out of risk order, so a scorer that
-    // leaves them alone fails the ordering assertion.
-    worker: "ingrain-risk-scorer",
-    label: "ingrain-risk-scorer :: frozen threats",
-    input: TASK_AND_THREATS_ON_DISK,
-    timeoutMs: AGENT_TIMEOUT_MS,
-    check: (r) => {
-      assertContainsAll(r.text, [/likelihood/i, /impact/i], "expected likelihood & impact labels");
-      assertContainsAny(r.text, [/\b(low|medium|high|critical)\b/i], "expected a criticality band");
-      assertRiskDescendsByTag(r.text, "expected the threats re-tagged into risk order");
-    },
-    // The scorer reads `## Threats` off disk, so seeding it is what makes the real dispatch
-    // shape testable — and it is the only way to put blocks in front of the one worker whose
-    // contract is to rewrite entries WHOLE.
-    seedFile: async (assessmentAbs) => {
-      const seeded = await Deno.readTextFile(assessmentAbs);
-      await Deno.writeTextFile(
-        assessmentAbs,
-        seeded.replace("## Threats", FROZEN_THREATS_BLOCKED.replace(/^## Threats\n/, "## Threats")),
-      );
-    },
-    // R-C, the one exception to "write only inside your own block": re-tagging moves entries,
-    // so the scorer rewrites them whole and must carry every other block across verbatim. The
-    // failure it guards is silent and expensive — a re-assessment that flattens `#### test`
-    // erases a prior pass's verdict, and the entry then reads as never verified.
-    checkFile: (written) => {
-      // Membership first. The scorer reorders and re-tags; it never adds or drops. Asserted
-      // explicitly because the first live run of this case DID drop one — the entry whose
-      // `#### usergate` already carried `Selection: excluded`, which the scorer appears to
-      // have read as a filter rather than as context travelling with the entry. Its
-      // reference now says so outright; this is what holds that shut.
-      assertEquals(
-        threatEntries(written).length,
-        2,
-        "the scorer must return exactly the frozen set — it reorders, never adds or drops",
-      );
-      assertBlockCarriedAcross(written, "usergate", "Selection: excluded", "prior gate decision");
-      assertBlockCarriedAcross(written, "test", "Robustness: adequate", "prior verdict");
-      assertBlockCarriedAcross(written, "test", "services/auth/signup.ts:31", "prior evidence");
-    },
-  },
-  {
     // ingrain-threat-critic (sonnet): scores a threat model 0-100 and returns a verdict.
     // The weak fixture biases toward needs-revision but we assert only the shape.
     worker: "ingrain-threat-critic",
@@ -162,31 +106,6 @@ const CASES: AgentCase[] = [
     check: (r) => {
       assertContainsAny(r.text, [/approved/i, /needs[-\s]revision/i], "expected a verdict");
       assertHasScore0to100(r.text);
-    },
-  },
-  {
-    // ingrain-guidance-critic (sonnet): scores coverage across both driver axes 0-100 + a verdict.
-    worker: "ingrain-guidance-critic",
-    label: "ingrain-guidance-critic :: sample guidance",
-    input: THREAT_AND_GUIDANCE,
-    timeoutMs: AGENT_TIMEOUT_MS,
-    check: (r) => {
-      assertContainsAny(r.text, [/approved/i, /needs[-\s]revision/i], "expected a verdict");
-      assertHasScore0to100(r.text);
-    },
-  },
-  {
-    // ingrain-guidance-generator (sonnet): proposes guidance for the selected drivers, each
-    // with Yield / Effort and the drivers it names. It has no CLI by design — the org rules
-    // are retrieved before it runs — and here `## Org rules` is empty, so this exercises the
-    // no-rules path: it must still produce threat-anchored guidance from its own analysis.
-    worker: "ingrain-guidance-generator",
-    label: "ingrain-guidance-generator :: selected threats (no org rules)",
-    input: SELECTED_THREATS,
-    timeoutMs: AGENT_TIMEOUT_MS,
-    check: (r) => {
-      assertContainsAll(r.text, [/yield/i, /effort/i], "expected Yield & Effort fields");
-      assertContainsAny(r.text, [/threats/i, /\bT1\b/], "expected a threat driver reference");
     },
   },
   {
@@ -210,7 +129,6 @@ for (const c of CASES) {
     const projectDir = await Deno.makeTempDir();
     try {
       const { assessmentAbs } = await mintAssessment(projectDir, c.label);
-      await c.seedFile?.(assessmentAbs);
       const seeded = await Deno.readTextFile(assessmentAbs);
       const prompt = await workerDispatchPrompt(c.worker, c.input, assessmentAbs);
 

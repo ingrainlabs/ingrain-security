@@ -41,6 +41,12 @@ const SUBSTITUTIONS: ReadonlyArray<readonly [string, string]> = [
   // wrong ref but a bash redirect, so the fence would fail on syntax rather than on grammar.
   ["<diff_ref>", "HEAD"],
   ["path/to/file.ts", "README.md"],
+  // The path a real run pastes in from the mint. Relative, so it resolves inside the throwaway
+  // project this harness runs each command in — and pointing at a file that is NOT there, which
+  // `threat-retag` reports as `retagged: false` with a reason rather than failing. That is the
+  // documented degraded case, and it is the one this tier can reach: the fence's job is the
+  // argument grammar, while the re-tag's behaviour is `tests/hooks/threat-retag.test.ts`'s.
+  ["<assessment_abs>", ".ingrain-security/assessment-parity-harness.md"],
 ];
 
 interface IInvocation {
@@ -65,14 +71,22 @@ async function agentFacingDocs(): Promise<string[]> {
   return docs.sort();
 }
 
-/** Pull every line of every `ingrain-script` fence out of one doc. */
+/**
+ * Pull every line of every `ingrain-script` fence out of one doc.
+ *
+ * Fences are matched after leading whitespace, because a step written as a numbered list item
+ * indents its fence — and a column-0-only scan silently skipped exactly those, which is the
+ * whole contract this tier exists to enforce. Commands are trimmed either way, so an indented
+ * fence runs the same command a top-level one does.
+ */
 function invocationsIn(doc: string, text: string): IInvocation[] {
   const found: IInvocation[] = [];
   let inFence = false;
   text.split("\n").forEach((raw, index) => {
-    if (raw.startsWith("```")) {
+    const marker = raw.trimStart();
+    if (marker.startsWith("```")) {
       // A closing fence carries no info string, so the tag test also ends the block.
-      inFence = !inFence && raw.slice(3).trim() === FENCE_TAG;
+      inFence = !inFence && marker.slice(3).trim() === FENCE_TAG;
       return;
     }
     if (inFence && raw.trim()) {

@@ -23,9 +23,8 @@ allowed-tools: Bash(ingrain context:*) Bash(ingrain record:*)
 ---
 
 <SUBAGENT-STOP>
-If you were dispatched as a worker subagent (ingrain-threat-generator,
-ingrain-threat-critic, ingrain-risk-scorer, ingrain-rule-critic, ingrain-guidance-generator,
-ingrain-guidance-critic, ingrain-rule-verifier, ingrain-threat-verifier), do the one job you were given
+If you were dispatched as a worker subagent (ingrain-threat-generator, ingrain-threat-critic,
+ingrain-rule-critic, ingrain-rule-verifier, ingrain-threat-verifier), do the one job you were given
 and return. The orchestration — Development and Testing alike — is run by the session that
 dispatched you; you are one step inside it.
 </SUBAGENT-STOP>
@@ -166,11 +165,17 @@ instead of a whole pass.
 
 # Security review loop
 
-Both phases work the same way: **you orchestrate, fresh subagents do the work, and the assessment
-file is how they hand off.** Each worker is a role a subagent adopts by reading its reference
-file; you hold the state between steps and never do a worker's job yourself. Which workers, in
-what order, and what the phase produces are the flow file's — Development dispatches seven roles
-and writes back into the plan, Testing dispatches verifiers and reports.
+Both phases work the same way: **you orchestrate, dispatched subagents do the work that needs
+fresh eyes, and the assessment file is how every stage hands off.** Each worker is a role a
+subagent adopts by reading its reference file; you hold the state between steps and never do a
+worker's job yourself. Which workers, in what order, what stays yours, and what the phase produces
+are the flow file's — Development dispatches three roles and writes back into the plan, Testing
+dispatches verifiers and reports.
+
+**A step is dispatched when it needs fresh eyes; it is yours when you already hold its input.** A
+dispatch costs a wave — the subagent re-reads from disk what you are holding, and you cannot take a
+turn while suspended on it — so it is spent on judgement that benefits from clean context, not on
+work whose inputs are already in front of you.
 
 **Two driver axes, one vessel.** A threat sets a goal (close this); an org rule sets a goal
 (implement this control); implementation guidance is *how* either goal is reached. The user gates
