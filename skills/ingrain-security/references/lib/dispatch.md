@@ -25,8 +25,13 @@ at Finalize — happen strictly between worker steps, once the worker has return
 **Every Development worker and every Testing verifier runs as a fresh subagent — that is the
 designed mode.** It gives each worker clean context and its own **Recommended model** tier, and it
 keeps the orchestrator holding just compact statuses and pointers (SKILL.md § Context-window
-discipline). Run the seven Development workers and the Testing verifiers as subagents wherever the
+discipline). Run the three Development workers and the Testing verifiers as subagents wherever the
 host allows.
+
+**Which steps are workers at all is the flow file's, not this one's.** A dispatch costs a wave, so
+it is spent where fresh eyes are worth it and not on work whose inputs the orchestrator already
+holds — `references/development/flow.md` says which is which, and this file covers the mechanism
+for the ones that are dispatched.
 
 The sequential in-context fallback below is a **degraded mode**: one shared context across every
 worker, and the session model throughout. Reserve it for a host whose only mode is the main
@@ -42,7 +47,7 @@ This covers:
   read-only and deterministic, and neither reads the other's output. One block, and the values
   are reused for the whole run; no later step re-mints.
 - **The two driver chains after the review question** — the threat chain and the broad rule retrieval have no
-  data dependency on each other, so they run in parallel and join at the guidance generator.
+  data dependency on each other, so they run in parallel and join at the guidance step.
 - **The Testing verifiers** — one per selected threat and one per selected rule, mutually
   independent (see `references/testing/verification-pass.md` § How to dispatch a verifier).
 
@@ -64,9 +69,9 @@ costs one call rather than one per line.
 
 An entry's field lines are **not** one contiguous run: `## Threats` entries are divided into
 `#### ` phase blocks, one per writing stage, and replacing first-field-to-last would swallow the
-markers between them. The `ingrain-risk-scorer` is the single exception to writing inside one
-block — re-tagging reorders entries, so it rewrites them whole and carries every block it does
-not own across verbatim; its own reference states that, and this file does not restate it.
+markers between them. **Every stage writes inside its own marker, with no exception.** Re-tagging
+is `skills/ingrain-security/scripts/threat-retag`'s, and it moves entries by line span without
+re-typing a block, so no stage has cause to rewrite `## Threats` whole.
 
 **The file tells you its own shape.** The mint seeds a **field card** under every section, and that
 card is the write contract — write from it. `references/lib/assessment-file.md` is for what

@@ -1,0 +1,478 @@
+#!/usr/bin/env bash
+# The THREAT RE-TAG for the ingrain-security plugin. Sibling to the assessment minter.
+#
+# Sorts a scored `## Threats` section into descending-risk order and renumbers the entries
+# contiguously from `T01`, so `T01` is the most dangerous threat and every downstream display
+# reads the priority straight off the ids. Emits ONE JSON object on stdout; diagnostics go to
+# stderr.
+#
+# WHY THIS IS A SCRIPT. Scoring is judgement and belongs to the orchestrator; the re-tag is
+# bookkeeping — a total order over five numbers — and a model doing it has to rewrite the whole
+# section to move an entry. That rewrite was the single exception to the block rule ("write only
+# inside your own marker"), and it cost a live run a prior pass's `#### test` verdicts: an entry
+# rewritten from memory came back with the block flattened, which reads downstream as "never
+# verified". Moving entries by line span cannot flatten a block, because it never re-types one.
+#
+# THE ORDER, and why it is total. Risk score descending, then impact (critical > high > medium >
+# low), then likelihood (very high > high > medium > low), then the incoming id ascending. The
+# last key is unique within the file, so two runs over the same scores produce the same ids —
+# which is what makes the re-tag safe to re-run on a re-assessment.
+#
+# WHAT IT REFUSES TO DO. Re-tag a partially scored section. An id is permanent from here on —
+# guidance references it — so an order computed over entries the scoring stage has not reached
+# yet would freeze the wrong priority. A refusal is a complete JSON object with `retagged: false`,
+# a `reason`, and `malformed` naming the entries; the file is left exactly as it was.
+#
+# Usage:
+#   threat-retag --assessment PATH
+#   threat-retag --help
+#
+# It takes the path rather than a <host> token, unlike its two siblings, because it needs no
+# project root: the mint already resolved the path, and the caller passes `assessment_abs`
+# verbatim. Resolving a root here could only disagree with the one that minted the file.
+#
+# THE TARGET CHECK IS LEXICAL, and that is deliberate. The path must name an `assessment*.md`
+# directly inside an `.ingrain-security/` folder, and must not be a symlink — enough to refuse a
+# mistyped or mis-resolved path (a plan file, a source file) without touching the filesystem to
+# decide. The strict containment test in `hooks/scripts/lib/assessment-write.sh`
+# (`is_assessment_target`) is deliberately NOT reused: it requires the target to sit in the
+# folder that the CALLER's project root resolves to, which refuses an assessment in a temp tree,
+# a second checkout, a nested repo or a git worktree — every one of which must stay re-taggable.
+# This is a safety check on a caller's argument, not a security boundary; there is none to
+# enforce here, since the agent invoking this already has a shell (see `branch-delta`'s note on
+# the same point).
+#
+# Exit codes: 0 ok, INCLUDING every refusal · 2 usage error (bad flag, non-assessment path)
+# · 1 runtime error (unreadable file, failed write, or a rebuilt section that does not account
+# for every line it started with).
+#
+# The keys below are this script's AGENT-FACING CONTRACT — see the same block in
+# `assessment-mint` for what it is and which tier reads it.
+# CONTRACT KEYS BEGIN
+#   retagged reason threats tag previous_tag title risk_score criticality
+#   malformed instruction
+# CONTRACT KEYS END
+#
+# Bundled with the skill and run directly by the orchestrator, which already has a bash shell.
+# Uses `set -uo pipefail` WITHOUT `-e`: a missing file, an unscored section and a malformed entry
+# are all results this script reports rather than crashes, and `-e` would turn each into a bare
+# non-zero exit with no JSON to read.
+
+set -uo pipefail
+
+usage() {
+    cat <<'EOF'
+Re-tag an assessment's scored threats into descending-risk order. Prints one JSON object.
+
+Usage:
+  threat-retag --assessment PATH
+  threat-retag --help
+
+Arguments:
+  --assessment PATH   the assessment file to re-tag — pass `assessment_abs` from the mint
+                      verbatim. Must name an assessment*.md inside an .ingrain-security/ folder.
+
+What it does: sorts the `## Threats` entries by risk score descending (ties broken by impact,
+then likelihood, then the incoming id) and renumbers them contiguously from T01. Entries move
+by line span, so every phase block — #### gen, #### usergate, #### test — travels with its
+threat byte for byte; only the `T<nn>` token in the heading is rewritten.
+
+Output keys:
+  retagged      true when the file was rewritten; false when there was nothing to do
+  reason        why not, when retagged is false: no-assessment-file | no-threats-section |
+                no-threat-entries | unscored-entries
+  threats       the new order: [{tag, previous_tag, title, risk_score, criticality}], T01 first
+  malformed     entries the parse could not read in full (missing marker, missing score field)
+  instruction   restates how to read the above
+
+Exit codes: 0 ok (INCLUDING every refusal) · 2 usage error · 1 runtime error.
+EOF
+}
+
+# --- helpers ----------------------------------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Load map — both libs are FLAT: neither sources nor calls the other, so the order is free.
+#   json.sh            escape_for_json
+#   assessment-dir.sh  ASSESSMENT_DIR_NAME — the folder name, read rather than repeated, so the
+#                      target check cannot drift from the folder the mint writes into
+# shellcheck source=lib/json.sh
+if ! . "${SCRIPT_DIR}/lib/json.sh" 2>/dev/null; then
+    printf 'threat-retag: cannot load lib/json.sh\n' >&2
+    exit 1
+fi
+# shellcheck source=lib/assessment-dir.sh
+if ! . "${SCRIPT_DIR}/lib/assessment-dir.sh" 2>/dev/null; then
+    printf 'threat-retag: cannot load lib/assessment-dir.sh\n' >&2
+    exit 1
+fi
+
+# Lowercase, for the two enumerated score fields. `tr` rather than bash 4's `${v,,}`: macOS
+# ships bash 3.2 as /bin/bash, which `env bash` finds when no newer one is installed.
+lower() {
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+# Strip leading and trailing whitespace from a field value.
+trim() {
+    local s="$1"
+    s="${s#"${s%%[![:space:]]*}"}"
+    s="${s%"${s##*[![:space:]]}"}"
+    printf '%s' "${s}"
+}
+
+# The two enumerated score fields, as sort keys. An unrecognized or absent value ranks 0, below
+# every real band — it can only appear on an entry already reported in `malformed`.
+impact_rank() {
+    case "$(lower "$1")" in
+        critical) printf '%s' 4 ;;
+        high)     printf '%s' 3 ;;
+        medium)   printf '%s' 2 ;;
+        low)      printf '%s' 1 ;;
+        *)        printf '%s' 0 ;;
+    esac
+}
+
+likelihood_rank() {
+    case "$(lower "$1")" in
+        'very high') printf '%s' 4 ;;
+        high)        printf '%s' 3 ;;
+        medium)      printf '%s' 2 ;;
+        low)         printf '%s' 1 ;;
+        *)           printf '%s' 0 ;;
+    esac
+}
+
+# True when the path names an assessment artifact: an `assessment*.md` directly inside an
+# `.ingrain-security/` folder, and not a symlink. Purely lexical except the symlink test — see
+# the header for why the strict containment twin is not used here.
+is_assessment_artifact() {
+    local path="$1"
+    [ -n "${path}" ] || return 1
+    [ "$(basename "$(dirname "${path}")")" = "${ASSESSMENT_DIR_NAME}" ] || return 1
+    case "$(basename "${path}")" in
+        assessment*.md) ;;
+        *) return 1 ;;
+    esac
+    [ -L "${path}" ] && return 1
+    return 0
+}
+
+# Emit one refusal object and return 0. $1 reason, and any remaining arguments are the
+# `malformed` entries. A refusal is a RESULT, not a failure: the caller reads `retagged`.
+emit_refusal() {
+    local reason="$1" out="" sep="" item instruction
+    shift
+    for item in "$@"; do
+        out="${out}${sep}\"$(escape_for_json "${item}")\""
+        sep=","
+    done
+
+    case "${reason}" in
+        no-assessment-file) instruction="No file at the path given, so there was nothing to re-tag. Check you passed assessment_abs from the mint verbatim." ;;
+        no-threats-section) instruction="The file carries no '## Threats' heading, so there was nothing to re-tag." ;;
+        no-threat-entries)  instruction="The '## Threats' section holds no '### T<nn>' entries yet, so there was nothing to re-tag. A rules-only review reaches this legitimately — carry on to the gates." ;;
+        unscored-entries)   instruction="Some threats carry no readable 'Risk score', so the file was left EXACTLY as it was: an order computed over a half-scored list would freeze the wrong priority, and ids are permanent from here. Fill the '#### score' block of each entry named in malformed, then run this again." ;;
+        *)                  instruction="Nothing was re-tagged; the file was left exactly as it was." ;;
+    esac
+
+    printf '{"retagged":false,"reason":"%s","count":0,"threats":[],"malformed":[%s],"instruction":"%s"}\n' \
+        "${reason}" \
+        "${out}" \
+        "$(escape_for_json "${instruction}")"
+}
+
+# --- main -------------------------------------------------------------------------
+
+# Parse, sort, rewrite and report. $1 the assessment path. Emits ONE JSON object on stdout.
+#
+# The whole file is read into an array once and every later step addresses it by line index, so
+# an entry is MOVED rather than re-rendered: the only line this function rewrites is a heading,
+# and only the `T<nn>` token within it.
+retag_threats() {
+    local path="$1"
+    local line stripped i
+
+    local -a lines=()
+    # `|| [ -n "${line}" ]` so a final line with no trailing newline is still read. Lines are
+    # stored RAW — a `\r` from a CRLF checkout included — and stripped only for matching, so a
+    # line this script does not own is written back exactly as it arrived.
+    while IFS= read -r line || [ -n "${line}" ]; do
+        lines+=("${line}")
+    done < "${path}"
+
+    local total=${#lines[@]}
+    [ "${total}" -gt 0 ] || { emit_refusal no-threats-section; return 0; }
+
+    # The section. Its heading opens it and the next `## ` heading closes it, the same bounding
+    # `count_selected_in_section` uses, so a threat's fields can never be read out of another
+    # section.
+    local threats_start=-1 threats_end="${total}"
+    for ((i = 0; i < total; i++)); do
+        stripped="${lines[i]%$'\r'}"
+        if [ "${threats_start}" -lt 0 ]; then
+            [ "${stripped}" = "## Threats" ] && threats_start=$i
+            continue
+        fi
+        case "${stripped}" in
+            '## '*) threats_end=$i; break ;;
+        esac
+    done
+    [ "${threats_start}" -ge 0 ] || { emit_refusal no-threats-section; return 0; }
+
+    # Entry starts. An entry runs from its heading to the next heading, or to the end of the
+    # section — so its four phase blocks, and the blank line separating it from the next entry,
+    # travel with it.
+    local -a start=() tag=() title=()
+    local n=0
+    for ((i = threats_start + 1; i < threats_end; i++)); do
+        stripped="${lines[i]%$'\r'}"
+        if [[ "${stripped}" =~ ^###[[:space:]]+T([0-9]+)([[:space:]].*)?$ ]]; then
+            start+=("$i")
+            tag+=("${BASH_REMATCH[1]}")
+            case "${stripped}" in
+                *' — '*) title+=("${stripped#* — }") ;;
+                *)       title+=("") ;;
+            esac
+            n=$((n + 1))
+        fi
+    done
+    [ "${n}" -gt 0 ] || { emit_refusal no-threat-entries; return 0; }
+
+    local -a end=()
+    for ((i = 0; i < n; i++)); do
+        if [ $((i + 1)) -lt "${n}" ]; then
+            end+=("${start[i + 1]}")
+        else
+            end+=("${threats_end}")
+        fi
+    done
+
+    # The blank lines trailing each entry are the document's SPACING, not that entry's content.
+    # They stay in their original positions while the entries move through them — so the
+    # separator between two entries, and the one before the next `## ` heading, read the same
+    # whichever threat ends up last. Left attached to their entries, the last entry's separator
+    # would follow it into the middle of the list and the new last entry would butt up against
+    # `## Risk score`.
+    # An entry is then `start[i] .. body_end[i]`, and the gap that follows position i is
+    # `body_end[i] .. end[i]` — re-emitted from the original lines, so a tab-only separator or a
+    # CRLF line ending survives as the bytes it was.
+    local -a body_end=()
+    local b
+    for ((i = 0; i < n; i++)); do
+        b="${end[i]}"
+        while [ "${b}" -gt "$((start[i] + 1))" ] && [ -z "$(trim "${lines[b - 1]}")" ]; do
+            b=$((b - 1))
+        done
+        body_end+=("${b}")
+    done
+
+    # The score fields, read per entry.
+    local -a risk=()
+    local -a imp=()
+    local -a lik=()
+    local -a crit=()
+    local -a malformed=()
+    local block_start block_end j k value
+    for ((i = 0; i < n; i++)); do
+        # Default to the whole entry body: a file written by an older plugin carries no markers
+        # at all, and its fields are read by presence — per ENTRY, never per file, the same
+        # tolerance the CLI applies. The `#### score` marker, where it exists, narrows that to
+        # the block, so a `Risk score` line in another block is never read as this one's.
+        block_start=$((start[i] + 1))
+        block_end="${end[i]}"
+        for ((j = start[i] + 1; j < end[i]; j++)); do
+            case "${lines[j]%$'\r'}" in
+                '#### score'*) ;;
+                *) continue ;;
+            esac
+            block_start=$((j + 1))
+            for ((k = block_start; k < end[i]; k++)); do
+                case "${lines[k]%$'\r'}" in
+                    '#### '*) block_end=$k; break ;;
+                esac
+            done
+            break
+        done
+
+        risk+=("-1")
+        imp+=("0")
+        lik+=("0")
+        crit+=("")
+        for ((j = block_start; j < block_end; j++)); do
+            stripped="${lines[j]%$'\r'}"
+            case "${stripped}" in
+                'Risk score:'*)  value="$(trim "${stripped#Risk score:}")"
+                                 [[ "${value}" =~ ^[0-9]{1,3}$ ]] && [ "${value}" -le 100 ] &&
+                                     risk[i]="${value}" ;;
+                'Impact:'*)      imp[i]="$(impact_rank "$(trim "${stripped#Impact:}")")" ;;
+                'Likelihood:'*)  lik[i]="$(likelihood_rank "$(trim "${stripped#Likelihood:}")")" ;;
+                'Criticality:'*) crit[i]="$(trim "${stripped#Criticality:}")" ;;
+            esac
+        done
+
+        [ "${risk[i]}" -ge 0 ] ||
+            malformed+=("T${tag[i]} — no readable 'Risk score' (0-100) in its #### score block")
+    done
+
+    # A half-scored section is refused whole. Ids are permanent from here — guidance references
+    # them — so an order computed over entries the scoring stage never reached would freeze the
+    # wrong priority, and the entries it did reach would carry ids nothing can correct later.
+    if [ "${#malformed[@]}" -gt 0 ]; then
+        emit_refusal unscored-entries "${malformed[@]}"
+        return 0
+    fi
+
+    # Insertion sort by adjacent swap. The comparison is a strict total order — the incoming id
+    # is unique within the file — so the result does not depend on the input order and two runs
+    # over the same scores produce the same ids.
+    local -a order=()
+    local pos
+    for ((i = 0; i < n; i++)); do
+        order+=("$i")
+        pos=$((${#order[@]} - 1))
+        while [ "${pos}" -gt 0 ] && precedes "$i" "${order[pos - 1]}"; do
+            order[pos]="${order[pos - 1]}"
+            order[pos - 1]="$i"
+            pos=$((pos - 1))
+        done
+    done
+
+    # Rebuild: everything before the first entry (heading, field card, blanks), then the entries
+    # in their new order, then the blanks held back above, then the rest of the file.
+    local -a out=()
+    for ((i = 0; i < start[0]; i++)); do
+        out+=("${lines[i]}")
+    done
+
+    local idx new_tag head
+    local -a new_tags=()
+    for ((i = 0; i < n; i++)); do
+        idx="${order[i]}"
+        new_tag="$(printf 'T%02d' "$((i + 1))")"
+        new_tags+=("${new_tag}")
+        # Only the `T<nn>` token is rewritten; the rest of the heading — separator, title, any
+        # trailing `\r` — is the original line's own bytes.
+        head="${lines[start[idx]]}"
+        out+=("${head/T${tag[idx]}/${new_tag}}")
+        for ((j = start[idx] + 1; j < body_end[idx]; j++)); do
+            out+=("${lines[j]}")
+        done
+        # The gap belonging to THIS POSITION, not to the entry that moved into it.
+        for ((j = body_end[i]; j < end[i]; j++)); do
+            out+=("${lines[j]}")
+        done
+    done
+    for ((i = threats_end; i < total; i++)); do
+        out+=("${lines[i]}")
+    done
+
+    # The one self-check worth making here: a rebuilt section that dropped or duplicated a line
+    # means the span arithmetic above is wrong, and the file must not be replaced by it. That
+    # every entry's BODY survives byte for byte is structural — those lines are never re-typed,
+    # only re-indexed — and is asserted from the outside, in tests/hooks/threat-retag.test.ts.
+    if [ "${#out[@]}" -ne "${total}" ]; then
+        printf 'threat-retag: rebuilt %s lines from %s; refusing to write\n' \
+            "${#out[@]}" "${total}" >&2
+        return 1
+    fi
+
+    # Written beside the target and moved into place, so an interrupted run leaves the original
+    # intact rather than a half-written analysis.
+    local tmp="${path}.retag.$$"
+    if ! printf '%s\n' "${out[@]}" > "${tmp}" 2>/dev/null; then
+        rm -f "${tmp}" 2>/dev/null
+        printf 'threat-retag: cannot write %s\n' "${tmp}" >&2
+        return 1
+    fi
+    if ! mv -f "${tmp}" "${path}" 2>/dev/null; then
+        rm -f "${tmp}" 2>/dev/null
+        printf 'threat-retag: cannot replace %s\n' "${path}" >&2
+        return 1
+    fi
+
+    # One printf per entry rather than one escaped-quote string: the format string then carries
+    # each key literally, which is what lets `tests/parity/scriptOutputFields` see them emitted
+    # and hold the header's CONTRACT KEYS block to what the script really produces.
+    local threats_json="" sep="" instruction
+    for ((i = 0; i < n; i++)); do
+        idx="${order[i]}"
+        threats_json="${threats_json}${sep}$(printf \
+            '{"tag":"%s","previous_tag":"T%s","title":"%s","risk_score":%s,"criticality":"%s"}' \
+            "${new_tags[i]}" \
+            "${tag[idx]}" \
+            "$(escape_for_json "${title[idx]}")" \
+            "${risk[idx]}" \
+            "$(escape_for_json "${crit[idx]}")")"
+        sep=","
+    done
+
+    instruction="The entries are now in descending-risk order under new ids: T01 is the most dangerous threat. THE IDS YOU HELD ARE STALE — take every id from the threats array above, whose previous_tag maps each new id back to the one you scored, and show threats in that order from here on. The ids are permanent now: guidance references them."
+
+    printf '{"retagged":true,"reason":"","count":%s,"threats":[%s],"malformed":[],"instruction":"%s"}\n' \
+        "${n}" \
+        "${threats_json}" \
+        "$(escape_for_json "${instruction}")"
+}
+
+# True when entry $1 must be ordered before entry $2. Reads the score arrays `retag_threats`
+# built, which is why it is defined beside it rather than taking eight arguments.
+#
+# Each key returns as soon as it separates the pair, so the next key is consulted only on a tie.
+precedes() {
+    local a="$1" b="$2"
+    [ "${risk[a]}" -ne "${risk[b]}" ] && { [ "${risk[a]}" -gt "${risk[b]}" ]; return; }
+    [ "${imp[a]}" -ne "${imp[b]}" ] && { [ "${imp[a]}" -gt "${imp[b]}" ]; return; }
+    [ "${lik[a]}" -ne "${lik[b]}" ] && { [ "${lik[a]}" -gt "${lik[b]}" ]; return; }
+    # `10#` forces base 10: a zero-padded id like `08` is otherwise read as octal and rejected.
+    [ "$((10#${tag[a]}))" -lt "$((10#${tag[b]}))" ]
+}
+
+case "${1:-}" in
+    -h|--help)
+        usage
+        exit 0
+        ;;
+    "")
+        printf 'threat-retag: missing --assessment. Try --help.\n' >&2
+        exit 2
+        ;;
+esac
+
+assessment=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --assessment)
+            [ $# -ge 2 ] || { printf 'threat-retag: --assessment needs a value\n' >&2; exit 2; }
+            assessment="$2"
+            shift 2
+            ;;
+        *)
+            printf 'threat-retag: unknown flag "%s". Try --help.\n' "$1" >&2
+            exit 2
+            ;;
+    esac
+done
+
+[ -n "${assessment}" ] || { printf 'threat-retag: --assessment needs a value\n' >&2; exit 2; }
+
+# A refusal, not a no-op: a path that is not an assessment artifact means the caller is holding
+# the wrong path, and re-tagging is not what it wanted done to that file.
+if ! is_assessment_artifact "${assessment}"; then
+    printf 'threat-retag: %s is not an .ingrain-security/assessment*.md file; refusing\n' \
+        "${assessment}" >&2
+    exit 2
+fi
+
+# A file that is not there yet is reported, not failed: every degraded case leaves the caller a
+# complete JSON object to route on, exactly as branch-delta does.
+if [ ! -f "${assessment}" ]; then
+    emit_refusal no-assessment-file
+    exit 0
+fi
+if [ ! -r "${assessment}" ]; then
+    printf 'threat-retag: cannot read %s\n' "${assessment}" >&2
+    exit 1
+fi
+
+retag_threats "${assessment}"

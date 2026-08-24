@@ -33,7 +33,7 @@ const SCRIPTS = `${SKILL_ROOT}scripts/`;
  * used to pair a script with a separate emitter file, back when `lib/mint.sh` carried the
  * whole composition.
  */
-const EMITTERS: ReadonlyArray<string> = ["assessment-mint", "branch-delta"];
+const EMITTERS: ReadonlyArray<string> = ["assessment-mint", "branch-delta", "threat-retag"];
 
 /** The label a minter interpolates into its `"%s_abs"`-style keys. One label remains. */
 const LABEL = "assessment";

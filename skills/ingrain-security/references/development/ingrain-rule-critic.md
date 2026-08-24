@@ -92,5 +92,5 @@ the change violates is emphatically a **keep**.
 
 Judge applicability and hand the list back. **You do not edit `## Org rules`** — the orchestrator
 applies the prune. You do not decide `Selection` either: that is the user's, at the rule gate, over
-the set you leave behind. And you do not propose guidance — the `ingrain-guidance-generator` does
+the set you leave behind. And you do not propose guidance — the orchestrator does
 that, later, from the rules the user accepts.

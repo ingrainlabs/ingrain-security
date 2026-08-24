@@ -49,6 +49,7 @@ const EXPECTED = [
   "skills/ingrain-security/scripts/lib/json.sh",
   "skills/ingrain-security/scripts/lib/mint.sh",
   "skills/ingrain-security/scripts/lib/project-root.sh",
+  "skills/ingrain-security/scripts/threat-retag",
 ];
 
 /**

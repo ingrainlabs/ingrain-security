@@ -91,7 +91,7 @@ Surfaces:
      order, each a \"#### <name>\" line with its own fields beneath it, one per line:
 
      #### gen      — threat generator:  Asset, Vector, Description, Assumptions
-     #### score    — risk scorer:       Justification (a sentence or two),
+     #### score    — scoring step:      Justification (a sentence or two),
                      Impact (critical|high|medium|low),
                      Likelihood (very high|high|medium|low), Risk score (0-100),
                      Criticality (low|medium|high|critical)
@@ -115,12 +115,13 @@ Surfaces:
      not apply (Residual path on a non-weak verdict, Evidence nobody cited).
      Missing marker? Append your fields at the end of the entry.
 
-     Ids start in discovery order; the risk scorer re-tags them once into descending-risk
-     order (T01 = highest risk) and they are permanent after that. Entries sit in id
-     order. -->
+     Ids start in discovery order; the threat-retag script re-tags them once into
+     descending-risk order (T01 = highest risk) and they are permanent after that. Entries
+     sit in id order. -->
 
 ## Risk score
-<!-- Score: 0-100. Criticality: low|medium|high|critical. The plan-level residual risk. -->
+<!-- Score: 0-100. Criticality: low|medium|high|critical. The plan-level residual risk,
+     written by the orchestrator's scoring step beside the per-threat #### score blocks. -->
 Score:
 Criticality:
 
