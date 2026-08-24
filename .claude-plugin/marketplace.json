@@ -11,10 +11,10 @@
       "source": {
         "source": "github",
         "repo": "ingrainlabs/ingrain-security",
-        "ref": "v1.1.0"
+        "ref": "v1.1.1"
       },
       "description": "Finds the security holes in a change while they are still cheap to fix, then verifies the implementation actually closed them.",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "author": { "name": "Ingrain Labs" },
       "repository": "https://github.com/ingrainlabs/ingrain-security",
       "license": "MIT",
