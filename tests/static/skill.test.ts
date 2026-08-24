@@ -42,7 +42,7 @@ const ENSURE_DIR = `${ROOT}hooks/scripts/ensure-assessment-dir`;
 const PROJECT_ROOT_LIB = `${ROOT}skills/ingrain-security/scripts/lib/project-root.sh`;
 const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-mint`;
 const TEMPLATE_LIB = `${ROOT}skills/ingrain-security/scripts/lib/artifact-template.sh`;
-const SCORER_REF = `${ROOT}skills/ingrain-security/references/development/ingrain-risk-scorer.md`;
+const RETAG_SCRIPT = `${ROOT}skills/ingrain-security/scripts/threat-retag`;
 
 /**
  * Collapse every run of whitespace to one space so a phrase can be asserted as the reader
@@ -81,27 +81,74 @@ Deno.test("SKILL.md: workflow steps are in the required order", async () => {
     "ingrain-threat-critic",
     "generate before critique",
   );
+  // Scoring and guidance are the ORCHESTRATOR's steps now, not dispatches, so they are ordered
+  // by their step headings rather than by a worker name. The dependency is unchanged and just
+  // as real: scores are computed over the frozen list, and the re-tag that follows them is the
+  // last thing that may reorder it.
   assertOrder(
     flow,
     "ingrain-threat-critic",
-    "ingrain-risk-scorer",
+    "**Risk score — yours",
     "critique/freeze before scoring",
   );
-  assertOrder(flow, "ingrain-risk-scorer", "ingrain-guidance-generator", "score before guidance");
-  assertOrder(
-    flow,
-    "ingrain-guidance-generator",
-    "ingrain-guidance-critic",
-    "generate guidance before critique",
-  );
+  assertOrder(flow, "**Risk score — yours", "scripts/threat-retag", "score before the re-tag");
+  assertOrder(flow, "scripts/threat-retag", "**Guidance — yours", "re-tag before guidance");
   // The rule chain runs in PARALLEL with the threat chain, so it is not ordered against it —
   // but its own two steps are sequential, and the gate cannot precede the prune that curates
   // what it presents. This is decision 12's precondition: wholesale accept-all is only sound
   // over a curated set.
   assertOrder(flow, "ingrain-rule-critic", "rule gate", "rule critique before the rule gate");
-  // The join: guidance needs BOTH gates, so its DISPATCH cannot precede either decision.
-  assertOrder(flow, "rule gate", "ingrain-guidance-generator", "rule gate before guidance");
-  assertOrder(flow, "threat gate", "ingrain-guidance-generator", "threat gate before guidance");
+  // The join: guidance needs BOTH gates, so it cannot begin before either decision.
+  assertOrder(flow, "rule gate", "**Guidance — yours", "rule gate before guidance");
+  assertOrder(flow, "threat gate", "**Guidance — yours", "threat gate before guidance");
+});
+
+/**
+ * Scoring and guidance are the orchestrator's own steps, and the re-tag is a script's.
+ *
+ * The pipeline used to dispatch a subagent for each, which cost three sequential waves for work
+ * whose inputs the orchestrator already held. Nothing but this holds the new shape: a flow file
+ * that quietly went back to "dispatch `ingrain-risk-scorer`" would name a worker whose reference
+ * file no longer exists, and the run would fail at its first read — after the wave.
+ */
+Deno.test("SKILL.md: the steps the orchestrator kept are named as its own", async (t) => {
+  const flow = flatten(section(await Deno.readTextFile(DEV_FLOW), "## Development — the flow"));
+
+  await t.step("scoring is the orchestrator's, over a read it already makes", () => {
+    assertStringIncludes(flow, "**Risk score — yours, no worker.**");
+    // The saving, stated where the instruction is: the gate used to make this read one step
+    // later, so scoring here costs no read of its own.
+    assertStringIncludes(flow, "the same one the threat gate needs");
+  });
+
+  await t.step("the re-tag is the script's, and never done by hand", () => {
+    assertStringIncludes(flow, "Then re-tag, with the script — never by hand");
+    assertStringIncludes(flow, "scripts/threat-retag --assessment");
+    // Its refusal has to reach the orchestrator, or a half-scored list silently keeps the
+    // ids it was given and the priority freezes wrong.
+    assertStringIncludes(flow, "unscored-entries");
+  });
+
+  await t.step("guidance is the orchestrator's, with no critique round behind it", () => {
+    assertStringIncludes(flow, "**Guidance — yours, no worker.**");
+    // What the removed critic uniquely caught, kept as a check over data already in context.
+    assertStringIncludes(flow, "check your own coverage");
+    assertStringIncludes(flow, "every **selected** rule is named by some entry");
+  });
+
+  await t.step("the rule the deleted exception used to carve out is now absolute", async () => {
+    // Re-tagging was the only reason any writer rewrote `## Threats` wholesale, and that
+    // exception cost a live run a prior pass's `#### test` verdicts. A script that moves
+    // entries by line span cannot flatten a block, so the carve-out is gone rather than
+    // merely discouraged — and must not creep back in as prose.
+    const dispatch = flatten(await Deno.readTextFile(DISPATCH_REF));
+    assertStringIncludes(dispatch, "Every stage writes inside its own marker, with no exception");
+    assertEquals(
+      /is the single exception to writing inside one block/.test(dispatch),
+      false,
+      "dispatch.md still carves out a writer that may rewrite entries whole",
+    );
+  });
 });
 
 /**
@@ -361,31 +408,33 @@ Deno.test("field cards: the schema additions appear in the card as well as the r
 });
 
 /**
- * The threat ids ARE the priority: the risk scorer re-tags the frozen list into descending-risk
- * order, so `T01` is the most dangerous threat and every display just walks the ids.
+ * The threat ids ARE the priority: the re-tag sorts the frozen list into descending-risk order,
+ * so `T01` is the most dangerous threat and every display just walks the ids.
  *
  * This guard exists because the docs and the live tests already drifted apart once, in exactly
- * this spot — `assertRiskDescendsByTag` in tests/lib/matchers.ts asserted re-tagging while the
- * skill told the scorer never to renumber, so a scorer obeying its instructions failed the
- * agent test. Nothing but a static check keeps prose in sync with a live assertion.
+ * this spot — a matcher asserted re-tagging while the skill told the scoring worker never to
+ * renumber, so a worker obeying its instructions failed the agent test. The re-tag is a script
+ * now, so the two ends are the script's own behaviour (tests/hooks/threat-retag.test.ts) and the
+ * prose that tells the orchestrator to run it. Nothing but a static check keeps them in step.
  */
 Deno.test("threat ids: the docs instruct re-tagging into risk order", async (t) => {
-  const scorer = flatten(await Deno.readTextFile(SCORER_REF));
+  const retag = flatten(await Deno.readTextFile(RETAG_SCRIPT));
   const md = flatten(await devDoc());
 
-  await t.step("the scorer is told to re-tag, and what the resulting order means", () => {
-    assertStringIncludes(scorer, "Re-tag the list into risk order");
-    assertStringIncludes(scorer, "`T01` is the most dangerous threat");
+  await t.step("the script states the order it imposes, and what it means", () => {
+    assertStringIncludes(retag, "descending-risk order");
+    assertStringIncludes(retag, "T01` is the most dangerous threat");
   });
 
-  await t.step("the scorer carries no leftover prohibition on renumbering", () => {
-    // The old contract's exact wording. Reintroducing it puts the scorer back in conflict
-    // with tests/agents/agents.test.ts, which fails a scorer that leaves the tags alone.
+  await t.step("nothing tells a writer to leave the ids alone", () => {
+    // The old contract's exact wording, when re-tagging was a worker's. Reintroducing it
+    // anywhere would put the prose back in conflict with the script's behaviour, which
+    // tests/hooks/threat-retag.test.ts pins.
     for (const stale of [/do not renumber/i, /nothing to reorder/i, /scores in place/i]) {
       assertEquals(
-        stale.test(scorer),
+        stale.test(md),
         false,
-        `ingrain-risk-scorer.md must not tell the scorer to leave ids alone (matched ${stale})`,
+        `the dev docs tell a writer to leave threat ids alone (matched ${stale})`,
       );
     }
   });
@@ -547,6 +596,29 @@ Deno.test("step 0: instructs a prior-analysis lookup that seeds the generator", 
   assertStringIncludes(skill, "Prior analysis pointer");
   // The schema carries the optional Prior analysis field.
   assertStringIncludes(await Deno.readTextFile(ASSESSMENT_REF), "Prior analysis");
+});
+
+Deno.test("step 0: the review question comes before every other thing step 0 does", async () => {
+  // The question is what the user is waiting on, and everything else in step 0 exists to feed
+  // step 1 — which a `No` never reaches. Asked after the prior-analysis lookup, a run that is
+  // about to be told "not security-relevant" first spends turns reading sibling assessments off
+  // disk and then reads the whole flow file it will not use.
+  const flow = section(await Deno.readTextFile(DEV_FLOW), "## Development — the flow");
+  assertOrder(
+    flow,
+    "Run a security review for this change?",
+    "Find the prior analysis first",
+    "the review question must precede the prior-analysis lookup",
+  );
+  assertOrder(
+    flow,
+    "Run a security review for this change?",
+    "## Affected paths",
+    "the review question must precede the writes that feed step 1",
+  );
+  // The one thing that may go first, and it is routing rather than analysis: which file this
+  // run writes into has to be settled before anything is written into one.
+  assertStringIncludes(flatten(flow), "resolves its siblings first");
 });
 
 Deno.test("step 0: the review question is the user's, asked with a recommended default", async () => {
@@ -1083,19 +1155,16 @@ Deno.test("phase blocks: each writer names the block it fills, and the seeding r
   const generator = await Deno.readTextFile(
     `${ROOT}skills/ingrain-security/references/development/ingrain-threat-generator.md`,
   );
-  const scorer = await Deno.readTextFile(SCORER_REF);
   const verification = await Deno.readTextFile(
     `${ROOT}skills/ingrain-security/references/testing/verification-pass.md`,
   );
   const flow = await Deno.readTextFile(DEV_FLOW);
 
   await t.step("each of the four stages names its own block", () => {
-    // Deliberately NOT "names exactly one block": the risk scorer legitimately names all
-    // four, because re-tagging moves entries and it is the one writer that rewrites them
-    // whole — so it has to be told to carry the other three across verbatim. Asserting
-    // exclusivity here would have failed on the correct instruction.
+    // Two of the four are the orchestrator's, so `flow.md` carries both — which is also why
+    // this does not assert "names exactly one block".
     assertStringIncludes(generator, "#### gen");
-    assertStringIncludes(scorer, "#### score");
+    assertStringIncludes(flow, "#### score");
     assertStringIncludes(flow, "#### usergate");
     assertStringIncludes(verification, "#### test");
   });
@@ -1124,11 +1193,19 @@ Deno.test("phase blocks: each writer names the block it fills, and the seeding r
     assertStringIncludes(flatten(verification), "exactly as Development left it");
   });
 
-  await t.step("the scorer is told to carry the blocks it does not own across whole", () => {
-    // The one writer that rewrites entries wholesale. Without this clause the block rule
-    // and its contract contradict each other, and the resolution it would reach on its
-    // own — write only your block — cannot re-tag at all.
-    assertStringIncludes(flatten(scorer), "VERBATIM AND WHOLE");
+  await t.step("the scoring step writes inside its own block, like every other", () => {
+    // There used to be an exception here: the risk scorer rewrote entries whole, because
+    // re-tagging moves them, and was told to carry the other three blocks across verbatim.
+    // The re-tag is a script's now, so the scoring step is an ordinary one-block writer and
+    // the clause that carved it out has nowhere left to sit.
+    assertStringIncludes(
+      flatten(flow),
+      "one Edit per entry, replacing the run between that marker and the next",
+    );
+    assertStringIncludes(
+      flatten(flow),
+      "leaving `#### gen`, `#### usergate` and `#### test` untouched",
+    );
   });
 
   await t.step("the missing-marker fallback is stated where a writer will meet it", async () => {
@@ -1185,6 +1262,29 @@ Deno.test("absence: no file tells a writer to seed `—` into a block it does no
     /whose stage has not run yet still\s+`?—/,
     "the three-check must not ask for `—` where an EMPTY block is the correct state",
   );
+});
+
+Deno.test("absence: the three retired workers are gone from every surface", async () => {
+  const files = await skillFiles();
+  assertEquals(files.length > 10, true, `only ${files.length} skill files found; fix the walk`);
+
+  // A deleted worker leaves three kinds of wreckage, and the roster lint catches only one of
+  // them: a reference file that is gone. The other two are a dispatch nobody can satisfy —
+  // which fails at the subagent's FIRST read, after the wave has already been paid for — and
+  // prose describing a step that no longer runs. Both are prose, so only a scan finds them.
+  //
+  // `## Guidance critique` rides along because it is the same deletion: the section existed
+  // solely as the critic's scratch, and finalize now deletes two transient sections, not three.
+  for (
+    const gone of [
+      /ingrain-risk-scorer/,
+      /ingrain-guidance-generator/,
+      /ingrain-guidance-critic/,
+      /## Guidance critique/,
+    ]
+  ) {
+    assertNowhere(files, gone, "a retired worker or its scratch section is still named");
+  }
 });
 
 Deno.test("absence: `Robustness: —` is never named as a sanctioned state", async () => {
@@ -1259,7 +1359,6 @@ Deno.test("every worker shown a threat entry is shown its phase markers", async 
   for (
     const name of [
       "ingrain-threat-generator",
-      "ingrain-risk-scorer",
       "ingrain-threat-critic",
     ]
   ) {

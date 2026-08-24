@@ -27,53 +27,14 @@ export const MINOR_PLAN = `# Implementation plan: tidy up the landing page
 - In README.md, fix "recieve" -> "receive" in the intro paragraph.
 `;
 
-/**
- * A frozen threat list under the generator's working tags, for ingrain-risk-scorer /
- * guidance inputs. The tags are deliberately NOT in risk order — SQL injection, the
- * most severe of the three, arrives last — so a scorer that leaves the tags alone fails
- * the risk-order assertion instead of passing by luck.
- */
-export const FROZEN_THREATS = `Frozen threat list for the login feature:
-
-T1 - Weak session tokens: predictable session tokens let an attacker hijack sessions.
-T2 - Plaintext password storage: passwords are stored without hashing, so a database
-     breach exposes every user's credentials.
-T3 - SQL injection: the email is concatenated into the users-table query, allowing
-     an attacker to read or modify arbitrary rows.
-`;
-
-/** A subset the user "selected" at the threat gate, for ingrain-guidance-generator. */
-export const SELECTED_THREATS = `Selected threats to address:
-
-T1 - SQL injection in the users-table lookup query.
-T2 - Plaintext password storage in the users table.
-`;
-
 /** A deliberately thin threat model, to bias ingrain-threat-critic toward needs-revision. */
 export const THREAT_MODEL_WEAK = `Threat model for the login feature:
 
 T1 - Someone might guess a password.
 `;
 
-/** Sample implementation guidance to feed ingrain-guidance-critic.
- *
- * Field names are the ARTIFACT's, not the wire's. This carried `threatTags:` — the wire key —
- * so the worker whose whole job is catching contract violations was being exercised against a
- * field that does not exist in the schema it grades. */
-export const GUIDANCE_SAMPLE = `Proposed implementation guidance:
-
-- Description: Use parameterized queries / prepared statements for the users-table
-  lookup so user input can never alter the query structure.
-  Yield: High. Effort: Low. Threats: T1
-- Description: Hash passwords with a slow, salted algorithm (bcrypt/argon2) before
-  storing them; never store plaintext.
-  Yield: High. Effort: Medium. Threats: T2
-`;
-
 /** A single task + threats blob, for the critic agents that take both. */
 export const TASK_AND_WEAK_MODEL = `Task:\n${MAJOR_PLAN}\n\n${THREAT_MODEL_WEAK}`;
-export const TASK_AND_FROZEN_THREATS = `Task:\n${MAJOR_PLAN}\n\n${FROZEN_THREATS}`;
-export const THREAT_AND_GUIDANCE = `${SELECTED_THREATS}\n\n${GUIDANCE_SAMPLE}`;
 
 /**
  * The rule gate's other axis: retrieved org rules awaiting a verdict, for
@@ -92,68 +53,4 @@ Passwords and other long-lived credentials are stored only as a slow, salted has
 Selection: —
 CI build artifacts are kept for 90 days so a release can be reproduced from the exact
 bytes that shipped.
-`;
-
-/**
- * A frozen threat list **as the artifact actually holds it** — block-bearing, and carrying a
- * prior pass's `#### usergate` and `#### test` content.
- *
- * The prose `FROZEN_THREATS` above is what a scorer case fed the model directly; the real
- * scorer reads `## Threats` off disk, and its one hard rule is that re-tagging must move
- * entries **without** disturbing the blocks it does not own. That rule is only reachable if
- * the blocks are there to disturb, which is what this fixture supplies.
- *
- * Ids are deliberately out of risk order — the plaintext-storage threat outranks the
- * session-fixation one — so a scorer that leaves the tags alone fails the ordering assertion.
- */
-export const FROZEN_THREATS_BLOCKED = `## Threats
-
-### T01 — Session fixation via a pre-set cookie
-
-#### gen
-Asset: the session cookie
-Vector: an attacker pre-sets a session id the victim then authenticates into
-Description: The cookie is not regenerated at login.
-Assumptions: The attacker can set a cookie on a shared subdomain.
-
-#### score
-
-#### usergate
-Selection: excluded
-
-#### test
-
-### T02 — Plaintext password storage
-
-#### gen
-Asset: the users table
-Vector: a database read exposes every credential at once
-Description: Passwords are stored without hashing.
-Assumptions: The table is reachable from any read-only breach.
-
-#### score
-
-#### usergate
-Selection: selected
-
-#### test
-Robustness justification: Carried across from the previous pass — argon2id at signup.
-Robustness: adequate
-Residual path: —
-Evidence: services/auth/signup.ts:31
-`;
-
-/**
- * The scorer's real dispatch shape: the task, plus a pointer to the frozen list **on disk**.
- *
- * `TASK_AND_FROZEN_THREATS` pastes a prose list into the INPUT, which is not how this worker
- * is dispatched — its hand-off contract reads `## Threats` from the assessment file. Pairing
- * that prose list with a seeded file also put two different threat sets in front of the model
- * at once, and it said so: it scored the file per its contract and reported the mismatch as a
- * premature freeze. Correct behaviour, contradictory fixture.
- */
-export const TASK_AND_THREATS_ON_DISK = `Task:\n${MAJOR_PLAN}
-
-The frozen threat list is already in the assessment file's \`## Threats\` section — read it
-there and score it in place.
 `;

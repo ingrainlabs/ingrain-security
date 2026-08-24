@@ -7,21 +7,26 @@
  * builds, turning `assertEquals(order.includes(w), false)` into a tautology; that
  * is exactly how the guidance-generator halt assertions went vacuous through the
  * mitigation → guidance rename. Import it, never restate it.
+ *
+ * **A name removed from this list can never appear in a trace**, so any negative
+ * assertion keyed on one goes vacuous rather than red. That is why the three
+ * workers retired in the speed-up — `ingrain-risk-scorer`,
+ * `ingrain-guidance-generator` and `ingrain-guidance-critic`, whose steps moved
+ * into the orchestrator — took their halt assertions with them instead of leaving
+ * them behind to pass forever. What replaced them observes the *file*: guidance
+ * that has not been written yet is absent from the assessment whoever wrote it.
  */
 export const WORKERS = [
   "ingrain-threat-generator",
   "ingrain-threat-critic",
-  "ingrain-risk-scorer",
   "ingrain-rule-critic",
-  "ingrain-guidance-generator",
-  "ingrain-guidance-critic",
 ] as const;
 
 /**
  * The Testing pass's two verifiers, which `WORKERS` deliberately does not carry: that list
  * is the **Development flow order**, and `dispatchedWorkers` filters traces on it.
  *
- * They are dispatched exactly as the seven above are (`verification-pass.md`), but they are
+ * They are dispatched exactly as the three above are (`verification-pass.md`), but they are
  * the *inverse* worker: read-only, writing nothing, returning a verdict the orchestrator
  * records. So the Development lint's central assertions — names a write target, must not
  * call itself read-only — are not merely inapplicable but backwards for them, which is why

@@ -549,8 +549,8 @@ Report the concluded results to the coding agent as **visible Markdown output in
 conversation** — **one table per driver axis**, and no table for guidance: it carries no verdict,
 so it has nothing to report. Lead with the threats.
 
-**Threat robustness**, one row per selected threat, **in id order — `T01` first**, which the
-risk-scorer already re-tagged into descending risk (the selection may leave gaps; keep the order).
+**Threat robustness**, one row per selected threat, **in id order — `T01` first**, the
+descending-risk order Development's re-tag already fixed (the selection may leave gaps; keep it).
 If **the gate selected no threat**, say so in one line instead of showing an empty table — "no
 threat was selected for this change, so there is nothing to judge on the threat axis." A rules-only
 review reaches Testing through the OR-route and lands here legitimately, so an empty selected set

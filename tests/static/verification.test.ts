@@ -499,9 +499,9 @@ Deno.test("assessment-file.md: `## Task` declares a Description and a Schema ver
  */
 Deno.test("rule ids: the examples are full UUIDs and the docs forbid abbreviating them", async () => {
   const assessment = await Deno.readTextFile(ASSESSMENT_REF);
-  const generator = await Deno.readTextFile(
-    `${ROOT}skills/ingrain-security/references/development/ingrain-guidance-generator.md`,
-  );
+  // The guidance step is the orchestrator's, so the instruction that governs how an id is
+  // copied now sits in the flow rather than in a worker's reference file.
+  const guidanceStep = await Deno.readTextFile(DEV_FLOW);
 
   assertEquals(
     /\br-[a-z]+-\d+\b/.test(assessment),
@@ -515,7 +515,7 @@ Deno.test("rule ids: the examples are full UUIDs and the docs forbid abbreviatin
   assertStringIncludes(assessment, `### ${shared} — `);
   // And the instruction is tightened where the ids are actually written.
   assertStringIncludes(assessment, "never abbreviated, never a prefix");
-  assertStringIncludes(generator, "never abbreviate one to a prefix");
+  assertStringIncludes(guidanceStep.replace(/\s+/g, " "), "never abbreviated to a prefix");
 });
 
 /**

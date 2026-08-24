@@ -15,6 +15,14 @@ export interface RunOptions {
   timeoutMs?: number;
   /** Restrict tools (`--allowed-tools`). */
   allowedTools?: string[];
+  /**
+   * Working directory for the spawned session. Defaults to the harness's own cwd — this
+   * repository — which is the wrong place for any test whose prompt describes work on files:
+   * the agent looks for them, does not find them, and stops before editing rather than
+   * inventing targets, so the skill's trigger never fires. Point it at a project that actually
+   * holds what the prompt names.
+   */
+  cwd?: string;
 }
 
 export interface StreamEvent {

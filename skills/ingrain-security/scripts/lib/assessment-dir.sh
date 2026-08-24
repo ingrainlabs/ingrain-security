@@ -15,6 +15,7 @@
 # Sourced by:
 #   hooks/scripts/ensure-assessment-dir                  (creates it at SessionStart)
 #   skills/ingrain-security/scripts/assessment-mint    (for lib/mint.sh)
+#   skills/ingrain-security/scripts/threat-retag       (names the folder its target must sit in)
 #   hooks/claude/allow-assessment-write                (for hooks/scripts/lib/assessment-write.sh)
 #   hooks/codex/allow-assessment-write                 (for hooks/scripts/lib/assessment-write.sh)
 #   hooks/scripts/require-review-before-write          (names the folder the gate reads)

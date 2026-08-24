@@ -27,11 +27,18 @@ export const ORCHESTRATION_TIMEOUT_MS = 600_000; // full gated cycle
  * characters against the hosts' 10,000-character cap, so the hook now injects a directive and
  * the skill body arrives when the Skill tool loads it. That is one extra round trip before the
  * run can reach a verdict, and at 4 the minor-plan test ran out of turns mid-tool-call and
- * returned no text at all. The cap absorbs the round trip; the cycle guard still holds at a
- * quarter of ORCHESTRATION_MAX_TURNS.
+ * returned no text at all. The cap absorbs the round trip; the cycle guard still holds well
+ * inside ORCHESTRATION_MAX_TURNS.
+ *
+ * `ORCHESTRATION_MAX_TURNS` was 30, calibrated on runs that never dispatched a worker at all —
+ * the subagent gate went unanswered, so the run stopped at the questions and 30 was generous.
+ * With the request supplied in the prompt the tier finally reaches the fan-out it exists to
+ * check, and a measured run spent its 30 turns still writing the threat list. This is the
+ * budget to the gates plus room for the one conditional revision round; a run that needs more
+ * than this has a real problem worth failing on.
  */
 export const SESSION_MAX_TURNS = 8;
-export const ORCHESTRATION_MAX_TURNS = 30;
+export const ORCHESTRATION_MAX_TURNS = 60;
 
 /** Flatten all tool_use content blocks across assistant events. */
 // deno-lint-ignore no-explicit-any
@@ -91,10 +98,23 @@ export const streamText = (events: StreamEvent[]): string => {
  * sequential in-context fallback reads the same reference via the Skill tool, so
  * we count that too.
  */
+/**
+ * The host's subagent primitive, under every name it has shipped under.
+ *
+ * **Both, not just the current one.** The name is the host's, not ours, and this detector is
+ * what every dispatch assertion in the suite reads — so a rename it does not know about turns
+ * each positive assertion red and, far worse, each NEGATIVE one vacuous. That is exactly what
+ * happened: the tool became `Agent`, nothing emitted `Task` any more, and `dispatchedWorkers`
+ * returned `[]` for every run — so "the review halted before dispatching a worker" passed
+ * whether or not it had. The same hazard `lib/workers.ts` documents for the roster, reaching
+ * the suite through the host instead.
+ */
+const SUBAGENT_TOOLS = new Set(["Agent", "Task"]);
+
 export const dispatchedWorkers = (events: StreamEvent[]): string[] => {
   const workers: string[] = [];
   for (const block of toolUses(events)) {
-    if (block.name === "Task" && typeof block.input?.prompt === "string") {
+    if (SUBAGENT_TOOLS.has(block.name) && typeof block.input?.prompt === "string") {
       const m = block.input.prompt.match(/references\/development\/([a-z-]+)\.md/);
       if (m && isWorker(m[1])) {
         workers.push(m[1]);
@@ -203,6 +223,7 @@ export const runClaude = async (prompt: string, opts: RunOptions = {}): Promise<
   const signal = AbortSignal.timeout(opts.timeoutMs ?? AGENT_TIMEOUT_MS);
   const cmd = new Deno.Command("claude", {
     args,
+    cwd: opts.cwd,
     stdin: "piped",
     stdout: "piped",
     stderr: "piped",

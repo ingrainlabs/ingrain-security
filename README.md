@@ -137,10 +137,11 @@ The short version — the internals are in
 [`docs/technical-docs.md`](docs/technical-docs.md), and the spec the agent follows is
 [`skills/ingrain-security/SKILL.md`](skills/ingrain-security/SKILL.md):
 
-- **You decide whether it runs.** The review opens with one question — *run a security review
-  for this change?* — recommending yes whenever the change plausibly touches a security surface,
-  because a needless review is cheap and a missed concern is not. Answer "not security-relevant"
-  and it stops there, records that, and the agent carries on with the work.
+- **You decide whether it runs, and you are asked first.** The review opens with one question —
+  *run a security review for this change?* — before it looks anything up or writes anything,
+  recommending yes whenever the change plausibly touches a security surface, because a needless
+  review is cheap and a missed concern is not. Answer "not security-relevant" and it stops there,
+  records that, and the agent carries on with the work.
 - **Two axes, run in parallel.** After that the **threat chain** (generate → critique →
   risk-score 0–100 → **threat gate**) and, with the CLI, the **rule chain** (retrieve broadly →
   critique → **rule gate**) run side by side. Each is recall-then-precision: cast a wide net, then
@@ -149,24 +150,27 @@ The short version — the internals are in
   risk*; the **rule gate** asks *does this rule apply here* — with an accept-all fast path, so
   the default costs one choice. Selecting none on either axis is always allowed, and an
   exclusion is recorded: "we looked and decided otherwise" is part of the record.
-- **Guidance is generated, then yours to refine.** Once the gates close, one worker proposes
+- **Guidance is written, then yours to refine.** Once the gates close, the review proposes
   **implementation guidance** against everything you selected — how each threat gets closed and
   each rule gets implemented. Every entry names **at least one driver**; an entry may serve
-  several threats *and* several rules at once, and is written once naming them all. It is
-  critiqued, then lands in the plan or outline the agent is working from, where **you refine it**
-  like any other part of it.
+  several threats *and* several rules at once, and is written once naming them all. It lands in
+  the plan or outline the agent is working from, where **you refine it** like any other part of
+  it — that is the editing surface, and verification later judges the code rather than the list.
 - **Org rules ride in the assessment.** Retrieval writes the full set into the assessment's own
   `## Org rules` section; the gate records your decision per rule; finalize keeps the selected
   rules' bodies (Testing reads them as the specification) and reduces the excluded to a
   decision-only stub. One artifact carries the whole analysis.
-- **Each step is its own agent.** The review runs as a chain of focused subagents rather than one
-  pass, so each starts with clean context and writes only its own part of the assessment.
+- **The steps that need fresh eyes are their own agents.** Finding threats, critiquing them and
+  judging which retrieved rules apply each run as a focused subagent with clean context. The rest
+  — the opening question, the rule retrieval, the risk scoring, the guidance — is work whose
+  inputs the review already has in hand, so it happens in place rather than costing a round trip.
+  Sorting the scored threats into risk order is not judgement at all, so it is a script.
 - **Then the code gets checked against both axes.** Once the work is implemented, the
   **Testing** phase judges each selected threat for robustness and each selected rule for
   adherence — see [Verifying the implementation](#verifying-the-implementation) below.
 
 Without the CLI the rule chain sits out, the review runs on the threat axis alone, and the
-guidance stands on the workers' own analysis.
+guidance stands on the review's own analysis.
 
 The whole lifecycle, both phases end to end — **Development** before code, **Testing** after:
 
@@ -178,7 +182,7 @@ flowchart TD
         majorQ -->|minor — not security-relevant| stop(["Stop — carry on"])
         majorQ -->|major| threats["generate threats → critic"]
         majorQ -->|major, in parallel| rules["retrieve org rules — broad<br/>optional: needs the ingrain CLI"]
-        threats --> score["risk score 0–100"]
+        threats --> score["risk score 0–100<br/>then re-tag into risk order"]
         rules --> rcritic["rule critic — prunes<br/>before you see anything"]
         score --> threatgate
         rcritic --> rulegate
@@ -188,12 +192,10 @@ flowchart TD
             rulegate{"rule gate:<br/>applies here, or not<br/>accept-all in one choice"}
         end
 
-        threatgate -->|1+ threat selected| guidance["generate implementation guidance"]
+        threatgate -->|1+ threat selected| guidance["write implementation guidance"]
         rulegate -->|1+ rule selected| guidance
         GATES -.->|nothing selected on either axis| folded(["Fold results into the work"])
-        guidance --> gcritic["guidance critic"]
-        gcritic -->|needs-revision| guidance
-        gcritic -->|approved| folded
+        guidance --> folded
     end
 
     folded --> impl["coding agent builds it<br/>refining the guidance as it goes"]

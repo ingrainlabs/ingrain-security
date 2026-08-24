@@ -81,13 +81,12 @@ shape.
   | `## Task` | the mint seeds `Title`, `Latest stage` and `Schema version`; the orchestrator writes `Description` at Development, and the Testing pass advances `Latest stage` |
   | `## Affected paths` | orchestrator, at Development beside `Description` |
   | `## Triage` | the orchestrator alone — `Verdict` + `Security relevant` from the user's answer to the review question, `Prior analysis` from its own Step 0 lookup, and `Surfaces` beside them on `major` |
-  | `## Threats` | **four writers, one phase block each** — `ingrain-threat-generator` (`#### gen`) → `ingrain-risk-scorer` (`#### score`) → orchestrator at the **threat gate** (`#### usergate`) → the Testing verification pass (`#### test`). The only entry in the file written by more than one writer, and the blocks are how it says so: each stage writes inside its own marker and carries the rest across verbatim → § `## Threats` |
+  | `## Threats` | **four writers, one phase block each** — `ingrain-threat-generator` (`#### gen`) → the orchestrator at its **scoring step** (`#### score`) → the orchestrator at the **threat gate** (`#### usergate`) → the Testing verification pass (`#### test`). The only entry in the file written by more than one writer, and the blocks are how it says so: each stage writes inside its own marker and carries the rest across verbatim → § `## Threats` |
   | `## Threat critique` | `ingrain-threat-critic` — **transient**, deleted by the orchestrator at finalize |
-  | `## Risk score` | `ingrain-risk-scorer` (plan-level residual) |
+  | `## Risk score` | orchestrator, at its scoring step (the plan-level residual) |
   | `## Org rules` | orchestrator (the broad retrieval pass writes each entry and its body; the machine prune removes rejected ones; the **rule gate** records each surviving Selection) |
   | `## Rule critique` | `ingrain-rule-critic` — **transient**, deleted by the orchestrator at finalize |
-  | `## Implementation guidance` | `ingrain-guidance-generator` — a single writer, since the vessel carries neither a gate decision nor a verdict |
-  | `## Guidance critique` | `ingrain-guidance-critic` — **transient**, deleted by the orchestrator at finalize |
+  | `## Implementation guidance` | orchestrator — a single writer, since the vessel carries neither a gate decision nor a verdict |
   | `## Rule adherence` | the Testing verification pass (one entry per **selected** org rule, at the Testing phase) |
   | `## Maintenance (for the implementing agent)` | the mint — seeded static text, never rewritten by any stage |
 
@@ -99,9 +98,9 @@ shape.
   headings up.
 - **Living document.** Rewrite the relevant section at each commit point so the file
   always mirrors the current frozen state — critic-loop revisions and re-selection
-  overwrite the prior contents of that section. The three critique sections
-  (`## Threat critique`, `## Rule critique`, `## Guidance critique`) are iteration scratch, and
-  the orchestrator **deletes all three at finalize** — so the finalized file holds end results
+  overwrite the prior contents of that section. The two critique sections
+  (`## Threat critique` and `## Rule critique`) are iteration scratch, and
+  the orchestrator **deletes both at finalize** — so the finalized file holds end results
   alone, which is why the template below omits them. `## Org rules` is **pruned rather than
   deleted**: a selected entry keeps its body (it is Testing's specification), an excluded one
   keeps its heading and `Selection` line with the body dropped — the decision is the record,
@@ -205,7 +204,7 @@ mechanism does not reach it; its three writers touch named, disjoint fields.)
 | Block | Written by | Fields, in order |
 |-------|-----------|------------------|
 | `#### gen` | `ingrain-threat-generator` | Asset, Vector, Description, Assumptions |
-| `#### score` | `ingrain-risk-scorer` | Justification, Impact, Likelihood, Risk score, Criticality |
+| `#### score` | the orchestrator, at its **scoring step** | Justification, Impact, Likelihood, Risk score, Criticality |
 | `#### usergate` | the orchestrator, at the **threat gate** | Selection |
 | `#### test` | the Testing verification pass | Robustness justification, Robustness, Residual path, Evidence |
 
@@ -225,7 +224,7 @@ an older plugin carries no markers at all and is read field-by-field as it alway
 
 | Field | Block | Constraint |
 |-------|-------|------------|
-| **id** (in the heading) | heading | `T<n>`, zero-padded (`T01`) — unique within the file; assigned in discovery order by the generator, **reassigned once** by the risk scorer into descending-risk order, and fixed from that point on |
+| **id** (in the heading) | heading | `T<n>`, zero-padded (`T01`) — unique within the file; assigned in discovery order by the generator, **reassigned once** by `scripts/threat-retag` into descending-risk order, and fixed from that point on |
 | **title** (in the heading) | heading | string, after the ` — ` |
 | **Asset** | `gen` | string |
 | **Vector** | `gen` | string |
@@ -263,12 +262,22 @@ the generator assigns `T01`, `T02`, … as it finds threats, and those labels st
 the critique and the single revision round so the critic's `[T<n>]` feedback keys line up.
 Gaps from dropped threats are legal at that stage.
 
-The `ingrain-risk-scorer` then **re-tags the list exactly once**. It sorts by **Risk score
+**`scripts/threat-retag`** then **re-tags the list exactly once**, after the orchestrator has
+scored it. It sorts by **Risk score
 descending**, breaking ties by impact (critical > high > medium > low), then likelihood
 (very high > high > medium > low), then the pre-scoring id ascending — a deterministic total
 order, so two runs over the same scores produce the same ids. It reassigns ids contiguously
 from `T01`, closing any gaps, and writes the entries in that order. `T01` is the most
 dangerous threat.
+
+**A script, because the move is bookkeeping and a rewrite is not free.** Re-tagging is the only
+reason anything ever rewrote this section wholesale, and that rewrite was the single exception to
+the block rule — the one writer permitted to re-type blocks it did not own, which is exactly how a
+live run once came back with a populated `#### test` block flattened. The script moves entries by
+line span and rewrites nothing but the `T<nn>` token in each heading, so every other block travels
+byte for byte and the exception is gone. It also **refuses a half-scored section**: an id is
+permanent from here, so an order computed over entries the scoring step never reached would freeze
+the wrong priority.
 
 **After scoring the id is permanent.** It is what every guidance entry's **Threats** field
 references, and guidance is written after scoring, so every reference points at a final id.
@@ -464,7 +473,7 @@ its checklist, not a validation rule.
 
 ## Template
 
-A finalized file — the three critique sections deleted, `## Org rules` pruned by Selection.
+A finalized file — both critique sections deleted, `## Org rules` pruned by Selection.
 Its static text (the banner and the Maintenance footer) is seeded by
 `scripts/lib/artifact-template.sh` and reproduced here verbatim; keeping the two in step is
 manual, so **an edit to either is an edit to both**. The **field cards are elided below** for
