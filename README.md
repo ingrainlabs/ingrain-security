@@ -182,7 +182,7 @@ flowchart TD
         majorQ -->|minor — not security-relevant| stop(["Stop — carry on"])
         majorQ -->|major| threats["generate threats → critic"]
         majorQ -->|major, in parallel| rules["retrieve org rules — broad<br/>optional: needs the ingrain CLI"]
-        threats --> score["risk score 0–100<br/>then re-tag into risk order"]
+        threats --> score["risk score 0–100<br/>then sort into risk order"]
         rules --> rcritic["rule critic — prunes<br/>before you see anything"]
         score --> threatgate
         rcritic --> rulegate
@@ -313,6 +313,38 @@ the review notes it in one line and carries on to the end.
 **To keep everything local,** deny `ingrain record` in your host's permission settings, or leave
 the CLI unconfigured. A CLI at a release that predates `Schema version: 2` reports an unknown
 subcommand, and the review continues unsynced.
+
+## Unattended / CI
+
+The review normally puts two questions to you — which threats to act on, and which of your org's
+rules govern the change. With nobody at the keyboard there is no one to ask, and picking nothing
+would mean no guidance and no verification pass. So set `INGRAIN_SECURITY_UNATTENDED` — to
+`connected` when the runner has an `ingrain` API token, or `standalone` when it does not — and
+each gate resolves on its own. **It takes one of those two words, not a flag**: anything else is
+read as `connected`, and a runner with no token then attempts uploads it cannot make.
+
+| Gate | What it does unattended |
+| --- | --- |
+| *Is this change worth reviewing?* | Takes **yes** — a needless review is cheap, a missed concern is not |
+| *Which threats to act on?* | Selects everything above your org's **risk threshold**; the rest are reported but not required |
+| *Which org rules apply?* | Accepts all of them, over a set already narrowed to this change |
+
+**The threshold is your configuration, not ours.** Connected, it comes from the maturity band set
+on the buckets covering the repository, so what CI enforces is changed in the product rather than
+in a workflow file — and a band set in a workflow is refused there, because on a pull request that
+file comes from the branch under review. Standalone has no buckets to read, so it takes the band
+from `INGRAIN_SECURITY_BAND` (`low` | `medium` | `high`).
+
+A stricter band means a lower bar: `high` requires work on anything scoring above
+25, `medium` above 50, `low` above 75. With nothing configured anywhere it uses `high` — the
+strictest — so the gate can never fail to resolve.
+
+**Nothing is hidden.** A threat below the threshold is still reported, marked as accepted risk
+rather than required work. The band and the exact threshold applied are recorded in the assessment,
+so a reader can see what the run enforced instead of inferring it.
+
+Standalone skips org-rule retrieval and both uploads and still produces the whole
+threat review — which is also the stronger privacy posture, since nothing leaves the runner.
 
 ## For contributors
 

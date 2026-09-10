@@ -33,7 +33,7 @@
  */
 
 import { join } from "@std/path";
-import { PLUGIN_DIR } from "../lib/claudeRunner.ts";
+import { AGENT_MODEL, PLUGIN_DIR } from "../lib/claudeRunner.ts";
 import { shQuote } from "../lib/shell.ts";
 import { discoverVariants, stageVariantPluginDir, type TVariant } from "../lib/skillVariants.ts";
 import { findTask, TASK_PROMPTS } from "../lib/taskPrompts.ts";
@@ -100,9 +100,11 @@ const writeRunScripts = async (
   // normal mode omits the flag and uses claude's default permission mode.
   const planFlag = mode === "plan" ? "--permission-mode plan " : "";
   // The prompt is read via `$(cat …)` so no prompt text reaches the shell as code.
-  const claudeCmd = `claude ${planFlag}--plugin-dir ${shQuote(stagedPluginDir)} "$(cat ${
-    shQuote(promptPath)
-  })"`;
+  // Same tier as the automated tiers: variants are compared against each other, so a window
+  // running a different model than its neighbour confounds the one thing this tool shows.
+  const claudeCmd = `claude ${planFlag}--model ${AGENT_MODEL} --plugin-dir ${
+    shQuote(stagedPluginDir)
+  } "$(cat ${shQuote(promptPath)})"`;
 
   const launch = [
     "#!/usr/bin/env bash",

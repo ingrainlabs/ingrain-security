@@ -115,15 +115,25 @@ Surfaces:
      not apply (Residual path on a non-weak verdict, Evidence nobody cited).
      Missing marker? Append your fields at the end of the entry.
 
-     Ids start in discovery order; the threat-retag script re-tags them once into
-     descending-risk order (T01 = highest risk) and they are permanent after that. Entries
-     sit in id order. -->
+     An id is assigned once, by the generator, and belongs to that threat for the life of
+     the task — never renumbered, not by re-scoring and not across runs. A dropped id is
+     retired, not reused, so gaps are ordinary. The threat-retag script sorts entries into
+     descending-risk DOCUMENT order without touching a heading, so the section reads highest
+     risk first while a tag still names one threat. Display by Risk score, never by id. -->
 
 ## Risk score
 <!-- Score: 0-100. Criticality: low|medium|high|critical. The plan-level residual risk,
-     written by the orchestrator's scoring step beside the per-threat #### score blocks. -->
+     written by the orchestrator's scoring step beside the per-threat #### score blocks.
+     Gating band (low|medium|high) and Gating threshold (0-100) are written by an UNATTENDED
+     run only: the band this run gated on, and the risk score a threat had to exceed to be
+     selected. Connected, the band is the org's, resolved server-side from the buckets covering
+     the change; standalone, it is the caller's; where none arrived it is the strictest. An
+     attended run leaves both empty — a person made those calls, so there is no threshold
+     to record. -->
 Score:
 Criticality:
+Gating band:
+Gating threshold:
 
 ## Org rules
 <!-- The second driver axis. Written by the broad retrieval pass, which runs in PARALLEL with
@@ -166,9 +176,9 @@ Update this file whenever the implementation diverges from the analysis — a ne
 surface, a threat's acceptance changes, or a guidance entry is added, dropped, or
 altered. Keep the Selection fields on both driver axes honest against the code you
 write, and keep every enumerated field within the values its section's field card
-names — the comment under each heading. The scoring pass already re-tagged the
-threats into risk order, so ids are permanent from here: add a new threat with the
-next free \`T<n>\` and keep the existing ones as they are.
+names — the comment under each heading. A threat's \`T<n>\` is permanent and belongs
+to that threat alone: add a new threat with the next free one, retire a dropped
+threat's rather than reusing it, and never renumber the ones already there.
 
 To locate this file, re-run the \`assessment-mint\` command from your
 INGRAIN-ASSESSMENT-PATHS session context and write to the absolute \`assessment_abs\`

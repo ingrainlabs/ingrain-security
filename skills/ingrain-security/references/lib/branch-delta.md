@@ -19,8 +19,8 @@ Testing consumes it and the reporting caveats.
 
 **Resolve this with the shared script, and let it discover the trunk.** Branches are routinely
 cut from other feature branches, release branches, and long-lived integration branches, so the
-parent is whatever branch this one was actually cut from — which is what the script works out. Sharing one resolver is what keeps
-Phase select and the review agreed on what is under test.
+parent is whatever branch this one was actually cut from, which the script works out. One resolver,
+shared, keeps Phase select and the review agreed on what is under test.
 
 The bundled **`scripts/branch-delta`** script resolves it: it takes every other local and remote
 branch, computes its merge-base with `HEAD`, discards any whose merge-base *is* `HEAD` (those
@@ -87,8 +87,8 @@ Three things it does that a hand-written `git diff` does not:
   `color.ui = always` or a `diff.external` driver cannot decide what you read. Centralizing the
   commands would buy nothing if each still rendered differently per machine.
 - **`--ref` pins the basis.** Pass the `diff_ref` you were given rather than letting the script
-  re-resolve: that is what holds a whole fan-out of verifiers to one change while the working
-  tree keeps moving under them. Omitting it re-resolves, which is fine for a one-shot look.
+  re-resolve: pinning holds a whole fan-out of verifiers to one change while the working tree
+  keeps moving under them. Omitting it re-resolves, which is fine for a one-shot look.
 
 An unknown subcommand, a `--ref` with no value, and a path that is neither tracked nor on disk
 are all refused with a message rather than absorbed — a typo must not come back looking like an
@@ -99,7 +99,7 @@ empty diff.
 By the time Testing is due, the coding agent has usually **committed** the implementation, so
 the uncommitted delta alone may show only a fraction of the code the guidance was written
 for. Route on `delta_empty`, which counts committed and uncommitted work alike.
-`delta_empty: false` with a clean working tree means the implementation is committed —
-precisely the case Testing exists for.
+`delta_empty: false` with a clean working tree means the implementation is committed — the case
+Testing exists for.
 
 On the `HEAD` fallback, `delta_empty` degrades to the dirty-tree test.

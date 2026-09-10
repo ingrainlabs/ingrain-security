@@ -49,6 +49,17 @@
 # The caller must already have deferred on an empty slug — an unresolvable branch (detached
 # HEAD, non-git tree) is "we cannot tell", never "no review", and this returning non-zero
 # there would turn that doubt into a block.
+#
+# TWO GLOBS ON A SEPARATOR BOUNDARY, never one bare `${slug}*`. The mint writes exactly
+# `assessment-<branch-slug>.md` or `assessment-<branch-slug>-<task-slug>.md`, and `${slug}*`
+# matched neither shape — it matched any slug this one is a PREFIX of, so a `Verdict: minor`
+# recorded on `feature/authz-refactor` opened the gate for every write on `feature/auth`.
+#
+# It does not close the case where a longer branch slug is this one plus `-<something>`
+# (`feature/auth-v2` against `feature/auth`), and nothing here can: `-` separates branch from
+# task AND appears inside both, and the file records no branch of its own to disambiguate
+# against. Stated rather than glossed — the fix removes the arbitrary-sibling match, not the
+# ambiguity the filename format carries.
 branch_review_recorded() {
     local dir="$1" slug="$2" file line in_triage
 
@@ -56,7 +67,7 @@ branch_review_recorded() {
     [ -n "${slug}" ] || return 1
     [ -d "${dir}" ] || return 1
 
-    for file in "${dir}"/assessment-"${slug}"*.md; do
+    for file in "${dir}"/assessment-"${slug}".md "${dir}"/assessment-"${slug}"-*.md; do
         [ -f "${file}" ] || continue
 
         in_triage=0

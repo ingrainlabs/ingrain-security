@@ -38,10 +38,10 @@ Run all commands from this `tests/` directory.
 ```
 lib/      claudeRunner.ts (spawn helper) · matchers.ts (assertions) · sampleInputs.ts (canned plans) · reporter.ts (input/output printer)
 static/   offline lint of worker-reference frontmatter + advisory ROLE + skill/hook structure (no model calls)
-parity/   scriptInvocations.test.ts · scriptOutputFields.test.ts · sourceGraph.test.ts — hold the scripts and the docs/headers that describe them to each other (no model calls)
+parity/   scriptInvocations.test.ts · scriptOutputFields.test.ts · sourceGraph.test.ts · taskWiring.test.ts — hold the scripts and the docs/headers that describe them to each other, and this file's own task table to the files it runs (no model calls)
 hooks/    assessment-hooks.test.ts · assessment-mint.test.ts · threat-retag.test.ts · allow-assessment-write.test.ts · codex-allow-assessment-write.test.ts · assessment-write-lib.test.ts · project-root-lib.test.ts — run the hook/path/skill scripts and their shared libs under bash against a throwaway project (no model calls)
 shell/    shellcheck.test.ts — ShellCheck over every committed shell script, found by shebang so the extensionless hooks are covered too (no model calls)
-agents/   agents.test.ts — table-driven live tests, one case per worker scenario (dispatched via its reference file)
+agents/   agents.test.ts (table-driven, one case per worker scenario) · unattended.test.ts (the three gates resolving with nobody there) · resume.test.ts (tag permanence + the rule axis across a resume) — live
 skill/    trigger.test.ts (review starts / minor stops) · orchestration.test.ts (gated)
 ```
 
@@ -75,16 +75,19 @@ This is always on for the live tiers — Deno streams each test's output live (w
 - **parity/** — the tier for facts stated in two places. A script and the docs describing it are
   edited independently, so a renamed subcommand, a renamed JSON key or a stale dependency comment
   each go unnoticed on both sides — the script keeps passing its own tests and the markdown keeps
-  rendering. Three checks, each deriving both ends rather than pinning a literal:
-  `scriptInvocations` **executes** every command inside an `ingrain-script` fence (the tag is the
-  contract: a fence claims "runnable", prose about a script does not) against a throwaway git repo
-  and requires exit 0 plus parseable JSON; `scriptOutputFields` reads each script's `CONTRACT KEYS`
-  header block and checks every declared key is both really emitted and really documented, plus the
+  rendering. Four checks, each deriving both ends rather than pinning a literal: `scriptInvocations`
+  **executes** every command inside an `ingrain-script` fence (the tag is the contract: a fence
+  claims "runnable", prose about a script does not) against a throwaway git repo and requires exit 0
+  plus parseable JSON; `scriptOutputFields` reads each script's `CONTRACT KEYS` header block and
+  checks every declared key is both really emitted and really documented, plus the
   `phase`/`phase_reason` enum in both directions; `sourceGraph` derives the shell dependency graph
   from the `.` commands and cross-file symbol use, and holds each lib's "Sourced by" and "Requires
   …" headers to it — including the ShellCheck directive beside each source line, whose drift
-  silently un-lints a file. Adding a contract key, a route or a script means touching **both** ends
-  or this tier fails.
+  silently un-lints a file. `taskWiring` holds this file's own task table to the files it runs: the
+  live tier globs `agents/`, so a new file there is covered for free while the **granular** tasks —
+  which name one file each — silently stop being the sum of it, and anyone reaching for the narrow
+  task runs a subset without being told. Adding a contract key, a route, a script or an `agents/`
+  file means touching **both** ends or this tier fails.
 - **hooks/** — offline, no model calls, but unlike `static/` it **executes** the scripts. It also
   covers `skills/ingrain-security/scripts/threat-retag`, which is not a hook but belongs to the same
   tier for the same reason: it is a bundled script whose behaviour is deterministic, so it is run
@@ -147,11 +150,28 @@ deno task ci                 # what CI runs: lint + fmt:check + test:offline
 **Needs an agent** — spawns `claude`, requires auth, costs model calls, can flake:
 
 ```bash
-deno task test:agent         # 3 live worker cases (one per worker) + the 2 skill trigger tests
+deno task test:agent         # the whole live tier: workers + unattended + resume + triggers
 deno task test:integration   # everything, incl. the full orchestration cycle (slow)
+```
 
-# one worker only:
-deno test --allow-run=claude --allow-read --allow-env agents/ --filter ingrain-threat-generator
+**Run one file rather than the tier.** The live tier is minutes and real money — six of its cases
+are full orchestration runs — so touching one subject should not mean paying for all four:
+
+```bash
+deno task test:agent:workers      # 3 worker cases, one per worker (~2 min)
+deno task test:agent:unattended   # the three gates resolving with nobody there (~15 min)
+deno task test:agent:resume       # tag permanence + the rule axis across a resume (~5 min)
+deno task test:agent:trigger      # the 2 skill trigger tests
+```
+
+These are **separate `deno test` invocations over one file each**, not `--filter` over the tier: a
+filter couples the task to test _names_, so renaming a case silently drops it and the task goes
+green having run nothing. `test:agent` stays a single invocation over `agents/` rather than chaining
+the four with `&&`, so one failing file does not stop the rest from reporting.
+
+```bash
+# narrower still — one case, by name:
+deno task test:agent:unattended --filter "medium"
 ```
 
 Each tier's Deno permissions double as a capability tag: `test:static` gets `--allow-read` only and
@@ -231,8 +251,15 @@ earlier mode's transcript in its own subdir.
 | `test:ts`                | no              | 0                         | < 1s      | no   |
 | `test:offline`           | no              | 0                         | < 1s      | no   |
 | `ci` (+ lint, fmt:check) | no              | 0                         | a few s   | no   |
-| `test:agent`             | yes             | ~5 (3 worker cases + 2)   | a few min | yes  |
+| `test:agent:workers`     | yes             | 3 worker cases            | ~2 min    | yes  |
+| `test:agent:trigger`     | yes             | 2 trigger cases           | ~2 min    | yes  |
+| `test:agent:resume`      | yes             | 2, one a full cycle       | ~5 min    | yes  |
+| `test:agent:unattended`  | yes             | 6 full cycles             | ~15 min   | yes  |
+| `test:agent`             | yes             | all 13 of the above       | 15–25 min | yes  |
 | `test:integration`       | yes             | + full cycle to the gates | 5–20 min  | yes  |
+
+`test:agent` is the sum of the four above it, so reach for the narrow one: the unattended tier alone
+is most of the tier's cost, and a change to the band table needs nothing else.
 
 ## Notes
 

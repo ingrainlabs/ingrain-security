@@ -51,12 +51,15 @@ main() {
 
     # The hook.json matcher is a convenience filter, not a security boundary — re-check.
     tool="$(extract_string "${payload}" ".tool_name")" || defer
+    # `NotebookEdit` names its target `notebook_path`, not `file_path` — so reading only the
+    # latter deferred every notebook write and the file prompted, which is exactly what this
+    # hook exists to prevent. The review gate reads the same two names for the same reason;
+    # the two hooks disagreeing about what a payload names is the one thing neither detects.
     case "${tool}" in
-        Write | Edit | MultiEdit | NotebookEdit) ;;
+        NotebookEdit) file_path="$(extract_string "${payload}" ".tool_input.notebook_path")" || defer ;;
+        Write | Edit | MultiEdit) file_path="$(extract_string "${payload}" ".tool_input.file_path")" || defer ;;
         *) defer ;;
     esac
-
-    file_path="$(extract_string "${payload}" ".tool_input.file_path")" || defer
     [ -n "${file_path}" ] || defer
 
     cwd="$(extract_string "${payload}" ".cwd")" || cwd=""

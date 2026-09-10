@@ -131,6 +131,16 @@ main() {
     payload="$(cat)" || return
     [ -n "${payload}" ] || return
 
+    # SAY SO WHEN THE GATE CANNOT DECIDE. `extract_string` needs `jq`, and without it every
+    # payload reads as unextractable — so the gate defers on all of them and this guardrail is
+    # simply off. The fail-open discipline stands (a gate that strands a session is worse than
+    # one that misses a nudge), but silence is what made it indistinguishable from a reviewed
+    # branch. One line on stderr, before any decision, and the deferral is at least visible.
+    if ! command -v jq >/dev/null 2>&1; then
+        printf 'ingrain-security: jq not found on PATH — the review gate cannot read hook payloads and is deferring every write. Install jq to restore it.\n' >&2
+        return
+    fi
+
     local tool
     tool="$(extract_string "${payload}" ".tool_name")" || return
 
@@ -153,10 +163,19 @@ main() {
             ;;
         *)
             case "${tool}" in
-                Write | Edit | MultiEdit | NotebookEdit) ;;
+                # `NotebookEdit` names its target `notebook_path` and its schema admits no
+                # extra properties, so the `file_path` read the other three use came back
+                # EMPTY for every notebook write — and `[ -n "${targets}" ] || return`
+                # below then let it through UNGATED. The matcher named the tool while the
+                # extraction could never see it.
+                NotebookEdit)
+                    targets="$(extract_string "${payload}" ".tool_input.notebook_path")" || return
+                    ;;
+                Write | Edit | MultiEdit)
+                    targets="$(extract_string "${payload}" ".tool_input.file_path")" || return
+                    ;;
                 *) return ;;
             esac
-            targets="$(extract_string "${payload}" ".tool_input.file_path")" || return
             ;;
     esac
     [ -n "${targets}" ] || return

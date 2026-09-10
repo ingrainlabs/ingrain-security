@@ -163,60 +163,25 @@ if ! . "${SCRIPT_DIR}/lib/fork-point.sh" 2>/dev/null; then
     exit 1
 fi
 
+# shellcheck source=lib/changed-files.sh
+if ! . "${SCRIPT_DIR}/lib/changed-files.sh" 2>/dev/null; then
+    printf 'branch-delta: cannot load lib/changed-files.sh\n' >&2
+    exit 1
+fi
+
 # --- the change ---------------------------------------------------------------------
 
-# git's one-letter status, as a word the agent reads without knowing git's table.
-status_word() {
-    case "$1" in
-        A) printf 'added' ;;
-        M) printf 'modified' ;;
-        D) printf 'deleted' ;;
-        T) printf 'type-changed' ;;
-        *) printf '%s' "$1" ;;
-    esac
-}
-
-# The COMPLETE changed-file set as a JSON array of {path,status}: committed, staged, unstaged
-# and untracked. No single git command covers all four, and the merge is deterministic — which
-# makes it this script's job rather than something every caller re-derives in prose.
+# The same set as a JSON array of {path,status}, for `branch-delta`'s report.
 #
-# The two queries ALMOST partition the set — `diff` reports tracked paths, `ls-files --others`
-# untracked ones — and git emits each in path order, which is what retires the `sort -u` this
-# used to need and with it every failure around a path containing a newline.
-#
-# They are NOT disjoint, though, and an earlier comment here claimed they were. `git rm --cached
-# creds.env` — the standard way to untrack a wrongly-committed secret — leaves the path in BOTH:
-# `D` against the fork point, and untracked on disk. Emitting both entries told the reviewer
-# "deleted" about a file still sitting there, on exactly the question a security review asks.
-# So the untracked pass wins on a collision: it is the disk truth, and the disk is what a
-# reviewer opens. `seen` is what enforces that.
-#
-# `-z` throughout, because git octal-escapes a non-ASCII path under core.quotePath and a
-# caller handed the raw text has no way to undo it. That is also what puts raw bytes into the
-# JSON: `lib/json.sh` escapes five characters and no more, so a path carrying a control byte or
-# invalid UTF-8 emits an object no strict parser accepts — an ACCEPTED limitation, documented at
-# `escape_for_json`. `--no-renames` on purpose: a rename lands
-# as a delete plus an add, which names BOTH paths — for a security review the old location is
-# as interesting as the new one, and it costs the R-parsing branch nothing to keep.
-# `--exclude-standard` honours .gitignore, so the self-ignoring assessment folder drops out.
+# Raw bytes reach the JSON: `lib/json.sh` escapes five characters and no more, so a path
+# carrying a control byte or invalid UTF-8 emits an object no strict parser accepts — an
+# ACCEPTED limitation, documented at `escape_for_json`.
 changed_files_json() {
-    local root="$1" ref="$2" out="[" sep="" st path
-    # Untracked first, so the tracked pass can defer to it on a collision. A NUL-delimited
-    # membership string rather than an array: paths may contain anything but NUL, and this is
-    # the one separator no path can forge.
-    local untracked="" seen=""
-    while IFS= read -r -d '' path; do
-        untracked="${untracked}${path}"$'\0'
-        out="${out}${sep}{\"path\":\"$(escape_for_json "${path}")\",\"status\":\"untracked\"}"
-        sep=","
-    done < <(git -C "${root}" ls-files --others --exclude-standard -z 2>/dev/null)
-    seen="${untracked}"
-
+    local out="[" sep="" st path
     while IFS= read -r -d '' st && IFS= read -r -d '' path; do
-        case "${seen}" in *"${path}"$'\0'*) continue ;; esac
-        out="${out}${sep}{\"path\":\"$(escape_for_json "${path}")\",\"status\":\"$(status_word "${st:0:1}")\"}"
+        out="${out}${sep}{\"path\":\"$(escape_for_json "${path}")\",\"status\":\"${st}\"}"
         sep=","
-    done < <(git --no-pager -C "${root}" diff --no-color --no-ext-diff --name-status --no-renames -z "${ref}" 2>/dev/null)
+    done < <(changed_entries "$1" "$2")
     printf '%s]' "${out}"
 }
 
@@ -232,12 +197,20 @@ is_tracked() {
 # carrying `notes -> ~/.ssh/id_rsa` would otherwise read that key into the review; and a
 # resolved path outside the root is refused, because a `../` path argument would otherwise
 # render a file this branch never touched as part of "what this branch changed".
+#
+# BOTH SIDES PHYSICAL, and that is the whole of the second refusal's correctness. `root` arrives
+# from `resolve_project_root`, which normalizes with a LOGICAL `pwd` and so keeps any symlink in
+# the path — `CLAUDE_PROJECT_DIR` is authoritative there and the host hands it whatever the user
+# typed. Comparing that against a `pwd -P` result made the prefix test fail for EVERY path on a
+# checkout reached through a link (macOS `/tmp` -> `/private/tmp` is the common one), so every
+# untracked file was refused and the rendered diff silently lost every file this branch added.
 inside_repo() {
-    local root="$1" path="$2" resolved
+    local root="$1" path="$2" resolved root_real
     [ -L "${root}/${path}" ] && return 1
     [ -f "${root}/${path}" ] || return 1
+    root_real="$(cd "${root}" 2>/dev/null && pwd -P)" || return 1
     resolved="$(cd "$(dirname "${root}/${path}")" 2>/dev/null && pwd -P)" || return 1
-    case "${resolved}/" in "${root}/"*) return 0 ;; esac
+    case "${resolved}/" in "${root_real}/"*) return 0 ;; esac
     return 1
 }
 
@@ -281,7 +254,9 @@ render_diff() {
 
     # `|| return 1` rather than letting the status fall through to the loop below: a bad ref
     # otherwise printed nothing and exited 0, which a verifier reads as "nothing changed".
-    git --no-pager -C "${root}" diff --no-color --no-ext-diff "${ref}" || return 1
+    # `--` for the same reason the per-path branch above carries one: a repo holding a file
+    # named `HEAD` makes the ref ambiguous, and an empty diff reads as a clean change.
+    git --no-pager -C "${root}" diff --no-color --no-ext-diff "${ref}" -- || return 1
     while IFS= read -r -d '' path; do
         printf '\n'
         render_untracked "${root}" "${path}"
@@ -351,7 +326,14 @@ emit_delta_facts() {
     # same tool result, at the moment the agent is about to dispatch its verifiers. Same
     # reasoning as the minter's instruction field: a static sentence read thousands of
     # tokens earlier gets lost.
-    if [ "${DELTA_EMPTY}" = "true" ]; then
+    # Tested BEFORE delta_empty, because on an unreliable delta `true` is a MEASUREMENT FAILURE
+    # and the branch below reads it as a finding. The mint already routes this exact state to
+    # `requires_judgement` via the same `is_delta_unreliable`; without this the two scripts
+    # contradicted each other in one tool result — the mint saying "committed work is invisible,
+    # judge it" and this instruction saying "stop and report no changes to verify".
+    if is_delta_unreliable && [ "${DELTA_EMPTY}" = "true" ]; then
+        instruction="delta_empty is TRUE because nothing could measure it, not because nothing changed: no fork point resolved (${DELTA_REASON}), so commits_ahead stayed 0 and only the working tree was read — and that is clean. A finished implementation may sit in the log. Do NOT report \"no changes to verify\". Read 'git log' to settle it: implementation present -> verify against HEAD and report the basis as narrowed; genuinely not started -> Development. The mint routes this same state to requires_judgement (delta_unreliable)."
+    elif [ "${DELTA_EMPTY}" = "true" ]; then
         instruction="This branch has no delta to verify: no commits since ${DELTA_DIFF_REF} and a clean working tree. Phase select routes this to Development (there is no code for this task yet); Testing stops and reports \"no changes to verify\"."
     elif [ "${DELTA_FALLBACK}" = "true" ] && [ "${DELTA_REASON}" = "no-divergence" ]; then
         instruction="No fork point resolved because this branch has no commits since it was cut, so diff_ref is HEAD — but HEAD captures ALL of this branch's work, so the review is complete, NOT narrowed. Diff against HEAD and pass it verbatim to every verifier."
@@ -376,7 +358,6 @@ emit_delta_facts() {
         "${changed_files}" \
         "$(escape_for_json "${instruction}")"
 }
-
 
 case "${1:-}" in
     -h|--help)

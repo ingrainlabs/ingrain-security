@@ -57,7 +57,7 @@ shape.
   cards are **permanent**: finalize deletes the scratch sections and keeps them, because the
   implementing agent and the Testing pass run in later sessions with no reference in context.
   Because of the seeding, **an untouched skeleton reads as `has_content: false`** — exactly
-  like no file at all, which is what lets Phase select and the resume check read it. Two
+  like no file at all, so Phase select and the resume check can read it. Two
   further fields say which
   empty case you are in — `template_seeded` (this mint wrote the skeleton) and
   `template_only` (the file is still an untouched skeleton).
@@ -86,7 +86,7 @@ shape.
   | `## Risk score` | orchestrator, at its scoring step (the plan-level residual) |
   | `## Org rules` | orchestrator (the broad retrieval pass writes each entry and its body; the machine prune removes rejected ones; the **rule gate** records each surviving Selection) |
   | `## Rule critique` | `ingrain-rule-critic` — **transient**, deleted by the orchestrator at finalize |
-  | `## Implementation guidance` | orchestrator — a single writer, since the vessel carries neither a gate decision nor a verdict |
+  | `## Implementation guidance` | orchestrator — a single writer, since guidance carries neither a gate decision nor a verdict |
   | `## Rule adherence` | the Testing verification pass (one entry per **selected** org rule, at the Testing phase) |
   | `## Maintenance (for the implementing agent)` | the mint — seeded static text, never rewritten by any stage |
 
@@ -148,8 +148,8 @@ from the plan you just reviewed. Being approximately right is useful; being sile
 **What it is for:** the `ingrain` CLI reads this section to scope org-rule retrieval to the
 code you are about to touch, and sends it with the assessment so the platform can attribute
 the analysis to the right part of the codebase. A wrong path narrows retrieval to the wrong
-place, so it is worth a moment's thought — but the skill never depends on it, and an
-unwritten section simply means an unscoped search.
+place, so check it — but the skill never depends on it, and an unwritten section simply means
+an unscoped search.
 
 ### `## Triage` — whether this change gets a review, and what it builds on
 - **Verdict** — `minor` | `major`. **The user's answer**, recorded by the orchestrator: the review
@@ -224,7 +224,7 @@ an older plugin carries no markers at all and is read field-by-field as it alway
 
 | Field | Block | Constraint |
 |-------|-------|------------|
-| **id** (in the heading) | heading | `T<n>`, zero-padded (`T01`) — unique within the file; assigned in discovery order by the generator, **reassigned once** by `scripts/threat-retag` into descending-risk order, and fixed from that point on |
+| **id** (in the heading) | heading | `T<n>`, zero-padded (`T01`) — unique within the file; assigned by the generator and **permanent from that moment**. Never reassigned: not by re-scoring, not by the sort, not across runs. It identifies a threat and carries no priority |
 | **title** (in the heading) | heading | string, after the ` — ` |
 | **Asset** | `gen` | string |
 | **Vector** | `gen` | string |
@@ -236,7 +236,7 @@ an older plugin carries no markers at all and is read field-by-field as it alway
 | **Risk score** | `score` | integer `0`–`100` |
 | **Criticality** | `score` | `low` \| `medium` \| `high` \| `critical` |
 | **Selection** | `usergate` | `selected` \| `excluded` \| `undecided` (the block is empty until the **threat gate**) |
-| **Robustness justification** | `test` | string — **a sentence or two** on what the code shows and why that is the level, concluded by the Testing orchestrator from the verifier's evidence. Where the argument runs longer, the part about *what to do* belongs in **Residual path**; this field stays the reason. Deliberately **not** named `Justification`: on this entry that name already means the risk-scoring rationale, and one name for two rationales is what makes them get interleaved. |
+| **Robustness justification** | `test` | string — **a sentence or two** on what the code shows and why that is the level, concluded by the Testing orchestrator from the verifier's evidence. Where the argument runs longer, the part about *what to do* belongs in **Residual path**; this field stays the reason. Deliberately **not** named `Justification`: on this entry that name already means the risk-scoring rationale, and one name over two rationales gets them interleaved. |
 | **Robustness** | `test` | `weak` \| `adequate` \| `strong` — how well this threat is closed in the implementation: `weak` = the threat can still be realized (a route survives, or the analysis leaves its closure unestablished); `adequate` = its realization routes are closed; `strong` = closed broadly **plus** artefacts that would fail if the control regressed. Concluded by the Testing pass from negative testing against the implementation. Normative definitions: `references/testing/verification-pass.md` → **Robustness levels**. **Set it from that verification's verdict.** |
 | **Residual path** | `test` | string — for a `weak` verdict, the concrete route by which the threat can still be realized and the change that would close it. The actionable half of the verification. `—` for any other verdict, where there is no surviving route to name. |
 | **Evidence** | `test` | *optional* — where the threat is closed or left open (`file:line`) — **anywhere in the tree, not only in the changed files**: a control that closes this threat counts wherever it lives, and a route that leaves it open counts wherever it survives. Advisory and volatile: line numbers drift as the code moves on, so treat it as a pointer, never as a claim the reader can re-verify later. `—` when the verifier cited none. |
@@ -257,33 +257,35 @@ instead of dressing one already chosen. Every other layer already works this way
 verifiers return their justification first, and the Testing orchestrator weighs it before it
 looks at the level.
 
-**The id carries the priority.** Before scoring, an id is a provisional discovery-order label:
-the generator assigns `T01`, `T02`, … as it finds threats, and those labels stay stable across
-the critique and the single revision round so the critic's `[T<n>]` feedback keys line up.
-Gaps from dropped threats are legal at that stage.
+**The id identifies the threat; it never ranks it.** The generator assigns `T01`, `T02`, … as it
+finds threats, and each label belongs to that threat from then on — through the critique, the
+revision round, the scoring pass, and every later run of the same task. Gaps are ordinary: a
+dropped threat's id is retired rather than reused, and nothing closes up behind it.
 
-**`scripts/threat-retag`** then **re-tags the list exactly once**, after the orchestrator has
-scored it. It sorts by **Risk score
-descending**, breaking ties by impact (critical > high > medium > low), then likelihood
-(very high > high > medium > low), then the pre-scoring id ascending — a deterministic total
-order, so two runs over the same scores produce the same ids. It reassigns ids contiguously
-from `T01`, closing any gaps, and writes the entries in that order. `T01` is the most
-dangerous threat.
+**Permanent because a moving id is a silent wrong answer.** A CI review posts findings as
+pull-request comments keyed on the tag, so a tag that moved with a re-score would leave a thread
+following a rank rather than the threat it was opened about — with nothing on screen to show it.
 
-**A script, because the move is bookkeeping and a rewrite is not free.** Re-tagging is the only
+**`scripts/threat-retag`** sorts the section after the orchestrator has scored it — **document
+order only, no renumbering**. It orders by **Risk score descending**, breaking ties by impact
+(critical > high > medium > low), then likelihood (very high > high > medium > low), then the id
+ascending — a deterministic total order, so two runs over the same scores lay the section out the
+same way. Every entry keeps the tag it arrived with; its heading is not rewritten at all.
+
+**A script, because the move is bookkeeping and a rewrite is not free.** Sorting is the only
 reason anything ever rewrote this section wholesale, and that rewrite was the single exception to
-the block rule — the one writer permitted to re-type blocks it did not own, which is exactly how a
+the block rule — the one writer permitted to re-type blocks it did not own, and that is how a
 live run once came back with a populated `#### test` block flattened. The script moves entries by
-line span and rewrites nothing but the `T<nn>` token in each heading, so every other block travels
-byte for byte and the exception is gone. It also **refuses a half-scored section**: an id is
-permanent from here, so an order computed over entries the scoring step never reached would freeze
-the wrong priority.
+line span and re-types no line at all, so every block travels byte for byte and the exception is
+gone. It also **refuses a half-scored section**: an entry the scoring step never reached has no
+risk to sort on, so it would land wherever the comparison dropped it and read as a priority
+nobody set.
 
-**After scoring the id is permanent.** It is what every guidance entry's **Threats** field
-references, and guidance is written after scoring, so every reference points at a final id.
-
-**Document order is id order is risk order.** Anywhere threats are shown — the threat gate's table,
-a worker's report, the verification tables — display them in **id order, `T01` first**.
+**Display in risk order, sorted explicitly — never by id.** Anywhere threats are shown — the
+threat gate's table, a worker's report, the verification tables — order them by **Risk score
+descending**, which is the order the sort has already left the section in. Every threat table
+carries a `Risk` column, so nothing is lost by the ids no longer being the sort; what is gained
+is that a tag means the same threat in every table, in every run.
 
 **The threat gate → Selection.** When the user decides, record each threat's **Selection**: act on
 it → `selected`, accept the risk → `excluded`. Use `undecided` only if the user is explicitly
@@ -291,9 +293,21 @@ unsure. Before the gate the `#### usergate` block is empty. It is one of the two
 same user moment as the **rule gate**, and its Selection scopes the **robustness** dimension
 exactly as the rule gate's scopes **adherence**.
 
-### `## Risk score` — plan-level residual risk
+### `## Risk score` — plan-level residual risk, and what gated the run
 - **Score** — integer `0`–`100`.
 - **Criticality** — `low` | `medium` | `high` | `critical`.
+- **Gating band** — `low` | `medium` | `high`. *Unattended runs only.*
+- **Gating threshold** — integer `0`–`100`. *Unattended runs only.*
+
+**The two `Gating` fields are written by an unattended run and by no other.** A person gating
+the threats made those calls themselves, so there is no threshold to record and both stay
+unwritten — their absence is how an attended run is told apart from one a band decided.
+
+**Recorded so nothing downstream recomputes them.** The band comes from the org's buckets and
+the threshold from the band→score table the skill holds; a reader that needed the number and
+could not find it here would have to carry a second copy of that table, which is the
+cross-repo duplication the whole arrangement exists to avoid. Writing the number down makes
+every later reader a quoter.
 
 ### `## Org rules` — one `###` entry per retrieved rule, and what the gate decided
 
@@ -319,13 +333,13 @@ enforces, and enforce it at the boundary rather than in the caller.
 | **Selection** | `selected` \| `excluded` (`—` until the rule gate runs) |
 | body | the rule text, verbatim and in full, on the lines beneath — not a `Key: value` field. It is Testing's specification for judging the rule |
 
-**Retrieval is broad on purpose, and precision is restored before the user sees anything.**
-Missing a governing rule is the costly failure, so the pass casts a wide net; the
-`ingrain-rule-critic` then judges each retrieved rule's applicability to *this* change in one
-round, and the orchestrator **prunes the machine-rejected entries from this section before the
-gate** — keeping any whose prune reason does not hold, since it holds the pen and the critique is
-advice. A pruned rule is never presented and never recorded — machine judgment is retrieval
-refinement, exactly like the search ranking, and only user decisions reach the record.
+**Retrieval is broad, and precision is restored before the user sees anything.** The
+`ingrain-rule-critic` judges each retrieved rule's applicability to *this* change in one round,
+and the orchestrator **prunes the machine-rejected entries from this section before the gate**,
+keeping any whose prune reason does not hold — the orchestrator writes this section and the
+critique is advice. A pruned rule is never presented and never recorded: machine judgment is
+retrieval refinement, like the search ranking, and only user decisions reach the record.
+→ `references/development/flow.md` § 1b owns why breadth is the instruction.
 
 **The rule gate → Selection.** Presented in the same user moment as the threat gate, over the
 curated set alone, with an **accept-all** option first: the default costs one choice, and
@@ -333,9 +347,9 @@ per-rule windows exist for the remaining misses. `selected` means the developer 
 rule governs this change — which is what puts it in **adherence scope**. `excluded` means
 deemed inapplicable here: a recorded decision, never a verdict, and left unjudged at Testing.
 
-**Both decisions travel.** An exclusion is exactly what makes developer-side scoping
-governable — its author gets to see that a rule was set aside, and a rule repeatedly excluded
-across changes is itself a signal. Filtering exclusions out would make that silent.
+**Both decisions travel.** An exclusion makes developer-side scoping governable: its author gets
+to see that a rule was set aside, and a rule repeatedly excluded across changes is itself a
+signal. Filtering exclusions out would remove both.
 
 **Finalize prunes by Selection.** A `selected` entry persists in full — its body is what the
 Testing pass reads as the rule's specification, whether or not any guidance ended up driving
@@ -404,7 +418,7 @@ negative testing, and writes every `## Rule adherence` entry from its rule-adher
 threat outside the `selected` set keeps an empty `#### test` block. Writing them, alongside
 setting `## Task` → `Latest stage: testing`, is what marks the assessment checked; the plan
 review leaves the `#### test` block **empty** for Testing to fill.
-**Nothing in this section is among them** — the vessel has no verdict to write.
+**Nothing in this section is among them** — guidance has no verdict to write.
 
 ### `## Rule adherence` — one `###` entry per **selected** org rule
 
@@ -447,8 +461,7 @@ verdict stays meaningful when guidance is merged or dropped.
 
 **Dropped guidance does not decide it.** Guidance dropped during plan refinement is the usual
 reason a rule ends up `not-followed`, and the justification names the absent control — but a
-rule satisfied by other means still reads `followed`. The verdict tracks the code, never the
-paperwork.
+rule satisfied by other means still reads `followed`. The verdict tracks the code, never the plan.
 
 **Never derived from Robustness.** The two dimensions are independent: a rule can be followed
 while a threat stays reachable (the rule governed input validation; the surviving route is an
@@ -602,9 +615,9 @@ Update this file whenever the implementation diverges from the analysis — a ne
 surface, a threat's acceptance changes, or a guidance entry is added, dropped, or
 altered. Keep the Selection fields on both driver axes honest against the code you
 write, and keep every enumerated field within the values its section's field card
-names — the comment under each heading. The scoring pass already re-tagged the
-threats into risk order, so ids are permanent from here: add a new threat with the
-next free `T<n>` and keep the existing ones as they are.
+names — the comment under each heading. A threat's `T<n>` is permanent and belongs
+to that threat alone: add a new threat with the next free one, retire a dropped
+threat's rather than reusing it, and never renumber the ones already there.
 
 To locate this file, re-run the `assessment-mint` command from your
 INGRAIN-ASSESSMENT-PATHS session context and write to the absolute `assessment_abs`

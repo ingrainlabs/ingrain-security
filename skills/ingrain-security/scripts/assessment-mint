@@ -50,7 +50,8 @@
 # CONTRACT KEYS BEGIN
 #   assessment_abs assessment_path plugin_root branch_slug phase phase_reason
 #   has_content selected_threats selected_rules siblings instruction
-#   template_seeded template_only
+#   template_seeded template_only unattended run_mode caller_band
+#   threshold_high threshold_medium threshold_low
 # CONTRACT KEYS END
 #
 # Bundled with the skill and run directly by the orchestrator (which already has a
@@ -75,6 +76,11 @@ Arguments:
 
 flags:
   --title T           the ## Task title; slugified into the filename (optional).
+  --scope-paths FILE  the footprint the recorded analysis was built for, one repository-
+                      relative folder per line (optional). Supplied by whatever pulled it —
+                      it lives on the platform, so a local run has no source for it and
+                      simply omits the flag. Present, it enables the scope-change route
+                      below; absent, routing is unchanged.
 
 Output (assessment_abs is CANONICAL — the one path to write to; assessment_path is the
 relative display form for prose and links). The `instruction` field restates this with
@@ -89,10 +95,36 @@ field card — no content) when it does not exist yet, so no writer starts from 
 existing file is never rewritten. `has_content` is true only when the file already holds
 written analysis — the run resumes the same task's prior work.
 
+Run mode, from the INGRAIN_SECURITY_UNATTENDED environment variable:
+  unattended          true when it is set at all — no window mechanism can reach a person, so
+                      every gate resolves without one. Reported here because the first gate is
+                      Step 0's review question, before the run has taken a turn of its own.
+  run_mode            attended (unset) | connected | standalone. Standalone makes no
+                      `ingrain context security_rules` call and no `ingrain record` call —
+                      not inferable from the CLI being present, which in CI it always is.
+                      An unrecognised value resolves to connected and says so in `instruction`:
+                      a wrong guess there fails a sync visibly, where the other way round
+                      records nothing and says nothing.
+  caller_band         the band the CALLER supplied, from INGRAIN_SECURITY_BAND: low | medium |
+                      high in STANDALONE, where there is no platform to ask; unset or
+                      unrecognised resolves to `high`, the strictest, so the gate can never
+                      fail to resolve. **EMPTY in every other mode, because the caller is not
+                      the authority there** — a connected run's band is the org's own, resolved
+                      server-side from the buckets covering the change, and a `pull_request`
+                      runs the workflow file from the PR head, so reporting a caller's band
+                      beside it would let the author of the change under review set their own
+                      bar.
+  threshold_high      the band -> threshold table, one key per band. BOTH modes read it the
+  threshold_medium    same way — `threshold_<band>`, with the band from `caller_band` in
+  threshold_low       standalone and from the retrieval's `maturityBand` when connected.
+
 Routing. The mint resolves Phase select's verdict, so a caller reads it rather than deriving it:
   phase               development | testing | requires_judgement
   phase_reason        fresh_task | resume_analysis | implementation_ahead | verify_now
-                      | siblings_present | delta_unreliable
+                      | scope_moved | siblings_present | delta_unreliable
+                      scope_moved fires only with --scope-paths: the change has reached code
+                      the recorded analysis was not built for, so it is re-analysed rather
+                      than verified against threats that never covered it.
   selected_threats    gated drivers on the threat axis (feeds `phase`)
   selected_rules      gated drivers on the rule axis (feeds `phase`)
   siblings            written assessments on this branch that THIS title did not mint.
@@ -116,7 +148,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 #   assessment-dir.sh    ensure_assessment_dir · ASSESSMENT_DIR_NAME
 #   artifact-template.sh seed_artifact_template
 #   fork-point.sh      resolve_delta_facts · is_delta_unreliable
-#   mint.sh              slugify · count_selected_in_section · resolve_phase
+#   changed-files.sh     changed_outside_footprint
+#   mint.sh              slugify · count_selected_in_section · resolve_phase · resolve_run_mode · resolve_gating_band · resolve_gating_threshold
 # shellcheck source=lib/json.sh
 if ! . "${SCRIPT_DIR}/lib/json.sh" 2>/dev/null; then
     printf 'assessment-mint: cannot load lib/json.sh\n' >&2
@@ -142,6 +175,11 @@ if ! . "${SCRIPT_DIR}/lib/fork-point.sh" 2>/dev/null; then
     printf 'assessment-mint: cannot load lib/fork-point.sh\n' >&2
     exit 1
 fi
+# shellcheck source=lib/changed-files.sh
+if ! . "${SCRIPT_DIR}/lib/changed-files.sh" 2>/dev/null; then
+    printf 'assessment-mint: cannot load lib/changed-files.sh\n' >&2
+    exit 1
+fi
 # shellcheck source=lib/mint.sh
 if ! . "${SCRIPT_DIR}/lib/mint.sh" 2>/dev/null; then
     printf 'assessment-mint: cannot load lib/mint.sh\n' >&2
@@ -164,12 +202,17 @@ emit_mint_facts() {
     local host="$1" label="$2"
     shift 2
 
-    local title=""
+    local title="" scope_paths_file=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --title)
                 [ $# -ge 2 ] || { printf '%s-mint: --title needs a value\n' "${label}" >&2; return 2; }
                 title="$2"
+                shift 2
+                ;;
+            --scope-paths)
+                [ $# -ge 2 ] || { printf '%s-mint: --scope-paths needs a value\n' "${label}" >&2; return 2; }
+                scope_paths_file="$2"
                 shift 2
                 ;;
             *)
@@ -205,7 +248,7 @@ emit_mint_facts() {
     if [ -n "${branch_slug}" ]; then branch_known="true"; else branch_known="false"; fi
 
     local task_slug
-    task_slug="$(slugify "${title}")"
+    task_slug="$(title_slug "${title}")"
 
     local target_dir="${ASSESSMENT_DIR_NAME}"
 
@@ -287,8 +330,20 @@ emit_mint_facts() {
     local phase phase_reason
     local delta_unreliable="false"
     is_delta_unreliable && delta_unreliable="true"
+    # Has the change moved outside the footprint the recorded analysis was built for? Only a
+    # caller that pulled one can say, so with no `--scope-paths` this is false and the routing
+    # is exactly what it was before the test existed.
+    local scope_moved_verdict="false"
+    changed_outside_footprint "${project_root}" "${DELTA_DIFF_REF}" "${scope_paths_file}" && scope_moved_verdict="true"
+
     resolve_phase "${has_content}" "$((selected_threats + selected_rules))" "${siblings}" \
-        "${DELTA_EMPTY}" "${delta_unreliable}"
+        "${DELTA_EMPTY}" "${delta_unreliable}" "${scope_moved_verdict}"
+
+    # Whether anyone is watching, and whether there is a platform. Read here rather than in
+    # the lib so that stays pure over its arguments.
+    local unattended run_mode mode_note caller_band
+    resolve_run_mode "${INGRAIN_SECURITY_UNATTENDED-}"
+    resolve_gating_band "${INGRAIN_SECURITY_BAND-}" "${run_mode}"
 
     # Carried in the JSON so the absolute path and the rule governing it arrive together,
     # in the same tool result, at the moment the agent is about to write. A static sentence
@@ -299,8 +354,26 @@ emit_mint_facts() {
     if [ -n "${siblings}" ]; then
         instruction="${instruction} No file exists for this title, but this branch already carries other assessments — see siblings. If one of them is this same task under different wording, open it, read its \`## Task\` Title, and re-run this mint with that Title VERBATIM rather than starting a fresh review; a paraphrase mints a different file and loses the prior analysis."
     fi
+    if [ "${unattended}" = "true" ]; then
+        instruction="${instruction} This run is UNATTENDED (run_mode: ${run_mode}) — no window mechanism can reach a person, so every gate resolves without one: take Yes at the review question, select threats by the gating band's risk threshold, and accept-all at the rule gate."
+        if [ "${run_mode}" = "standalone" ]; then
+            instruction="${instruction} STANDALONE: make no 'ingrain context security_rules' call and no 'ingrain record' call at either finalize, and take the gating band from the caller_band field above, its threshold from threshold_<band>."
+        else
+            instruction="${instruction} CONNECTED: the gating band is the one the platform returns with the org rules, and the caller_band field above is deliberately empty — a band from anywhere else is not the org's and must not gate this run."
+        fi
+    fi
+    [ -n "${mode_note}" ] && instruction="${instruction} ${mode_note}"
 
-    printf '{"host":"%s","plugin_root":"%s","project_root":"%s","branch":"%s","branch_slug":"%s","branch_known":%s,"task_slug":"%s","%s_dir":"%s","%s_path":"%s","%s_abs":"%s","basename":"%s","has_content":%s,"selected_threats":%s,"selected_rules":%s,"phase":"%s","phase_reason":"%s","template_seeded":%s,"template_only":%s,"siblings":[%s],"instruction":"%s"}\n' \
+    # The band→threshold table travels as DATA, derived by calling the one resolver once per
+    # band — never written out beside it, which would be the second copy this exists to retire.
+    # ONE lookup rule for both modes: whoever holds the band reads `threshold_<band>`. A
+    # pre-resolved single value used to sit here too, saving standalone that lookup at the price
+    # of a second rule and a second emptiness to explain.
+    resolve_gating_threshold "high"   && t_high="${threshold}"
+    resolve_gating_threshold "medium" && t_medium="${threshold}"
+    resolve_gating_threshold "low"    && t_low="${threshold}"
+
+    printf '{"host":"%s","plugin_root":"%s","project_root":"%s","branch":"%s","branch_slug":"%s","branch_known":%s,"task_slug":"%s","%s_dir":"%s","%s_path":"%s","%s_abs":"%s","basename":"%s","has_content":%s,"selected_threats":%s,"selected_rules":%s,"phase":"%s","phase_reason":"%s","unattended":%s,"run_mode":"%s","caller_band":"%s","threshold_high":%s,"threshold_medium":%s,"threshold_low":%s,"template_seeded":%s,"template_only":%s,"siblings":[%s],"instruction":"%s"}\n' \
         "$(escape_for_json "${host_slug}")" \
         "$(escape_for_json "${plugin_root}")" \
         "$(escape_for_json "${project_root}")" \
@@ -317,6 +390,10 @@ emit_mint_facts() {
         "${selected_rules}" \
         "${phase}" \
         "${phase_reason}" \
+        "${unattended}" \
+        "${run_mode}" \
+        "${caller_band}" \
+        "${t_high}" "${t_medium}" "${t_low}" \
         "${template_seeded}" \
         "${template_only}" \
         "${siblings}" \

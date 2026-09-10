@@ -31,6 +31,7 @@ const devDoc = async (): Promise<string> =>
   `${await Deno.readTextFile(SKILL)}\n${await Deno.readTextFile(DEV_FLOW)}`;
 const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/lib/assessment-file.md`;
 const DISPATCH_REF = `${ROOT}skills/ingrain-security/references/lib/dispatch.md`;
+const VERIFY_REF = `${ROOT}skills/ingrain-security/references/testing/verification-pass.md`;
 const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
 const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
 const SESSION_START = `${ROOT}hooks/scripts/session-start`;
@@ -121,11 +122,11 @@ Deno.test("SKILL.md: the steps the orchestrator kept are named as its own", asyn
     assertStringIncludes(flow, "the same one the threat gate needs");
   });
 
-  await t.step("the re-tag is the script's, and never done by hand", () => {
-    assertStringIncludes(flow, "Then re-tag, with the script — never by hand");
+  await t.step("the sort is the script's, and never done by hand", () => {
+    assertStringIncludes(flow, "Then sort, with the script — never by hand");
     assertStringIncludes(flow, "scripts/threat-retag --assessment");
-    // Its refusal has to reach the orchestrator, or a half-scored list silently keeps the
-    // ids it was given and the priority freezes wrong.
+    // Its refusal has to reach the orchestrator, or a half-scored list is laid out in an
+    // order nobody set and read as a priority.
     assertStringIncludes(flow, "unscored-entries");
   });
 
@@ -408,51 +409,270 @@ Deno.test("field cards: the schema additions appear in the card as well as the r
 });
 
 /**
- * The threat ids ARE the priority: the re-tag sorts the frozen list into descending-risk order,
- * so `T01` is the most dangerous threat and every display just walks the ids.
+ * A threat's `T<nn>` is PERMANENT: the sort reorders the section by risk and renumbers nothing,
+ * so a tag names one threat for the life of the task and priority is read off `Risk score`.
  *
  * This guard exists because the docs and the live tests already drifted apart once, in exactly
  * this spot — a matcher asserted re-tagging while the skill told the scoring worker never to
- * renumber, so a worker obeying its instructions failed the agent test. The re-tag is a script
- * now, so the two ends are the script's own behaviour (tests/hooks/threat-retag.test.ts) and the
- * prose that tells the orchestrator to run it. Nothing but a static check keeps them in step.
+ * renumber, so a worker obeying its instructions failed the agent test. The two ends are the
+ * script's own behaviour (tests/hooks/threat-retag.test.ts) and the prose that tells the
+ * orchestrator to run it. Nothing but a static check keeps them in step.
+ *
+ * The negative sweep below is the load-bearing half. The id-as-rank claim was stated in eight
+ * files in six different phrasings, and a grep for any one of them passes with the other five
+ * intact — so each is matched separately. In this skill a stale sentence is not a stale comment:
+ * the prose IS the behaviour, and one surviving "display them in id order" is a live instruction
+ * to sort by a field that no longer ranks anything.
  */
-Deno.test("threat ids: the docs instruct re-tagging into risk order", async (t) => {
+Deno.test("threat ids: a tag is permanent, and nothing still calls it a rank", async (t) => {
   const retag = flatten(await Deno.readTextFile(RETAG_SCRIPT));
   const md = flatten(await devDoc());
 
-  await t.step("the script states the order it imposes, and what it means", () => {
-    assertStringIncludes(retag, "descending-risk order");
-    assertStringIncludes(retag, "T01` is the most dangerous threat");
+  await t.step("the script states that it sorts and does not renumber", () => {
+    assertStringIncludes(retag, "descending-risk");
+    assertStringIncludes(retag, "does NOT renumber");
   });
 
-  await t.step("nothing tells a writer to leave the ids alone", () => {
-    // The old contract's exact wording, when re-tagging was a worker's. Reintroducing it
-    // anywhere would put the prose back in conflict with the script's behaviour, which
-    // tests/hooks/threat-retag.test.ts pins.
-    for (const stale of [/do not renumber/i, /nothing to reorder/i, /scores in place/i]) {
+  await t.step("every retired phrasing is gone from every reference file", async () => {
+    // Each entry is one of the six ways the old invariant was written. Whole-tree rather than
+    // devDoc-only: the claim outlived its home twice, and the two files a display-order sweep
+    // misses (flow.md's "ids are stale" and assessment-file.md's "re-tagged exactly once") are
+    // both live instructions rather than prose.
+    const retired: ReadonlyArray<readonly [RegExp, string]> = [
+      [/the id (carries|is) the priority/i, "the id carries the priority"],
+      [/is the most dangerous threat/i, "`T01` is the most dangerous threat"],
+      [/reassign(s|ed)? ids|renumbers? them contiguously/i, "ids are reassigned/contiguous"],
+      [/in id order/i, "display in id order"],
+      [/ids you (were|are) holding are stale|IDS YOU HELD ARE STALE/i, "held ids are stale"],
+      [/re-tags the list exactly once|re-tags them once/i, "the list is re-tagged once"],
+    ];
+
+    // EVERY shipped file, not just `.md`/`.sh` under `skills/`. The narrower scan this
+    // replaced could not see the two surfaces the claim actually survived on: the bundled
+    // scripts are **extensionless** (`threat-retag`, `assessment-mint`, `branch-delta`), so an
+    // ext filter skipped the one whose `instruction` string a model reads directly; and
+    // `docs/` + `README.md` sit outside `skills/` entirely. `tests/` stays out on purpose —
+    // the `retired` table above states all six phrasings by construction.
+    const scanned: string[] = [];
+    const offenders: string[] = [];
+    for (const root of [`${ROOT}skills`, `${ROOT}docs`]) {
+      for await (const found of walk(root, { includeDirs: false })) {
+        scanned.push(found.path);
+        const text = flatten(await Deno.readTextFile(found.path));
+        for (const [pattern, label] of retired) {
+          if (pattern.test(text)) offenders.push(`${found.path.slice(ROOT.length)}: ${label}`);
+        }
+      }
+    }
+    for (const loose of [`${ROOT}README.md`]) {
+      scanned.push(loose);
+      const text = flatten(await Deno.readTextFile(loose));
+      for (const [pattern, label] of retired) {
+        if (pattern.test(text)) offenders.push(`${loose.slice(ROOT.length)}: ${label}`);
+      }
+    }
+
+    // Non-vacuity, twice over: a scan that found nothing, or that quietly stopped covering the
+    // extensionless scripts, would report green against nothing at all.
+    assertEquals(scanned.length > 15, true, `the sweep scanned only ${scanned.length} files`);
+    for (const script of ["threat-retag", "assessment-mint", "branch-delta"]) {
       assertEquals(
-        stale.test(md),
-        false,
-        `the dev docs tell a writer to leave threat ids alone (matched ${stale})`,
+        scanned.some((path) => path.endsWith(`/${script}`)),
+        true,
+        `the sweep no longer reaches the extensionless script ${script}`,
       );
     }
+    assertEquals(offenders, [], `retired id-as-rank claims survive:\n  ${offenders.join("\n  ")}`);
   });
 
-  await t.step("the threat gate displays threats in id order, not by re-sorting", () => {
-    assertStringIncludes(md, "**in id order — `T01` first**");
+  await t.step("the gate and the verification pass both display by risk, not by id", () => {
+    assertStringIncludes(md, "highest `Risk score`");
+    assertStringIncludes(md, "do not sort by id");
+  });
+
+  await t.step(
+    "the resume instruction carries tags across, which is where they used to move",
+    () => {
+      // The generator is where a tag is born and, on a resume, where it would be reassigned.
+      // A script that merely stops renumbering would faithfully preserve whatever the generator
+      // had already renumbered, so this is the half that has to be stated at the source.
+      const generator = flatten(
+        Deno.readTextFileSync(
+          `${ROOT}skills/ingrain-security/references/development/ingrain-threat-generator.md`,
+        ),
+      );
+      assertStringIncludes(generator, "Carry each surviving threat's `T<nn>` with it");
+      assertStringIncludes(generator, "only a genuinely new threat takes the next free one");
+    },
+  );
+
+  await t.step("the schema and its field card both carry the permanence rule", async () => {
+    // assessment-file.md owns what the id MEANS, the card is what a writer actually reads;
+    // the two must not drift (assessment-file.md -> "Where the shape lives").
+    assertStringIncludes(
+      flatten(await Deno.readTextFile(ASSESSMENT_REF)),
+      "permanent from that moment",
+    );
+    assertStringIncludes(flatten(await Deno.readTextFile(TEMPLATE_LIB)), "never renumbered");
+  });
+});
+
+Deno.test("unattended: the procedures carry the mode, not just SKILL.md", async (t) => {
+  // Phase 3's behaviour was pinned almost entirely by `tests/agents/` — a paid tier outside
+  // `ci` — so a reword that dropped an unattended resolution from the file the orchestrator
+  // WALKS would ship green. These are the load-bearing sentences, each read from the procedure
+  // that owns it rather than from the summary in SKILL.md.
+  const flow = flatten(await Deno.readTextFile(DEV_FLOW));
+  const verify = flatten(await Deno.readTextFile(VERIFY_REF));
+  const dispatch = flatten(await Deno.readTextFile(DISPATCH_REF));
+
+  await t.step("both gates resolve without a window, in the flow itself", () => {
+    assertStringIncludes(flow, "open no window and decide by the threshold");
+    assertStringIncludes(flow, "take accept-all and open no window");
+  });
+
+  await t.step("the connected band is carried from where it arrives", () => {
+    // It passes through exactly one step and is used three steps later; nothing else fetches
+    // it, so an orchestrator that does not keep it degrades every connected run to strictest.
+    assertStringIncludes(flow, "keep `maturityBand` from that same response");
+  });
+
+  await t.step("standalone skips the platform on every path that reaches it", () => {
+    // Including Step 0's `minor` branch, which records before the review even begins.
     assertEquals(
-      /the ids will not be in order/i.test(md),
+      (flow.match(/[Ss]tandalone skips/g) ?? []).length >= 1,
+      true,
+      "the Development flow no longer states a standalone skip",
+    );
+    assertStringIncludes(verify, "standalone");
+  });
+
+  await t.step("the fall-through is stated, and so is the case that skips it", () => {
+    assertStringIncludes(flow, "Continue, do not re-enter");
+    assertStringIncludes(flow, "Skip it when neither gate selected anything");
+  });
+
+  await t.step("Testing knows it can be entered by continuation, not only by routing", () => {
+    // Its step 0 reused a batch measured BEFORE Development wrote, then read the stale
+    // `has_content: false` as a mis-mint and told the run to stop.
+    assertStringIncludes(verify, "Continued from Development's finalize");
+  });
+
+  await t.step("dispatch knows nobody is there to grant it", () => {
+    assertStringIncludes(dispatch, "there is nobody to ask: dispatch");
+  });
+});
+
+Deno.test("unattended: the band table is stated once, at exactly 25/50/75", async (t) => {
+  // Three constants that decide what a CI run ENFORCES, in the one repository that holds
+  // them: Part 1 defers server-side enforcement precisely so this table is not duplicated
+  // across repos, which makes "stated once" the property worth pinning. A typo'd threshold
+  // does not fail anything — it silently gates the wrong set.
+  //
+  // **The authority is `mint.sh`, not SKILL.md.** The numbers were prose the model applied;
+  // they are now resolved in bash and handed to the run, so the prose must point AT them and
+  // never restate them — a restatement is a second authority whether or not it agrees today.
+  const skill = flatten(await Deno.readTextFile(SKILL));
+
+  await t.step("the prose points at the resolved number and states none itself", () => {
+    assertStringIncludes(skill, "handed to you as a number");
+    assertEquals(
+      /\b(low|medium|high)\b[^.\n]{0,60}\babove\s+\*?\*?\d{1,3}\b/i.test(skill),
       false,
-      "SKILL.md must not tell the reader the gate's ids are out of order — the scorer re-tagged them",
+      "SKILL.md states a band threshold again — the gate reads the mint's number, so a copy " +
+        "here can only ever be a second authority that drifts from it",
     );
   });
 
-  await t.step("the schema and its field card both carry the rule", async () => {
-    // assessment-file.md owns what the id MEANS, the card is what a writer actually reads;
-    // the two must not drift (assessment-file.md -> "Where the shape lives").
-    assertStringIncludes(flatten(await Deno.readTextFile(ASSESSMENT_REF)), "re-tags the list");
-    assertStringIncludes(flatten(await Deno.readTextFile(TEMPLATE_LIB)), "re-tags them once");
+  await t.step("ONE authority, and every restatement of it agrees", async () => {
+    // The step this test is named for, and it was missing: five `assertStringIncludes` on
+    // SKILL.md asserted the numbers are *here*, never anything about elsewhere — while the
+    // comment claimed "stated once, here" was the property worth pinning.
+    //
+    // "Stated once" is too strong to be the real rule. `README.md` restates the thresholds and
+    // should: it is what a customer reads, and sending them to an agent instruction file for
+    // the numbers would be worse. What must not happen is a **second agent-facing authority**
+    // (which could mis-gate a run) or a restatement that has **drifted** (which misinforms a
+    // customer about the bar their own code is held to). So: nothing under `skills/` or `docs/`
+    // may carry the table, and any file that mentions a threshold must agree with SKILL.md.
+    // **Match on the SHAPE of a threshold claim, never on the correct numbers.** Requiring all
+    // three of 25/50/75 to flag a rival inverts the check: a copy is caught only while it still
+    // AGREES, and goes unnoticed the moment it drifts — which is the failure this exists to
+    // catch. So a rival is any file pairing a band word with a threshold at all.
+    const authority = `${ROOT}skills/ingrain-security/scripts/lib/mint.sh`;
+    const statesThreshold = (text: string): boolean =>
+      /\b(low|medium|high)\b[^.\n]{0,60}\babove\s+\*?\*?\d{1,3}\b/i.test(text) ||
+      /\babove\s+\*?\*?\d{1,3}\b[^.\n]{0,60}\b(low|medium|high)\b/i.test(text);
+
+    // The resolver is the one authority, and it must still carry every number.
+    const resolver = await Deno.readTextFile(authority);
+    for (const [band, n] of [["low", "75"], ["medium", "50"], ["high", "25"]] as const) {
+      assertEquals(
+        new RegExp(`${band}\\)\\s*threshold="${n}"`).test(resolver),
+        true,
+        `mint.sh no longer resolves \`${band}\` to ${n} — the gate reads this, so a change here ` +
+          "is a change to what every unattended run enforces",
+      );
+    }
+
+    const rivals: string[] = [];
+    for (const root of [`${ROOT}skills`, `${ROOT}docs`]) {
+      for await (const found of walk(root, { includeDirs: false })) {
+        if (found.path === authority) continue;
+        if (statesThreshold(flatten(await Deno.readTextFile(found.path)))) {
+          rivals.push(found.path.slice(ROOT.length));
+        }
+      }
+    }
+    assertEquals(
+      rivals,
+      [],
+      "a second agent-facing copy of the band→threshold table — the gate reads one, and these " +
+        `can drift from it silently:\n  ${rivals.join("\n  ")}`,
+    );
+
+    // The customer-facing restatement is allowed, and held to the same numbers.
+    //
+    // **Gated on a NUMBER appearing, not on the word "threshold".** Keying the check to one word
+    // let a reword disable it silently — and SKILL.md itself calls this a "bar", so rewording is
+    // the natural thing to do. Any three-digit-or-less figure beside a band word means the README
+    // is making a claim about the gate, and the claim has to be the gate's.
+    const readme = flatten(await Deno.readTextFile(`${ROOT}README.md`));
+    if (statesThreshold(readme)) {
+      for (const [band, threshold] of [["high", 25], ["medium", 50], ["low", 75]] as const) {
+        assertEquals(
+          new RegExp(`\`${band}\`[^.]{0,40}above \\*?\\*?${threshold}\\b`).test(readme),
+          true,
+          `README.md states a threshold for \`${band}\` that is not ${threshold} — a customer ` +
+            "would be told a different bar from the one the gate applies",
+        );
+      }
+    }
+  });
+
+  await t.step("the direction is stated, because it reads backwards", () => {
+    // Higher maturity means a LOWER bar. Every reader's first instinct is the opposite, so
+    // the reason is written down rather than left to be re-derived from the numbers.
+    assertStringIncludes(skill, "Higher maturity means a *lower* bar");
+  });
+
+  await t.step("every gate resolves, and the fallback is the strictest band", () => {
+    // SR-6 applied to a value rather than a step: a band that failed to arrive must not
+    // leave the threat gate with no threshold.
+    assertStringIncludes(skill, "degrades to the strictest");
+    assertStringIncludes(skill, "can never fail to resolve");
+  });
+
+  await t.step("sub-threshold threats are reported, not dropped", () => {
+    // The half of the trade that makes a threshold acceptable at all: the band gates
+    // REQUIRED WORK, never what gets seen.
+    assertStringIncludes(skill, "Sub-threshold threats are reported, not dropped");
+    assertStringIncludes(skill, "recorded `excluded`");
+  });
+
+  await t.step("the applied threshold is recorded, so no one downstream recomputes it", () => {
+    assertStringIncludes(skill, "`Gating band` and `Gating threshold`");
+    assertStringIncludes(skill, "Written by an unattended run only");
   });
 });
 
@@ -633,8 +853,11 @@ Deno.test("step 0: the review question is the user's, asked with a recommended d
   assertStringIncludes(skill, "No — this change is not security-relevant");
   // The asymmetry the whole skill rests on: a needless review is cheap, a missed concern is not.
   assertStringIncludes(skill, "Borderline recommends `Yes`");
-  // And the non-interactive fallback goes the same way, for the same reason.
-  assertStringIncludes(skill, "No window mechanism reachable");
+  // And the non-interactive path goes the same way, for the same reason. Named on both
+  // triggers: `unattended: true` is the one the action sets deliberately, and a host with no
+  // window primitive is the one nobody chose.
+  assertStringIncludes(skill, "`unattended: true`, or no window mechanism reachable");
+  assertStringIncludes(skill, "take `Yes` and open no window");
 });
 
 Deno.test("the relevance-triage worker is gone from every surface", async () => {
@@ -767,7 +990,9 @@ Deno.test("the retrieval instruction passes --assessment, so the search is actua
     );
     // Flattened: the doc is hand-wrapped, so matching raw text would tie this to line breaks.
     assertStringIncludes(flatten(retrieval), "never on gate selections");
-    assertStringIncludes(retrieval, "wide net");
+    // Breadth is the instruction; "cast a wide net" was the metaphor that carried it until
+    // tests/static/prose.test.ts banned it. Pin the direction, not the image.
+    assertStringIncludes(retrieval, "Retrieve broadly");
   });
 });
 

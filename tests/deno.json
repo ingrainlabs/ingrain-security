@@ -8,7 +8,13 @@
     "test:parity": "deno test --allow-run=bash --allow-read --allow-write --allow-env parity/",
     "test:hooks": "deno test --allow-run=bash --allow-read --allow-write --allow-env hooks/",
     "test:shell": "deno test --allow-run=git,shellcheck,bash --allow-read --allow-write --allow-env shell/",
+
     "test:agent": "deno test --allow-run=claude,bash --allow-read --allow-write --allow-env agents/ skill/trigger.test.ts",
+    "test:agent:workers": "deno test --allow-run=claude,bash --allow-read --allow-write --allow-env agents/agents.test.ts",
+    "test:agent:unattended": "deno test --allow-run=claude,bash --allow-read --allow-write --allow-env agents/unattended.test.ts",
+    "test:agent:resume": "deno test --allow-run=claude,bash --allow-read --allow-write --allow-env agents/resume.test.ts",
+    "test:agent:trigger": "deno test --allow-run=claude,bash --allow-read --allow-write --allow-env skill/trigger.test.ts",
+
     "test:integration": "INTEGRATION=1 deno test --allow-run=claude,bash,git,shellcheck --allow-read --allow-env --allow-write .",
     "ci": "deno task lint && deno task fmt:check && deno task test:offline",
     "variants": "deno run --allow-run --allow-read --allow-write --allow-env skillVariantTest/run.ts",

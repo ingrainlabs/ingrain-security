@@ -143,6 +143,79 @@ Deno.test("gate: denies a code write when no assessment exists at all", async ()
   });
 });
 
+Deno.test("gate: a sibling branch's verdict does not open this branch's gate", async () => {
+  // The lookup globbed `assessment-<slug>*.md`, which matches every slug this one is a
+  // PREFIX of — so answering the review question on `feature/thing-two` recorded a
+  // `Verdict: minor` that let every write on `feature/thing` through unreviewed.
+  await withProject("feature/thing", async (dir) => {
+    await writeAssessment(dir, "feature-thingtwo", "minor");
+    const res = await runGate(claudeWrite("src/app.ts", dir), { projectDir: dir });
+    assertEquals(res.decision, "deny", "another branch's verdict is not this branch's");
+  });
+});
+
+Deno.test("gate: this branch's own verdict still opens the gate, both filename shapes", async () => {
+  // The positive half — without it the test above passes on a lookup that finds nothing at
+  // all, which would block every write on every branch forever.
+  await withProject("feature/thing", async (dir) => {
+    await writeAssessment(dir, "feature-thing", "minor");
+    assertEquals(
+      (await runGate(claudeWrite("src/app.ts", dir), { projectDir: dir })).decision,
+      "defer",
+    );
+  });
+  // The title-less form the CI path mints: `assessment-<branch-slug>.md`, no task segment.
+  await withProject("feature/thing", async (dir) => {
+    await Deno.writeTextFile(
+      `${dir}/.ingrain-security/assessment-feature-thing.md`,
+      "# Security assessment\n\n## Task\nTitle: t\n\n## Triage\nVerdict: minor\nSecurity relevant:\n",
+    );
+    assertEquals(
+      (await runGate(claudeWrite("src/app.ts", dir), { projectDir: dir })).decision,
+      "defer",
+    );
+  });
+});
+
+Deno.test("gate: denies a NotebookEdit, whose target is `notebook_path`", async () => {
+  // `NotebookEdit` is on the matcher but names its target `notebook_path`, and its schema
+  // admits no extra properties — so a gate reading only `file_path` extracted nothing and
+  // returned before deciding. A notebook was the one code write nothing gated.
+  await withProject("feature/thing", async (dir) => {
+    const res = await runGate({
+      tool_name: "NotebookEdit",
+      tool_input: { notebook_path: `${dir}/src/analysis.ipynb` },
+      cwd: dir,
+    }, { projectDir: dir });
+    assertEquals(res.decision, "deny");
+  });
+});
+
+Deno.test("gate: denies a Codex patch whose heredoc opener carries a space", async () => {
+  // `apply_patch << 'EOF'` is an ordinary heredoc — the space after `<<` is optional in the
+  // shell. The opener regex required it absent, so this envelope failed to parse, and an
+  // unparseable envelope is one the gate returns on rather than blocks.
+  await withProject("feature/thing", async (dir) => {
+    const res = await runGate({
+      tool_name: "apply_patch",
+      tool_input: {
+        command: [
+          "apply_patch << 'EOF'",
+          "*** Begin Patch",
+          "*** Update File: src/app.ts",
+          "@@",
+          "-old",
+          "+new",
+          "*** End Patch",
+          "EOF",
+        ].join("\n"),
+      },
+      cwd: dir,
+    }, { projectDir: dir, host: "codex" });
+    assertEquals(res.decision, "deny");
+  });
+});
+
 Deno.test("gate: denies when the Verdict field is present but unanswered", async () => {
   await withProject("feature/thing", async (dir) => {
     await writeAssessment(dir, "feature-thing", "");

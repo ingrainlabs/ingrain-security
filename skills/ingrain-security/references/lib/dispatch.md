@@ -69,9 +69,10 @@ costs one call rather than one per line.
 
 An entry's field lines are **not** one contiguous run: `## Threats` entries are divided into
 `#### ` phase blocks, one per writing stage, and replacing first-field-to-last would swallow the
-markers between them. **Every stage writes inside its own marker, with no exception.** Re-tagging
-is `skills/ingrain-security/scripts/threat-retag`'s, and it moves entries by line span without
-re-typing a block, so no stage has cause to rewrite `## Threats` whole.
+markers between them. **Every stage writes inside its own marker, with no exception.** Sorting
+the section into risk order is `skills/ingrain-security/scripts/threat-retag`'s, and it moves
+entries by line span without re-typing a line, so no stage has cause to rewrite `## Threats`
+whole.
 
 **The file tells you its own shape.** The mint seeds a **field card** under every section, and that
 card is the write contract — write from it. `references/lib/assessment-file.md` is for what
@@ -85,6 +86,13 @@ the subagent to read the worker reference file from
 worker per call and read the returned text. Where the host supports a per-subagent
 model, set the worker's recommended tier; otherwise ignore it (advisory).
 
+**Three hosts have one, and the primitive is named differently on each.** Claude Code and
+Codex call it a subagent or task tool. **OpenCode dispatches by `@mention`**: it distinguishes
+`mode: "primary"` from `mode: "subagent"`, ships `general`, `explore` and `scout` as built-in
+subagents, and invoking one by name spawns a worker session. So the **designed dispatched mode
+applies on OpenCode too** — the sequential fallback below is not the OpenCode path, and reading
+it as one would give up per-worker context and the model tier for no reason.
+
 ## When a session rule gates subagents behind user request
 
 A **session rule says** the subagent tool is yours to call once the user has requested it — the
@@ -92,6 +100,12 @@ wording you will see is *"unless the user requested it."* Read that as a **permi
 mechanism the host already has**: the rule names the condition that opens it, so the work is to
 obtain that request. The sequential fallback below covers a different case — a host whose only mode
 is the main session.
+
+**Unattended, there is nobody to ask: dispatch.** The signal means no window mechanism can reach
+a person, so the gate the rule describes cannot be opened — and waiting on it stalls the run at its
+first action. The permission the rule seeks is the *user's request*, which an unattended run
+carries by construction: it was started to perform this review. Say in the closing verdict that the
+flow ran dispatched. Everything below is for an attended run.
 
 **Ask the user to allow the subagent flow, before the first dispatch of the run** — Development
 Step 1a's threat generator, or Testing's verifier fan-out. Ask once, up front: one answer covers the whole run,
@@ -171,3 +185,7 @@ The primitive is generic; only the mechanism changes per host:
   if it is declined — `flow.md` § 4b owns why that is the default.
 - **Text fallback** — where the host lacks a windowed primitive, ask the user to
   reply with the ids to include (e.g. `T01 T03`) or `none`.
+- **Unattended — neither branch applies.** No window opens and no reply is waited for: both gates
+  resolve without a person, the threat gate on the run's threshold and the rule gate on
+  accept-all. → `SKILL.md` § Unattended runs. The tables are still displayed; they are the whole
+  of the gate's output there.

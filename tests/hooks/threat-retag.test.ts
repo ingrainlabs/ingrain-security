@@ -4,7 +4,7 @@
  * throwaway dir, so they need the `test:hooks` run+write permissions and call no model.
  *
  * **This is where the re-tag's central promise is proved.** The script moves entries by line
- * span, so every phase block travels with its threat byte for byte and only the `T<nn>` token
+ * span, so every phase block AND every heading travels with its threat byte for byte; no token
  * in a heading is ever rewritten. The script checks its own line arithmetic and nothing more;
  * the byte-preservation claim is asserted from the outside, here — a multiset comparison over
  * every non-heading line, which no span bug can satisfy accidentally.
@@ -44,7 +44,6 @@ interface IRetagJson {
   count: number;
   threats: Array<{
     tag: string;
-    previous_tag: string;
     title: string;
     risk_score: number;
     criticality: string;
@@ -229,16 +228,16 @@ const headings = (text: string): string[] =>
   text.split("\n").filter((line) => /^### T\d+\b/.test(line));
 
 /**
- * Every line the re-tag is not allowed to touch, sorted.
+ * Every line in the file, sorted.
  *
  * A multiset rather than a sequence, because the whole point is that entries MOVED: comparing
- * in order would fail on a correct run. Headings are excluded because they are the one line the
- * script does rewrite, and they are asserted separately.
+ * in order would fail on a correct run. Headings are INCLUDED — since the tag became permanent
+ * the script rewrites no line at all, so the multiset covers the whole file rather than
+ * exempting the one line it used to edit.
  */
-const nonHeadingLines = (text: string): string[] =>
-  text.split("\n").filter((line) => !/^### T\d+\b/.test(line)).sort();
+const everyLine = (text: string): string[] => text.split("\n").sort();
 
-Deno.test("threat-retag: sorts by risk, renumbers from T01, and moves nothing else", async (t) => {
+Deno.test("threat-retag: sorts by risk, keeps every tag, and moves nothing else", async (t) => {
   // On a MINTED file, so the promise below is made about the document a run actually re-tags —
   // real field card, real neighbouring sections, real line endings.
   const { path, body: before } = await mintedAssessment([
@@ -267,27 +266,34 @@ Deno.test("threat-retag: sorts by risk, renumbers from T01, and moves nothing el
     assertEquals(json.count, 3);
   });
 
-  await t.step("the file reads T01..Tn in descending risk order", () => {
+  await t.step("entries land in descending risk order, each under the tag it arrived with", () => {
+    // The BR-10 assertion, at the file. The order changed and not one tag did: `the dangerous
+    // one` leads on 88 while keeping T02, and T01 sinks to last rather than being handed to
+    // whichever threat now ranks first.
     assertEquals(headings(after), [
-      "### T01 — the dangerous one",
-      "### T02 — middling",
-      "### T03 — low risk one",
+      "### T02 — the dangerous one",
+      "### T03 — middling",
+      "### T01 — low risk one",
     ]);
   });
 
-  await t.step("the emitted order maps each new id back to the one that was scored", () => {
-    assertEquals(json.threats.map((entry) => entry.tag), ["T01", "T02", "T03"]);
-    assertEquals(json.threats.map((entry) => entry.previous_tag), ["T02", "T03", "T01"]);
+  await t.step("the emitted order reports the same tags, in risk order", () => {
+    assertEquals(json.threats.map((entry) => entry.tag), ["T02", "T03", "T01"]);
+    // The tags themselves, asserted against what the fixture carried in: the day this list
+    // stops matching, a tag moved. `previous_tag` used to stand here, but it was emitted from
+    // the same expression as `tag`, so comparing the two could only ever hold.
+    assertEquals(json.threats.map((entry) => entry.tag), ["T02", "T03", "T01"]);
     assertEquals(json.threats.map((entry) => entry.risk_score), [88, 55, 30]);
     assertEquals(json.threats.map((entry) => entry.criticality), ["critical", "medium", "low"]);
     assertEquals(json.threats[0].title, "the dangerous one");
   });
 
-  await t.step("every line except the three headings survives byte for byte", () => {
+  await t.step("every line in the file survives byte for byte, headings included", () => {
     // The assertion the whole script exists to earn. A span bug that swallowed a marker, or
     // dropped a blank line, or duplicated a block, changes this multiset; a correct move
-    // cannot.
-    assertEquals(nonHeadingLines(after), nonHeadingLines(before));
+    // cannot. Headings are in scope now — the script edits no line, so a rewritten tag would
+    // fail here too.
+    assertEquals(everyLine(after), everyLine(before));
   });
 
   await t.step("the section's field card stays above the entries it describes", () => {
@@ -295,8 +301,11 @@ Deno.test("threat-retag: sorts by risk, renumbers from T01, and moves nothing el
     // see it MOVE — only vanish. A span bug that took the `## Threats` boundary an entry too
     // early would carry the card into the list and satisfy every other assertion here.
     const card = after.indexOf("THE BLOCK IS THE OWNERSHIP RECORD");
+    // Anchored on whichever entry leads the section, not on `T01` by name: the leading tag is
+    // now whatever scored highest, so naming one would quietly stop testing the boundary.
+    const firstEntry = after.search(/^### T\d+\b/m);
     assert(card > after.indexOf("## Threats"), "the field card left its own section");
-    assert(card < after.indexOf("### T01"), "the field card sank below the first entry");
+    assert(card < firstEntry, "the field card sank below the first entry");
   });
 
   await t.step("every entry still carries its four markers, in order", () => {
@@ -336,10 +345,47 @@ Deno.test("threat-retag: sorts by risk, renumbers from T01, and moves nothing el
   });
 });
 
+Deno.test("threat-retag: a re-score reorders the list and moves no tag", async () => {
+  // The case CI makes ordinary. Locally a re-review is rare; unattended, every run after the
+  // first is one, and a re-review re-scores every entry. While the tag was assigned from
+  // position, a moved score moved the tag with it — so a finding posted against `T01` came
+  // back describing a different threat one push later, with nothing on screen to show it.
+  const { path } = await mintedAssessment([
+    entry({ tag: "T01", title: "was riskiest", score: score("critical", "high", 90, "critical") }),
+    entry({ tag: "T02", title: "was middling", score: score("medium", "medium", 50, "medium") }),
+    entry({ tag: "T03", title: "was safest", score: score("low", "low", 10, "low") }),
+  ]);
+  await run(["--assessment", path]);
+  assertEquals(headings(await Deno.readTextFile(path)), [
+    "### T01 — was riskiest",
+    "### T02 — was middling",
+    "### T03 — was safest",
+  ]);
+
+  // The re-assessment: the ranking inverts completely, which before BR-10 would have handed
+  // `T01` to `was safest`.
+  const rescored = (await Deno.readTextFile(path))
+    .replace("Risk score: 90", "Risk score: 5")
+    .replace("Risk score: 10", "Risk score: 99");
+  await Deno.writeTextFile(path, rescored);
+  const second = await run(["--assessment", path]);
+  const after = await Deno.readTextFile(path);
+
+  assertEquals(second.code, 0, second.stderr);
+  assertEquals(JSON.parse(second.stdout).retagged, true);
+  assertEquals(headings(after), [
+    "### T03 — was safest",
+    "### T02 — was middling",
+    "### T01 — was riskiest",
+  ]);
+  // Order is the only thing that moved: same lines, rearranged.
+  assertEquals(everyLine(after), everyLine(rescored));
+});
+
 Deno.test("threat-retag: ties break by impact, then likelihood, then the incoming id", async () => {
   // All four entries carry the SAME risk score, so nothing but the tie-breaks decides the
   // order — and the last of them is unique within the file, which is what makes the total
-  // order total. Two runs over the same scores must produce the same ids.
+  // order total. Two runs over the same scores must produce the same document order.
   const before = assessment([
     entry({
       tag: "T01",
@@ -363,15 +409,15 @@ Deno.test("threat-retag: ties break by impact, then likelihood, then the incomin
   const json: IRetagJson = JSON.parse(result.stdout);
 
   assertEquals(result.code, 0, result.stderr);
-  assertEquals(json.threats.map((entry) => entry.previous_tag), ["T03", "T02", "T04", "T01"]);
-  assertEquals(nonHeadingLines(await Deno.readTextFile(path)), nonHeadingLines(before));
+  assertEquals(json.threats.map((entry) => entry.tag), ["T03", "T02", "T04", "T01"]);
+  assertEquals(everyLine(await Deno.readTextFile(path)), everyLine(before));
 });
 
 Deno.test("threat-retag: refuses a half-scored section and leaves the file alone", async () => {
-  // An id is permanent from here — guidance references it — so an order computed over entries
-  // the scoring stage never reached would freeze the wrong priority, and nothing downstream
-  // could correct it. Refusing whole is the only safe answer, and the file must come through
-  // untouched so the missing scores can simply be filled in.
+  // An unscored entry has no risk to sort on, so it would land wherever the comparison
+  // happened to drop it and read as a priority nobody set. Refusing whole is the only safe
+  // answer, and the file must come through untouched so the missing scores can simply be
+  // filled in.
   const before = assessment([
     entry({ tag: "T01", title: "scored", score: score("high", "high", 70, "high") }),
     entry({ tag: "T02", title: "never scored", score: "" }),
@@ -426,7 +472,7 @@ Deno.test("threat-retag: reads a marker-less entry by field presence", async () 
 
   assertEquals(result.code, 0, result.stderr);
   assertEquals(json.retagged, true);
-  assertEquals(json.threats.map((entry) => entry.previous_tag), ["T02", "T01"]);
+  assertEquals(json.threats.map((entry) => entry.tag), ["T02", "T01"]);
 });
 
 Deno.test("threat-retag: reads scores only from the ## Threats section", async () => {
@@ -461,7 +507,9 @@ Deno.test("threat-retag: preserves CRLF line endings", async () => {
   const after = await Deno.readTextFile(path);
 
   assertEquals(JSON.parse(result.stdout).retagged, true);
-  assertStringIncludes(after, "### T01 — loud\r\n");
+  // `loud` outranks `quiet` so it moves to the front, and it arrives there still called T02.
+  assertStringIncludes(after, "### T02 — loud\r\n");
+  assert(after.indexOf("— loud") < after.indexOf("— quiet"), "the sort did not reorder");
   assertEquals(after.split("\n").length, before.split("\n").length);
   assert(!/[^\r]\n/.test(after), "a line lost its carriage return");
 });

@@ -7,6 +7,8 @@
 export interface RunOptions {
   /** Plugin dir to load (skills + hooks). Defaults to repo root. */
   pluginDir?: string;
+  /** Model (`--model`). Defaults to `AGENT_MODEL`; override to run one case on another tier. */
+  model?: string;
   /** Use `--output-format stream-json`; populates `events`. */
   streamJson?: boolean;
   /** Cap agentic turns (`--max-turns`). */
@@ -23,6 +25,16 @@ export interface RunOptions {
    * holds what the prompt names.
    */
   cwd?: string;
+  /**
+   * Extra environment for the spawned session, merged over the harness's own.
+   *
+   * The unattended signal reaches the skill through `assessment-mint`, which the session
+   * spawns for itself — so it has to be on the session's environment rather than passed as a
+   * flag. Set per call rather than with `Deno.env.set`: that mutates the whole test process,
+   * and Deno runs test files in parallel, so one unattended case would silently make every
+   * other run unattended too.
+   */
+  env?: Record<string, string>;
 }
 
 export interface StreamEvent {

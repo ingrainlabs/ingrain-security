@@ -119,7 +119,8 @@ canonical_assessment_dir() {
 #     and equality (not a prefix) means a sibling folder sharing the prefix falls through.
 #   - the basename matches the minter's naming (`assessment*.md` — one artifact carries the
 #     whole analysis, so it is the only file this plugin mints),
-#   - the target is not a symlink, which would follow the link out of the folder.
+#   - the target is not a symlink, which would follow the link out of the folder,
+#   - and it is not a HARD link, which reaches out of the folder without being a link at all.
 #
 # A legitimate target's parent already exists — ensure-assessment-dir and assessment-mint
 # both create the folder — so a parent that cannot be entered is grounds to refuse.
@@ -138,7 +139,29 @@ is_assessment_target() {
     esac
 
     [ -L "${canon_parent}/${base}" ] && return 1
+    is_hard_linked "${canon_parent}/${base}" && return 1
     return 0
+}
+
+# True when the file has more than one directory entry pointing at its inode — a HARD link.
+#
+# The `[ -L ]` test above catches a symlink and CANNOT catch this: as far as the path is
+# concerned a hard link is not a link, it is the file. So `.ingrain-security/assessment-x.md`
+# hard-linked to `~/.ssh/authorized_keys` satisfies every test above — right parent, right
+# basename, not a symlink — and the auto-approve grant then writes through it to a file
+# outside the folder. Canonicalization is no help: a hard link has no target path to resolve,
+# which is exactly what makes it the one escape the containment test cannot see.
+#
+# `find -links +1` rather than `stat`, whose format flag is `-c %h` on GNU and `-f %l` on BSD
+# and would need both spellings to work on the macOS this plugin supports. A nonexistent path
+# yields nothing, which is the right answer for an assessment being created.
+#
+# **No `find` means no opinion, and today's behaviour stands** — unavailable evidence must not
+# invent a stricter answer, or a host without `find` would start prompting on every assessment
+# write, which is the prompt this hook exists to remove.
+is_hard_linked() {
+    command -v find >/dev/null 2>&1 || return 1
+    [ -n "$(find "$1" -maxdepth 0 -links +1 2>/dev/null)" ]
 }
 
 # True when the path LOOKS like an assessment artifact — any `.ingrain-security/assessment*.md`,
@@ -192,7 +215,12 @@ collect_patch_paths() {
 
     # `apply_patch`, optionally opening a heredoc: `apply_patch <<'EOF'`, `<<-"PATCH"`, …
     # Group 2 captures the delimiter, so the suffix can be held to the one actually opened.
-    opener_re="^apply_patch([[:space:]]+<<-?[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?)?[[:space:]]*\$"
+    #
+    # The whitespace after `<<` is OPTIONAL IN THE SHELL, so it has to be optional here.
+    # `apply_patch << 'EOF'` is an ordinary heredoc bash accepts, and without this the regex
+    # refused it — which the review gate reads as an unparseable patch and passes through
+    # UNGATED (`|| return`). One space was the whole bypass.
+    opener_re="^apply_patch([[:space:]]+<<-?[[:space:]]*[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?)?[[:space:]]*\$"
 
     while IFS= read -r line; do
         line="${line%$'\r'}"

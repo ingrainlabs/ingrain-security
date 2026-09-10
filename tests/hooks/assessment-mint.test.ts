@@ -85,6 +85,13 @@ interface IPathJson {
   /** The resolved route, and which state produced it. */
   phase: "development" | "testing" | "requires_judgement";
   phase_reason: string;
+  /** Whether anyone is watching, which mode the run is in, and the standalone gating band. */
+  unattended: boolean;
+  run_mode: "attended" | "connected" | "standalone";
+  caller_band: string;
+  threshold_high: number;
+  threshold_medium: number;
+  threshold_low: number;
   template_seeded: boolean;
   template_only: boolean;
   siblings: string[];
@@ -724,4 +731,268 @@ Deno.test("phase: the script resolves the route, and says when it cannot", async
     assertEquals(doubt.phase, "requires_judgement");
     assertEquals(doubt.phase_reason, "delta_unreliable");
   });
+});
+
+Deno.test("run mode: the unattended signal and the standalone band", async (t) => {
+  // Every guard on these two was a live-model case, so the mechanism itself was untested:
+  // changing `band="high"` to `band="low"` in mint.sh passed `deno task ci` untouched. These
+  // are pure functions of one environment variable each — the cheapest thing in the phase to
+  // pin, and the one deciding what an unattended run enforces.
+  const mint = async (env: Record<string, string>, dir: string): Promise<IPathJson> => {
+    const res = await new Deno.Command("bash", {
+      args: [SCRIPT, "claude", "--title", "Mode fixture"],
+      clearEnv: true,
+      env: { ...baseEnv(dir), ...env },
+      stdout: "piped",
+      stderr: "piped",
+    }).output();
+    assertEquals(res.code, 0, new TextDecoder().decode(res.stderr));
+    return JSON.parse(new TextDecoder().decode(res.stdout));
+  };
+
+  await withProject(async (dir) => {
+    await sh(gitRepo("feat/mode"), dir);
+
+    await t.step("unset is attended, and reports no band", async () => {
+      const j = await mint({}, dir);
+      assertEquals([j.unattended, j.run_mode, j.caller_band], [false, "attended", ""]);
+    });
+
+    await t.step("the two known values select their mode", async () => {
+      for (const mode of ["connected", "standalone"]) {
+        const j = await mint({ INGRAIN_SECURITY_UNATTENDED: mode }, dir);
+        assertEquals([j.unattended, j.run_mode], [true, mode], `${mode} did not resolve`);
+      }
+    });
+
+    await t.step("an unrecognised value is unattended + connected, and says so", async () => {
+      // The loud direction: a wrong `connected` guess fails a sync visibly, where a wrong
+      // `standalone` one records nothing and reports nothing.
+      const j = await mint({ INGRAIN_SECURITY_UNATTENDED: "yes" }, dir);
+      assertEquals([j.unattended, j.run_mode], [true, "connected"]);
+      assertStringIncludes(j.instruction, 'is set to "yes"');
+    });
+
+    await t.step("every band value resolves, and anything else degrades to `high`", async () => {
+      // SR-6 applied to a value: a gate that could not resolve its threshold would select
+      // everything or nothing, both worse than the strictest bar the org's vocabulary has.
+      for (
+        const [raw, expected] of [
+          ["low", "low"],
+          ["medium", "medium"],
+          ["high", "high"],
+          ["LOW", "high"],
+          ["aggressive", "high"],
+          ["", "high"],
+        ]
+      ) {
+        const j = await mint(
+          { INGRAIN_SECURITY_UNATTENDED: "standalone", INGRAIN_SECURITY_BAND: raw },
+          dir,
+        );
+        assertEquals(
+          j.caller_band,
+          expected,
+          `BAND=${JSON.stringify(raw)} resolved to ${j.caller_band}`,
+        );
+      }
+    });
+
+    await t.step("a connected run is given NO band, whatever the workflow set", async () => {
+      // BR-8's control, and the reason it is a control rather than a convention: a
+      // `pull_request` runs the workflow file from the PR head, so the author of the change
+      // under review could otherwise set the bar it is held to. Refusing to report the value
+      // is what makes the precedence unforgeable instead of model-enforced.
+      for (const mode of ["connected", ""]) {
+        const j = await mint(
+          mode === "" ? { INGRAIN_SECURITY_BAND: "low" } : {
+            INGRAIN_SECURITY_UNATTENDED: mode,
+            INGRAIN_SECURITY_BAND: "low",
+          },
+          dir,
+        );
+        assertEquals(j.caller_band, "", `${mode || "attended"} was handed a workflow band`);
+      }
+    });
+
+    await t.step("the band map is resolved here, not left for the gate to work out", async () => {
+      // The one constant that decides what a customer's CI enforces, and until it was resolved
+      // in bash the comparison was the model's: the skill stated a table and the gate applied
+      // it, so nothing offline could check the number. Phase 5 quotes it into a pull-request
+      // comment, which makes it a claim about the bar the customer's code was held to.
+      // One lookup rule for both modes: `threshold_<band>`. The pre-resolved single value that
+      // used to sit beside these saved standalone one lookup at the price of a second rule and
+      // a field that was empty in connected mode and had to be explained.
+      const j = await mint(
+        { INGRAIN_SECURITY_UNATTENDED: "standalone", INGRAIN_SECURITY_BAND: "low" },
+        dir,
+      );
+      assertEquals(
+        [j.threshold_low, j.threshold_medium, j.threshold_high],
+        [75, 50, 25],
+        "the band map the gate reads has drifted",
+      );
+    });
+
+    await t.step("an unrecognised band degrades to the strictest bar, never to none", async () => {
+      // SR-6 applied to a value: a gate that cannot resolve its threshold would select
+      // everything or nothing, and both are worse than the strictest bar the vocabulary has.
+      for (const raw of ["", "HIGH", "bogus", "critical"]) {
+        const j = await mint(
+          { INGRAIN_SECURITY_UNATTENDED: "standalone", INGRAIN_SECURITY_BAND: raw },
+          dir,
+        );
+        assertEquals(
+          j.caller_band,
+          "high",
+          `band ${JSON.stringify(raw)} resolved to ${j.caller_band}`,
+        );
+      }
+    });
+
+    await t.step("the whole map travels, so a connected run can look its band up", async () => {
+      // A connected run's band arrives from the platform AFTER the mint, so `caller_band` is
+      // empty and the map is what the band it later receives gets looked up in.
+      const j = await mint({ INGRAIN_SECURITY_UNATTENDED: "connected" }, dir);
+      assertEquals(j.caller_band, "", "connected was handed a caller band it must not apply");
+      assertEquals(
+        [j.threshold_high, j.threshold_medium, j.threshold_low],
+        [25, 50, 75],
+        "the band map the connected gate reads has drifted",
+      );
+    });
+  });
+});
+
+Deno.test("phase: a change that outgrew the recorded footprint re-enters Development", async (t) => {
+  // `verify_now` fires on any run with gated drivers and a delta — which unattended is EVERY
+  // run after the first. So a branch that acquires work outside the area the analysis was
+  // built for would be checked forever against the first push's threats, and the review would
+  // keep passing while coverage fell behind. That is the failure worth routing on precisely
+  // because it looks like success.
+  //
+  // The footprint is written OUTSIDE the repository here, as it is in a real run: it lands in
+  // the git-ignored `.ingrain-security/`, and a fixture that put it in the tree would make
+  // every case read `scope_moved` — the footprint file itself being an untracked path outside
+  // the footprint.
+  const gateOneThreat = async (path: string) => {
+    const lines = (await Deno.readTextFile(path)).split("\n");
+    let i = lines.indexOf("## Threats") + 1;
+    while (i < lines.length && !lines[i].startsWith("## ")) i++;
+    await Deno.writeTextFile(
+      path,
+      [...lines.slice(0, i), "### T01 — a", "Selection: selected", "", ...lines.slice(i)].join(
+        "\n",
+      ),
+    );
+  };
+
+  const footprints = await Deno.makeTempDir({ prefix: "ingrain-footprint-" });
+  try {
+    await withProject(async (dir) => {
+      await sh("git init -q -b main . && git commit -q --allow-empty -m base", dir);
+      await sh("git checkout -q -b feat", dir);
+      await sh("mkdir -p backend/routes frontend/src backend-legacy", dir);
+      const mint = await runJson(["claude", "--title", "T"], { projectDir: dir });
+      await gateOneThreat(mint.assessment_abs);
+      await sh("echo a > backend/routes/x.ts && git add -A && git commit -q -m backend", dir);
+
+      const inside = `${footprints}/inside`;
+      await Deno.writeTextFile(inside, "backend/\n");
+
+      await t.step("no footprint supplied — routing is exactly what it was", async () => {
+        // Locally nothing records a footprint, so the absent case must not invent a
+        // promotion. This is the assertion that keeps the local flow unchanged.
+        const r = await runJson(["claude", "--title", "T"], { projectDir: dir });
+        assertEquals(r.phase_reason, "verify_now");
+      });
+
+      await t.step("change inside the footprint still routes to Testing", async () => {
+        const r = await runJson(["claude", "--title", "T", "--scope-paths", inside], {
+          projectDir: dir,
+        });
+        assertEquals(r.phase_reason, "verify_now");
+      });
+
+      await t.step("change reaching outside it re-enters Development", async () => {
+        await sh("echo b > frontend/src/y.ts && git add -A && git commit -q -m frontend", dir);
+        const r = await runJson(["claude", "--title", "T", "--scope-paths", inside], {
+          projectDir: dir,
+        });
+        assertEquals(r.phase, "development");
+        assertEquals(r.phase_reason, "scope_moved");
+      });
+
+      await t.step("a footprint that covers the new work routes to Testing again", async () => {
+        const widened = `${footprints}/widened`;
+        await Deno.writeTextFile(widened, "backend/\nfrontend/\n");
+        const r = await runJson(["claude", "--title", "T", "--scope-paths", widened], {
+          projectDir: dir,
+        });
+        assertEquals(r.phase_reason, "verify_now");
+      });
+
+      await t.step("`backend/` does not cover `backend-legacy/`", async () => {
+        // The case a bare string-prefix test gets wrong, and gets wrong in the unsafe
+        // direction: it would report a change as covered by an analysis that never looked
+        // at it. The match is on a folder boundary, so the trailing slash is load-bearing.
+        await sh("git rm -q -r --cached frontend && rm -rf frontend", dir);
+        await sh("echo z > backend-legacy/n.ts && git add -A && git commit -q -m legacy", dir);
+        const r = await runJson(["claude", "--title", "T", "--scope-paths", inside], {
+          projectDir: dir,
+        });
+        assertEquals(r.phase, "development");
+        assertEquals(r.phase_reason, "scope_moved");
+      });
+
+      await t.step("the repository root, however it is spelled, covers everything", async () => {
+        // `.` and `./` are one intent with two spellings, and they used to have opposite
+        // outcomes: `.` became the prefix "./" and matched no path, promoting EVERY run to
+        // Development forever, while `./` normalised to empty and vanished, skipping the test
+        // in silence. A footprint covering the whole tree must simply never fire.
+        for (const spelled of [".", "./"]) {
+          const whole = await Deno.makeTempFile();
+          await Deno.writeTextFile(whole, `${spelled}\n`);
+          const r = await runJson(["claude", "--title", "T", "--scope-paths", whole], {
+            projectDir: dir,
+          });
+          assertEquals(
+            r.phase_reason === "scope_moved",
+            false,
+            `a footprint of "${spelled}" covers the whole repository, so nothing is outside it`,
+          );
+          await Deno.remove(whole);
+        }
+      });
+
+      await t.step("an absolute footprint entry is refused, not silently permanent", async () => {
+        // Repository-relative paths are what this compares against, so an absolute entry can
+        // never match one — left alone it reads as "everything moved" on every run, which is
+        // the silent permanent misroute the JSON refusal already guards the other shape from.
+        const abs = await Deno.makeTempFile();
+        await Deno.writeTextFile(abs, "/backend\n");
+        const r = await runJson(["claude", "--title", "T", "--scope-paths", abs], {
+          projectDir: dir,
+        });
+        assertEquals(r.phase_reason === "scope_moved", false, "an absolute entry promoted a run");
+        await Deno.remove(abs);
+      });
+
+      await t.step("an unreadable or empty footprint is 'unknown', never 'moved'", async () => {
+        // Both degrade to the pre-existing routing rather than to a promotion: an unknown
+        // must not manufacture a re-analysis, and a footprint that failed to arrive is
+        // indistinguishable here from one that was never owed.
+        const empty = `${footprints}/empty`;
+        await Deno.writeTextFile(empty, "\n  \n");
+        for (const file of [`${footprints}/does-not-exist`, empty]) {
+          const r = await runJson(["claude", "--title", "T", "--scope-paths", file], {
+            projectDir: dir,
+          });
+          assertEquals(r.phase_reason, "verify_now", `${file} should not route on scope`);
+        }
+      });
+    });
+  } finally {
+    await Deno.remove(footprints, { recursive: true });
+  }
 });

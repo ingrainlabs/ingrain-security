@@ -68,19 +68,27 @@ async function runHook(
   return { code: out.code, stdout, allowed: stdout.includes('"permissionDecision":"allow"') };
 }
 
-/** A PreToolUse payload for a file-editing tool. */
+/**
+ * A PreToolUse payload for a file-editing tool.
+ *
+ * **The target's key is per tool, and getting it wrong is what made the notebook case
+ * vacuous.** `NotebookEdit` takes `notebook_path` and its schema admits no extra
+ * properties, so a payload carrying `file_path` is a shape the host never sends — the
+ * suite looped over four tools while exercising three.
+ */
 function payload(
   toolName: string,
   filePath: string,
   cwd: string,
   extra: Record<string, string> = {},
 ): string {
+  const pathKey = toolName === "NotebookEdit" ? "notebook_path" : "file_path";
   return JSON.stringify({
     session_id: "test",
     cwd,
     hook_event_name: "PreToolUse",
     tool_name: toolName,
-    tool_input: { file_path: filePath, ...extra },
+    tool_input: { [pathKey]: filePath, ...extra },
   });
 }
 
@@ -266,6 +274,34 @@ Deno.test("defer: the target is a symlink", async () => {
       { projectDir: dir },
     );
     assertEquals(res.allowed, false);
+  });
+});
+
+Deno.test("defer: the target is a HARD link out of the folder", async () => {
+  await withProject(async (dir) => {
+    // The symlink guard cannot see this one: a hard link is not a link as far as the path
+    // is concerned, so the target passes the parent, basename and `-L` tests while the
+    // write lands on an inode outside the folder. Same filesystem, which is what a hard
+    // link needs and what a repo and its temp root ordinarily share.
+    const outside = `${dir}/secret.txt`;
+    await Deno.writeTextFile(outside, "not the assessment\n");
+    await sh(`ln "${outside}" "${dir}/.ingrain-security/assessment-evil.md"`);
+    const res = await runHook(
+      payload("Write", `${dir}/.ingrain-security/assessment-evil.md`, dir),
+      { projectDir: dir },
+    );
+    assertEquals(res.allowed, false);
+  });
+});
+
+Deno.test("allow: an ordinary single-linked assessment is still approved", async () => {
+  // The positive control for the hard-link guard: without it, a link-count check that
+  // refused everything would pass the test above while removing the hook's whole purpose.
+  await withProject(async (dir) => {
+    const target = `${dir}/.ingrain-security/assessment-main-real.md`;
+    await Deno.writeTextFile(target, "# Security assessment\n");
+    const res = await runHook(payload("Write", target, dir), { projectDir: dir });
+    assertEquals(res.allowed, true);
   });
 });
 

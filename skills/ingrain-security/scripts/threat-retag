@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
 # The THREAT RE-TAG for the ingrain-security plugin. Sibling to the assessment minter.
 #
-# Sorts a scored `## Threats` section into descending-risk order and renumbers the entries
-# contiguously from `T01`, so `T01` is the most dangerous threat and every downstream display
-# reads the priority straight off the ids. Emits ONE JSON object on stdout; diagnostics go to
-# stderr.
+# Sorts a scored `## Threats` section into descending-risk order. It does NOT renumber: every
+# entry keeps the `T<nn>` it arrived with, so a tag names one threat for the life of the task.
+# Emits ONE JSON object on stdout; diagnostics go to stderr.
+#
+# THE NAME IS NOW A MISNOMER — it reorders and re-tags nothing. Kept for one release so the
+# callers that invoke it by path do not break; renaming is a follow-up.
+#
+# WHY THE TAG IS PERMANENT. It used to be a rank: sort by risk, renumber from `T01`. That made
+# the id move whenever a score moved, and a re-review re-scores every entry — so across two runs
+# of the same task `T01` could name two different threats. Anything anchored to the id then
+# describes the wrong threat silently: a CI review posts its findings as pull-request comments
+# keyed on the tag, and a comment thread would follow a rank rather than the threat it was
+# opened about. Risk order is still worth having, so it survives as DOCUMENT order; what it
+# stopped being is the id. Display reads the `Risk score` column, which every threat table
+# already carries.
 #
 # WHY THIS IS A SCRIPT. Scoring is judgement and belongs to the orchestrator; the re-tag is
 # bookkeeping — a total order over five numbers — and a model doing it has to rewrite the whole
@@ -15,13 +26,16 @@
 #
 # THE ORDER, and why it is total. Risk score descending, then impact (critical > high > medium >
 # low), then likelihood (very high > high > medium > low), then the incoming id ascending. The
-# last key is unique within the file, so two runs over the same scores produce the same ids —
-# which is what makes the re-tag safe to re-run on a re-assessment.
+# last key is unique within the file, so two runs over the same scores produce the same document
+# order — which is what makes this safe to re-run on a re-assessment.
 #
-# WHAT IT REFUSES TO DO. Re-tag a partially scored section. An id is permanent from here on —
-# guidance references it — so an order computed over entries the scoring stage has not reached
-# yet would freeze the wrong priority. A refusal is a complete JSON object with `retagged: false`,
-# a `reason`, and `malformed` naming the entries; the file is left exactly as it was.
+# WHAT IT REFUSES TO DO. Order a partially scored section. An entry the scoring stage never
+# reached has no risk to sort on, so it would land wherever the comparison happened to drop it
+# and read as a priority nobody set. (Before the tag became permanent this refusal protected
+# something sharper — ids were assigned from position, so a bad order froze the wrong ids. That
+# hazard is gone; a wrong order is now a display defect, which is still worth refusing.) A
+# refusal is a complete JSON object with `retagged: false`, a `reason`, and `malformed` naming
+# the entries; the file is left exactly as it was.
 #
 # Usage:
 #   threat-retag --assessment PATH
@@ -49,7 +63,7 @@
 # The keys below are this script's AGENT-FACING CONTRACT — see the same block in
 # `assessment-mint` for what it is and which tier reads it.
 # CONTRACT KEYS BEGIN
-#   retagged reason threats tag previous_tag title risk_score criticality
+#   retagged reason threats tag title risk_score criticality
 #   malformed instruction
 # CONTRACT KEYS END
 #
@@ -62,26 +76,29 @@ set -uo pipefail
 
 usage() {
     cat <<'EOF'
-Re-tag an assessment's scored threats into descending-risk order. Prints one JSON object.
+Sort an assessment's scored threats into descending-risk order. Prints one JSON object.
 
 Usage:
   threat-retag --assessment PATH
   threat-retag --help
 
 Arguments:
-  --assessment PATH   the assessment file to re-tag — pass `assessment_abs` from the mint
+  --assessment PATH   the assessment file to sort — pass `assessment_abs` from the mint
                       verbatim. Must name an assessment*.md inside an .ingrain-security/ folder.
 
 What it does: sorts the `## Threats` entries by risk score descending (ties broken by impact,
-then likelihood, then the incoming id) and renumbers them contiguously from T01. Entries move
-by line span, so every phase block — #### gen, #### usergate, #### test — travels with its
-threat byte for byte; only the `T<nn>` token in the heading is rewritten.
+then likelihood, then the incoming id). It does NOT renumber — every entry keeps the `T<nn>` it
+arrived with, so a tag names one threat for the life of the task. Entries move by line span, so
+every phase block — #### gen, #### usergate, #### test — travels with its threat byte for byte,
+and the heading is emitted unchanged.
 
 Output keys:
   retagged      true when the file was rewritten; false when there was nothing to do
   reason        why not, when retagged is false: no-assessment-file | no-threats-section |
                 no-threat-entries | unscored-entries
-  threats       the new order: [{tag, previous_tag, title, risk_score, criticality}], T01 first
+  threats       the new document order: [{tag, title, risk_score, criticality}],
+                highest risk first. Ids do not move: a tag identifies a threat for the life
+                of the task, so the sort changes order and never names
   malformed     entries the parse could not read in full (missing marker, missing score field)
   instruction   restates how to read the above
 
@@ -119,6 +136,22 @@ trim() {
     s="${s#"${s%%[![:space:]]*}"}"
     s="${s%"${s##*[![:space:]]}"}"
     printf '%s' "${s}"
+}
+
+# A fenced-block delimiter, so a threat body that QUOTES the entry format is not read as
+# structure. The field card under `## Threats` teaches that format, so a body showing an
+# example `### T99` or `#### score` is expected rather than adversarial — and read as a
+# heading it starts a phantom entry, tearing the real one's blocks across two locations.
+# The span surgery then moves the halves apart while the line-count self-check still passes,
+# because no line is lost, only relocated.
+#
+# An UNTERMINATED fence swallows the rest of its scan, which ends in a refusal that leaves
+# the file byte-identical. That is the safe direction: the alternative is the silent tear.
+is_fence_marker() {
+    case "${1#"${1%%[![:space:]]*}"}" in
+        '```'*|'~~~'*) return 0 ;;
+    esac
+    return 1
 }
 
 # The two enumerated score fields, as sort keys. An unrecognized or absent value ranks 0, below
@@ -172,7 +205,7 @@ emit_refusal() {
         no-assessment-file) instruction="No file at the path given, so there was nothing to re-tag. Check you passed assessment_abs from the mint verbatim." ;;
         no-threats-section) instruction="The file carries no '## Threats' heading, so there was nothing to re-tag." ;;
         no-threat-entries)  instruction="The '## Threats' section holds no '### T<nn>' entries yet, so there was nothing to re-tag. A rules-only review reaches this legitimately — carry on to the gates." ;;
-        unscored-entries)   instruction="Some threats carry no readable 'Risk score', so the file was left EXACTLY as it was: an order computed over a half-scored list would freeze the wrong priority, and ids are permanent from here. Fill the '#### score' block of each entry named in malformed, then run this again." ;;
+        unscored-entries)   instruction="Some threats carry no readable 'Risk score', so the file was left EXACTLY as it was: an entry with nothing to sort on would land wherever the comparison dropped it and read as a priority nobody set. No id was touched — tags are permanent and this script never assigns them. Fill the '#### score' block of each entry named in malformed, then run this again." ;;
         *)                  instruction="Nothing was re-tagged; the file was left exactly as it was." ;;
     esac
 
@@ -187,8 +220,8 @@ emit_refusal() {
 # Parse, sort, rewrite and report. $1 the assessment path. Emits ONE JSON object on stdout.
 #
 # The whole file is read into an array once and every later step addresses it by line index, so
-# an entry is MOVED rather than re-rendered: the only line this function rewrites is a heading,
-# and only the `T<nn>` token within it.
+# an entry is MOVED rather than re-rendered. Since the tag became permanent this function
+# rewrites no line at all — headings included — so the move is pure re-indexing.
 retag_threats() {
     local path="$1"
     local line stripped i
@@ -208,8 +241,11 @@ retag_threats() {
     # `count_selected_in_section` uses, so a threat's fields can never be read out of another
     # section.
     local threats_start=-1 threats_end="${total}"
+    local in_fence=0
     for ((i = 0; i < total; i++)); do
         stripped="${lines[i]%$'\r'}"
+        if is_fence_marker "${stripped}"; then in_fence=$((1 - in_fence)); continue; fi
+        [ "${in_fence}" -eq 0 ] || continue
         if [ "${threats_start}" -lt 0 ]; then
             [ "${stripped}" = "## Threats" ] && threats_start=$i
             continue
@@ -225,8 +261,11 @@ retag_threats() {
     # travel with it.
     local -a start=() tag=() title=()
     local n=0
+    in_fence=0
     for ((i = threats_start + 1; i < threats_end; i++)); do
         stripped="${lines[i]%$'\r'}"
+        if is_fence_marker "${stripped}"; then in_fence=$((1 - in_fence)); continue; fi
+        [ "${in_fence}" -eq 0 ] || continue
         if [[ "${stripped}" =~ ^###[[:space:]]+T([0-9]+)([[:space:]].*)?$ ]]; then
             start+=("$i")
             tag+=("${BASH_REMATCH[1]}")
@@ -281,8 +320,12 @@ retag_threats() {
         # the block, so a `Risk score` line in another block is never read as this one's.
         block_start=$((start[i] + 1))
         block_end="${end[i]}"
+        in_fence=0
         for ((j = start[i] + 1; j < end[i]; j++)); do
-            case "${lines[j]%$'\r'}" in
+            stripped="${lines[j]%$'\r'}"
+            if is_fence_marker "${stripped}"; then in_fence=$((1 - in_fence)); continue; fi
+            [ "${in_fence}" -eq 0 ] || continue
+            case "${stripped}" in
                 '#### score'*) ;;
                 *) continue ;;
             esac
@@ -302,9 +345,13 @@ retag_threats() {
         for ((j = block_start; j < block_end; j++)); do
             stripped="${lines[j]%$'\r'}"
             case "${stripped}" in
+                # Normalised through `10#` before it is stored: the value lands in a JSON
+                # NUMBER slot in the report, and `08` there is not valid JSON — so a
+                # zero-padded score would mutate the file on disk and then hand the caller
+                # an unparseable report telling it what the new order is.
                 'Risk score:'*)  value="$(trim "${stripped#Risk score:}")"
-                                 [[ "${value}" =~ ^[0-9]{1,3}$ ]] && [ "${value}" -le 100 ] &&
-                                     risk[i]="${value}" ;;
+                                 [[ "${value}" =~ ^[0-9]{1,3}$ ]] && [ "$((10#${value}))" -le 100 ] &&
+                                     risk[i]="$((10#${value}))" ;;
                 'Impact:'*)      imp[i]="$(impact_rank "$(trim "${stripped#Impact:}")")" ;;
                 'Likelihood:'*)  lik[i]="$(likelihood_rank "$(trim "${stripped#Likelihood:}")")" ;;
                 'Criticality:'*) crit[i]="$(trim "${stripped#Criticality:}")" ;;
@@ -345,16 +392,12 @@ retag_threats() {
         out+=("${lines[i]}")
     done
 
-    local idx new_tag head
-    local -a new_tags=()
+    local idx
     for ((i = 0; i < n; i++)); do
         idx="${order[i]}"
-        new_tag="$(printf 'T%02d' "$((i + 1))")"
-        new_tags+=("${new_tag}")
-        # Only the `T<nn>` token is rewritten; the rest of the heading — separator, title, any
-        # trailing `\r` — is the original line's own bytes.
-        head="${lines[start[idx]]}"
-        out+=("${head/T${tag[idx]}/${new_tag}}")
+        # The tag travels with its entry. Position no longer names it, so the heading is
+        # emitted byte for byte and this loop rewrites nothing at all.
+        out+=("${lines[start[idx]]}")
         for ((j = start[idx] + 1; j < body_end[idx]; j++)); do
             out+=("${lines[j]}")
         done
@@ -398,8 +441,7 @@ retag_threats() {
     for ((i = 0; i < n; i++)); do
         idx="${order[i]}"
         threats_json="${threats_json}${sep}$(printf \
-            '{"tag":"%s","previous_tag":"T%s","title":"%s","risk_score":%s,"criticality":"%s"}' \
-            "${new_tags[i]}" \
+            '{"tag":"T%s","title":"%s","risk_score":%s,"criticality":"%s"}' \
             "${tag[idx]}" \
             "$(escape_for_json "${title[idx]}")" \
             "${risk[idx]}" \
@@ -407,7 +449,7 @@ retag_threats() {
         sep=","
     done
 
-    instruction="The entries are now in descending-risk order under new ids: T01 is the most dangerous threat. THE IDS YOU HELD ARE STALE — take every id from the threats array above, whose previous_tag maps each new id back to the one you scored, and show threats in that order from here on. The ids are permanent now: guidance references them."
+    instruction="The entries are now in descending-risk DOCUMENT order — highest risk first. THE IDS DID NOT CHANGE: every threat kept the tag you scored it under. Show threats in the order of the threats array above, never sorted by id — a tag identifies a threat for the life of the task and carries no priority. Risk score is what carries priority, and every threat table already has that column."
 
     printf '{"retagged":true,"reason":"","count":%s,"threats":[%s],"malformed":[],"instruction":"%s"}\n' \
         "${n}" \

@@ -13,6 +13,15 @@ import { isWorker } from "./workers.ts";
 /** Repo root = two levels up from this file (tests/lib/claudeRunner.ts). */
 export const PLUGIN_DIR = fromFileUrl(new URL("../..", import.meta.url));
 
+/**
+ * The tier every live case runs on.
+ *
+ * Set explicitly because the harness otherwise inherits whatever the invoking CLI defaulted to,
+ * so the same suite measured a different model from a laptop than from CI. The moving alias is
+ * deliberate: it tracks the current Sonnet rather than needing a bump each release.
+ */
+export const AGENT_MODEL = "sonnet";
+
 /** Per-call timeouts (ms). */
 export const AGENT_TIMEOUT_MS = 120_000; // single-agent default
 export const SESSION_TIMEOUT_MS = 180_000; // full session (skill + agents)
@@ -183,7 +192,7 @@ const MINT_SCRIPT = `${PLUGIN_DIR}/skills/ingrain-security/scripts/assessment-mi
 export const mintAssessment = async (
   projectDir: string,
   title: string,
-): Promise<{ assessmentAbs: string }> => {
+): Promise<{ assessmentAbs: string; json: Record<string, unknown> }> => {
   const out = await new Deno.Command("bash", {
     args: [MINT_SCRIPT, "claude", "--title", title],
     clearEnv: true,
@@ -198,8 +207,10 @@ export const mintAssessment = async (
   if (out.code !== 0) {
     throw new Error(`assessment mint failed: ${new TextDecoder().decode(out.stderr)}`);
   }
-  const minted = JSON.parse(new TextDecoder().decode(out.stdout)) as { assessment_abs: string };
-  return { assessmentAbs: minted.assessment_abs };
+  const minted = JSON.parse(new TextDecoder().decode(out.stdout)) as Record<string, unknown>;
+  // The whole object, not just the path: the mint is the authority for the gating thresholds
+  // too, and a test mirroring those numbers would be an unpinned copy of them.
+  return { assessmentAbs: minted.assessment_abs as string, json: minted };
 };
 
 /** Names of all tools the model invoked, in order. */
@@ -216,6 +227,7 @@ export const toolNames = (events: StreamEvent[]): string[] =>
 export const runClaude = async (prompt: string, opts: RunOptions = {}): Promise<RunResult> => {
   const args = ["--print", "--dangerously-skip-permissions"];
   args.push("--plugin-dir", opts.pluginDir ?? PLUGIN_DIR);
+  args.push("--model", opts.model ?? AGENT_MODEL);
   if (opts.streamJson) args.push("--output-format", "stream-json", "--verbose");
   if (opts.maxTurns !== undefined) args.push("--max-turns", String(opts.maxTurns));
   if (opts.allowedTools?.length) args.push("--allowed-tools", opts.allowedTools.join(","));
@@ -224,6 +236,10 @@ export const runClaude = async (prompt: string, opts: RunOptions = {}): Promise<
   const cmd = new Deno.Command("claude", {
     args,
     cwd: opts.cwd,
+    // Merged over the inherited environment rather than replacing it: the session needs the
+    // caller's PATH, HOME and credentials to run at all, and `opts.env` only ever adds the
+    // one or two variables a case is about.
+    env: opts.env,
     stdin: "piped",
     stdout: "piped",
     stderr: "piped",

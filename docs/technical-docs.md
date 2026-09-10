@@ -141,26 +141,37 @@ from every Development run. The scoring worker also did one job that is not judg
 
 ---
 
-## The re-tag
+## The sort (`threat-retag`)
 
-Sorting the scored threats into descending-risk order and renumbering them `T01…Tn` is a total
-order over four keys, so it is a script rather than a prompt:
+Sorting the scored threats into descending-risk order is a total order over four keys, so it is a
+script rather than a prompt:
 
     threat-retag --assessment "<assessment_abs>"
 
 Risk score descending → impact → likelihood → the incoming id, which is unique, so the order is
 total and re-running it on an already-sorted section is a fixed point.
 
+**It sorts; it does not renumber.** A threat's `T<nn>` is assigned once, by the generator, and
+belongs to that threat for the life of the task. The name is now a misnomer, kept for one release
+so callers invoking it by path do not break.
+
+**Why the tag stopped being a rank.** It used to be one: sort by risk, renumber from `T01`. That
+made the id move whenever a score moved — and a re-review re-scores every entry, so across two
+runs of the same task `T01` could name two different threats. Anything anchored to the tag then
+described the wrong threat silently, which is fatal to a CI review that posts findings as
+pull-request comments keyed on it: the thread would follow a rank rather than the threat it was
+opened about. Risk order survives as **document** order; priority is read from the `Risk score`
+column every threat table already carries.
+
 **It is also what retired the block rule's one exception.** Moving an entry means moving it, and
 the worker that used to do this was told to rewrite `## Threats` wholesale and carry every block
 it did not own across verbatim — a live run came back having flattened a populated `#### test`
-block, erasing a prior pass's verdicts. The script moves entries by **line span** and rewrites
-nothing but the `T<nn>` token in each heading, so every other block survives byte for byte and no
-writer needs an exemption any more.
+block, erasing a prior pass's verdicts. The script moves entries by **line span** and now re-types
+no line at all, so every block and every heading survives byte for byte.
 
 **It refuses a half-scored section** (`retagged: false`, `reason: unscored-entries`) and leaves
-the file untouched: ids are permanent from here, so an order computed over entries the scoring
-step never reached would freeze the wrong priority with nothing downstream able to correct it.
+the file untouched: an entry the scoring step never reached has no risk to sort on, so it would
+land wherever the comparison dropped it and read as a priority nobody set.
 
 **Context discipline.** The orchestrator holds only compact statuses and pointers, and reads
 bounded slices of the assessment at the gates and at finalize. Retrieval is the single exception:
@@ -212,6 +223,76 @@ information, and what was concluded syncs. Completeness is the pass's procedure,
 checklist rather than enforced as a validation rule.
 
 ---
+
+## Phase select's routing
+
+`resolve_phase` in `scripts/lib/mint.sh` reads six measured facts and emits `phase` +
+`phase_reason`. The **order the states are tested in is the whole of its meaning**, which is why
+it is a rule in one place rather than prose each caller re-derives.
+
+| `phase_reason` | Fires when | Route |
+|---|---|---|
+| `siblings_present` | no file for this title, but written assessments sit beside it | `requires_judgement` |
+| `fresh_task` | nothing written for this task | `development` |
+| `resume_analysis` | written, but no driver gated on either axis | `development` |
+| `scope_moved` | **the change reached code outside the recorded footprint** | `development` |
+| `verify_now` | drivers gated and a delta exists | `testing` |
+| `delta_unreliable` | drivers gated, tree clean, and no fork point resolved | `requires_judgement` |
+| `implementation_ahead` | drivers gated, tree clean, fork point fine | `development` |
+
+**`scope_moved` is tested before `verify_now`, and that ordering is the point.** They read the
+same delta against different questions — "is there code to verify" versus "is it still the code
+this analysis was built for". Unattended, every run after the first has a delta, so without the
+earlier test a branch that acquires work elsewhere routes to `verify_now` forever: it keeps being
+checked against the first push's threats while coverage falls behind, and the review keeps
+passing. That is the failure worth routing on precisely because it looks like success.
+
+The footprint reaches the mint as `--scope-paths FILE`, one repository-relative folder per line.
+It lives on the platform, so **a local run has no source for it and omits the flag** — and with
+no footprint the verdict is false, leaving the route exactly as it was. `changed_outside_footprint`
+in `scripts/lib/changed-files.sh` matches on a **folder boundary**, so `backend/` does not cover
+`backend-legacy/`; a bare string prefix would report a change as covered by an analysis that never
+looked at it.
+
+That lib exists because two scripts now need the same answer to "what did this branch touch", and
+they run in the same Phase-select block. A second implementation could disagree, and the
+disagreement would surface as a route.
+
+## Unattended runs
+
+`INGRAIN_SECURITY_UNATTENDED` carries two facts in one variable: **presence** says no window
+mechanism can reach a person, and its **value** (`connected` | `standalone`) says whether there is
+a platform. The second is not inferable — the skill otherwise reads connectedness off the CLI
+being present, which unattended it always is, baked into the image.
+
+The mint reports both as `unattended` and `run_mode`, because the first gate is Step 0's review
+question — reached before the run has taken a turn of its own, so a signal the orchestrator had to
+go and read for itself would arrive a turn late.
+
+`INGRAIN_SECURITY_BAND` is the second variable, reported as `caller_band` and read **only in
+standalone**: with no
+platform to ask, the caller supplies the gating band (`low` | `medium` | `high`, anything else
+resolving to `high`). A connected run's band is the org's own and arrives on the rule-retrieval
+response, so the mint refuses to report a caller-supplied one there — on a pull request the
+workflow file comes from the branch under review, and precedence stated only in prose would be
+the author's to argue with.
+
+The band → threshold numbers live in `scripts/lib/mint.sh`, and the mint emits them as
+`threshold_high` / `threshold_medium` / `threshold_low`. One lookup rule serves both modes —
+`threshold_<band>`, the band coming from `caller_band` in standalone and from the retrieval's
+`maturityBand` when connected — so the gate reads a number rather than applying a table from
+prose. It is the one constant that decides what a customer's CI enforces, and Phase 5 quotes it
+into a pull-request comment.
+
+**An unrecognised value resolves to `connected`**, which is the safe direction rather than the
+lenient one: guessing connected when the truth is standalone fails a `record` visibly against a
+platform with no token, while guessing standalone records nothing and says nothing — the silent
+degradation `ingrain assert-synced` exists to catch. The offending value is named in
+`instruction` so a typo is visible rather than merely survivable.
+
+Each gate's unattended resolution, and the band → threshold table it turns on, live in
+`SKILL.md` § Unattended runs — one copy, because Part 1 defers server-side enforcement
+specifically to avoid a second.
 
 ## The trigger layer
 
