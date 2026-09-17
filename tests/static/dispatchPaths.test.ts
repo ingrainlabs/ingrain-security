@@ -8,7 +8,7 @@
  * verifiers were dispatched that way.
  *
  * The fix is the one the same template already applies to the write target: paste the
- * absolute path in, from the mint JSON. `plugin_root` is what the write target's
+ * absolute path in, from the mint JSON. The skill's own base directory is what the write target's
  * `assessment_abs` is for reads.
  *
  * **Why a scan and not a literal assertion.** The defect did not stay put. It was filed
@@ -23,7 +23,7 @@ import { fromFileUrl, join, relative } from "@std/path";
 const SKILL_ROOT = fromFileUrl(new URL("../../skills/ingrain-security/", import.meta.url));
 
 /** The absolute form every dispatch must use. */
-const ABSOLUTE_LEAD = "<plugin_root>/skills/ingrain-security/references/";
+const ABSOLUTE_LEAD = "<skill_dir>/references/";
 
 /**
  * **Scope: the FIRST read handed to a subagent, and nothing else.**
@@ -101,7 +101,7 @@ Deno.test("no dispatch tells a subagent to read a relative references/ path", as
     [],
     `A dispatched subagent has read nothing yet, so it resolves this against the USER'S ` +
       `project rather than the plugin and the read fails on its first action. Write ` +
-      `"${ABSOLUTE_LEAD}…" and paste plugin_root in from the mint JSON, exactly as the ` +
+      `"${ABSOLUTE_LEAD}…" and paste this skill's base directory in, exactly as the ` +
       `write target already pastes assessment_abs:\n  ${offenders.join("\n  ")}`,
   );
 });
@@ -121,19 +121,22 @@ Deno.test("the prose describing a dispatch names the absolute reference path too
   );
 });
 
-Deno.test("the mint carries the plugin_root a dispatch needs to build that path", async () => {
+Deno.test("SKILL.md tells the orchestrator where that absolute path comes from", async () => {
   // The scan above is satisfiable by prose alone. This is the other half: the value the
-  // prose tells the orchestrator to paste has to actually arrive in the JSON it keeps.
-  // The JSON is emitted by the SCRIPT, which is where the composition lives — the lib holds
-  // only pure helpers now.
-  const mint = await Deno.readTextFile(join(SKILL_ROOT, "scripts/assessment-mint"));
+  // prose tells the orchestrator to paste has to have a stated source. It used to be a
+  // `plugin_root` field in the mint's JSON; it is now the skill's own base directory, which
+  // the Skill tool states on invoke — so nothing has to carry it through the run.
   const skill = await Deno.readTextFile(join(SKILL_ROOT, "SKILL.md"));
 
-  assertEquals(mint.includes('"plugin_root":"%s"'), true, "assessment-mint emits no plugin_root");
   assertEquals(
-    skill.includes("`plugin_root`"),
+    /base directory/i.test(skill),
     true,
-    "SKILL.md's kept-values list does not name plugin_root, so nothing tells the " +
-      "orchestrator to hold it for the whole run",
+    "SKILL.md does not say where a dispatch's absolute reference path comes from, so " +
+      "nothing tells the orchestrator how to build one",
+  );
+  assertEquals(
+    skill.includes("plugin_root"),
+    false,
+    "SKILL.md still names plugin_root, which no command emits any more",
   );
 });

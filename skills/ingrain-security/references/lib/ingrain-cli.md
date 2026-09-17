@@ -26,13 +26,12 @@ config or the network. Probe before querying.
 ## Retrieval
 
 ```bash
-ingrain context security_rules "<query>" --assessment "<assessment_abs>" --json
+ingrain context security_rules "<query>" --json
 ```
 
-- **Retrieve broadly.** Missing a governing rule is the costly failure, and precision is not
-  this step's job: the **rule critic** prunes what does not apply before the user sees anything,
-  and the rule gate decides the rest. So cast a wide net — more questions, higher limits — and
-  let the round after you sharpen it.
+- **Retrieve broadly** — more questions, higher limits. Precision is not this step's job: the
+  **rule critic** prunes what does not apply before the user sees anything, and the rule gate
+  decides the rest. → `references/development/flow.md` § 1b owns why breadth is the instruction.
 - **Queries are matched on meaning** — phrase them as questions ("how do we authenticate
   service-to-service calls").
 - **One query per distinct question.** Run several, each covering one topic. A query is
@@ -46,10 +45,10 @@ ingrain context security_rules "<query>" --assessment "<assessment_abs>" --json
   broad; with a critique round downstream, a generous limit costs little. It is still not a way
   to cover more ground: a larger limit returns more neighbours of the same point, so it cannot
   reach a topic the query did not aim at. Splitting the query is what covers more ground.
-- **`--assessment <abs>`** — the assessment file, so the CLI can read `## Affected paths` and
-  narrow the search to the org rules governing the code this change will touch. Pass it on
-  every query; the paths are read fresh each time, so a section written after an earlier query
-  still takes effect.
+- **`--assessment <abs>`** — rarely needed. The CLI reads `## Affected paths` from the
+  assessment the mint recorded for this branch and narrows the search to the org rules governing
+  that code. The paths are read fresh on every query, so a section written after an earlier one
+  still takes effect. The flag names a different file.
 
 ### The retrieval loop — every question in one call
 
@@ -62,11 +61,11 @@ for q in "how do we authenticate service-to-service calls" \
          "how do we store and rotate secrets" \
          "how do we validate user input at API boundaries"; do
   printf '\n=== %s\n' "$q"
-  ingrain context security_rules "$q" --assessment "<assessment_abs>" --json
+  ingrain context security_rules "$q" --json
 done
 ```
 
-Substitute your own questions and the absolute assessment path. **Run it sequentially — no `&`:**
+Substitute your own questions. **Run it sequentially — no `&`:**
 the invocations write to one stdout, so backgrounding them interleaves the JSON mid-array and
 costs you the whole batch to save a few seconds.
 
@@ -95,24 +94,36 @@ for one that never arrives.
 
 ## Output shape
 
-`--json` returns a JSON array of rule objects:
+`--json` returns one object — the rules, and the band that governs the change:
 
 ```json
-[{ "id": "...", "title": "...", "body": "..." }]
+{ "items": [{ "id": "...", "title": "...", "body": "..." }], "maturityBand": "high" }
 ```
 
 `body` is the org's authoritative guidance on *how to implement* the control. Keep it
 **verbatim** wherever it is written down, and record exactly the rules the CLI returned — the
-id, title and body as they came back are the whole of what you have to work with.
+id, title and body as they came back are all you have to work with.
+
+**`maturityBand` is the org's gate, and an unattended run needs it.** It is resolved
+server-side from the buckets covering the change — strictest wins, then the organization's own
+target, then `high` — and it arrives as a **band**, never a number: the band → threshold table
+belongs to the skill (`SKILL.md` § Unattended runs), and a copy of it server-side would put one
+constant in two repositories.
+
+**It is present on every response, including one that matched no rule.** That case is not
+incidental: an empty rule set is when the threat axis is all a run has, so a band
+dropped there would leave the threat gate with no threshold at the moment it is the only gate.
+**Absent or unrecognised, degrade to `high`** — the strictest — so the gate cannot fail to
+resolve. Standalone has no platform to ask and takes the band from its caller instead.
 
 ## Recording the assessment
 
-Two commands, one per phase's finalize. Both take the **absolute** minted paths, and both are
-**best-effort** — see **A failed sync never fails a review** below.
+Two commands, one per phase's finalize. Both are **best-effort** — see **A failed sync never
+fails a review** below.
 
 ```bash
-ingrain record design       --assessment "<assessment_abs>"
-ingrain record verification --assessment "<assessment_abs>"
+ingrain record design
+ingrain record verification
 ```
 
 - **`design`** — run at the **Development finalize**, after the file has been finalized in place.
@@ -130,21 +141,22 @@ off disk; syncing before the write would send the previous state.
 
 **One file, one flag.** The org rules ride in the assessment's own `## Org rules` section, so
 there is no second path to pass. The `--rules` flag is gone with the sidecar — and so is the
-failure class it created, where a caller who omitted it got a sync that silently recorded no rule
-at all and a later verification rejecting its verdicts with nothing on screen to explain why.
+failure class it created, where a caller who omitted it got a sync that recorded no rule at all,
+then a later verification rejecting its verdicts with nothing on screen to explain why.
 
 **You never build the payload.** The CLI owns the wire contract entirely — this skill stays
 platform-agnostic, and nothing about the backend's shape belongs in these files.
 
 ### A failed sync never fails a review
 
-The review's output is the assessment file and the report; the sync is a courtesy on top. So:
+The review's output is the assessment file and the report; the sync adds to those and never gates
+them. So:
 **report the failure in one line and carry on.** Never retry in a loop, never block the finalize,
 and never leave the user thinking the review itself failed. A non-zero exit from either command
 classifies exactly as in the taxonomy below.
 
 The one thing worth surfacing plainly: if `record` reports the assessment did not validate, that
-is a defect in the **file** — run `ingrain validate --assessment "<assessment_abs>"`, which needs
+is a defect in the **file** — run `ingrain validate`, which needs
 no configuration and no network, and reports every problem at once.
 
 ## Failure taxonomy
@@ -161,8 +173,8 @@ no configuration and no network, and reports every problem at once.
 | `record verification` reports the file is not at `Latest stage: testing` | **Wrong stage** — set it in the finalize write, then re-run |
 | "operation not permitted" / sandbox-denied / permission-required | **Access denied** |
 
-**No revision** is the one with a remedy in your own hands: run `ingrain record design
---assessment "<assessment_abs>"` first, then re-run the verification sync. It is not a CLI fault
+**No revision** is the one with a remedy in your own hands: run `ingrain record design`
+first, then re-run the verification sync. It is not a CLI fault
 and not a file fault — it is ordering, and the CLI names it in its own error.
 
 All but the last **degrade gracefully** — a permission grant would leave them unchanged, so note

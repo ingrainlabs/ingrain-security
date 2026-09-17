@@ -18,7 +18,7 @@ different readers, and **neither is derived from the other**:
   followed?"* — the security owner's question, which nothing else in the review answers.
 
 **Two subjects, and only two.** A verification judges the **threat** and the **rule**.
-Implementation guidance is the vessel through which a threat gets closed and a rule gets applied:
+Implementation guidance describes how a threat gets closed and a rule gets applied:
 it carries **no verdict of any kind**, and you write nothing into `## Implementation guidance`.
 
 They may legitimately disagree. A rule can be **followed while a threat stays reachable** (the
@@ -29,9 +29,9 @@ that produces confident, wrong compliance answers.
 **Announce:** open with "Using ingrain-security to verify the implementation."
 
 **Resolve every path in ONE block, first thing.** This pass needs two script results —
-`assessment-mint` and `branch-delta` — and neither reads the other's output, so they are issued
+`ingrain assessment mint` and `ingrain delta` — and neither reads the other's output, so they are issued
 **together** rather than one per step. Steps 0, 1 and 3 below then read from that single batch
-instead of paying a round-trip each. The mint takes a `--title`; `branch-delta` takes none.
+instead of paying a round-trip each. The mint takes a `--title`; the delta takes none.
 → `references/lib/dispatch.md` § Independent calls go out in one block.
 
 You orchestrate **one read-only worker per subject** — one per selected threat, one per selected
@@ -57,12 +57,10 @@ to you: the verdict it leads with is a conclusion you re-derive from the evidenc
 
 Testing reads and finalizes the **same** per-task assessment file the plan review
 wrote — a single file in `.ingrain-security/` at the project root. **Mint its path** once, in the
-opening batch, with the bundled **`scripts/assessment-mint`**
-script. Your SessionStart context carries the ready-to-run command (plugin root and host
-already substituted); it takes the form:
+opening batch, with **`ingrain assessment mint`**:
 
 ```ingrain-script
-bash <plugin>/skills/ingrain-security/scripts/assessment-mint <host> --title "<task title>"
+ingrain assessment mint --host <host> --title "<task title>"
 ```
 
 **The `--title` must be the task's title as Development recorded it — reuse the assessment's
@@ -102,7 +100,7 @@ it exactly as you found it. A threat outside the `selected` set keeps its `#### 
 **empty**, exactly as Development left it — that emptiness is how "this threat was never in
 verification scope" is stated, and it is already correct.
 
-**`## Implementation guidance` is not among them.** Guidance is the vessel, never a subject: it
+**`## Implementation guidance` is not among them.** Guidance is never a subject here: it
 carries no verdict, so this pass reads it and writes nothing into it. **`## Org rules` is
 read-only here too** — its Selections were recorded at the rule gate, and they are the scope you
 work to, not something to revise.
@@ -115,8 +113,9 @@ pre-approval, and the schema the cards render — open it for what a field *mean
 its shape. What the **Robustness levels** themselves mean is **this** file's, in the section of
 that name below.
 
-**Write it with the Edit or Write tool, on `assessment_abs`** — `allow-assessment-write`
-pre-approves those for this file, so the write lands with no permission prompt.
+**Write it with the Edit or Write tool, on `assessment_abs`** — this skill's `allowed-tools`
+grants those for `.ingrain-security/`, so on a host that applies a path-scoped rule the write
+lands with no permission prompt; where it does not, approve the prompt and carry on.
 
 **Check the write.** Testing writes this file exactly once — at **Finalize the assessment**,
 the step named below — and that write is a finished file, so run the **three-check** on the
@@ -132,13 +131,13 @@ cards included.
 ## The change under review
 
 Verify against the **branch delta** — everything this branch added since it diverged from the
-branch it was cut from, committed **and** uncommitted alike. The bundled **`scripts/branch-delta`**
-script resolves it, and it ran in the opening batch: take **`base_ref`** (the parent branch, for
-the report), **`diff_ref`** (what you actually diff against), `fallback` and `delta_empty` from
-that JSON.
-→ `references/lib/branch-delta.md` owns the script, the refs it returns, and the discipline
-around them — notably that `diff_ref` is the run's **fixed basis**: resolve it once and pass
-that exact string to every verifier.
+branch it was cut from, committed **and** uncommitted alike. **`ingrain delta`** resolves it, and
+it ran in the opening batch: take **`base_ref`** and **`diff_ref`** (the parent branch and the
+commit the review diffs against, both for the report), `fallback` and `delta_empty` from that
+JSON.
+→ `references/lib/branch-delta.md` owns the command, the refs it returns, and the discipline
+around them — notably that `ingrain delta` **pins** `diff_ref`, so every later `diff` reads the
+same basis on its own.
 
 **`changed_files` arrives resolved — there is no capture step.** The JSON already carries the
 complete set as `[{path, status}]`: committed, staged, unstaged and untracked, with `.gitignore`
@@ -155,10 +154,10 @@ inherits. A control that was supposed to be added and was not has **no presence 
 all**: `not-followed` is a statement about code that is not there. Treat the list as the entry
 point, then follow the route with Read and Grep wherever it goes.
 
-**Every git command this review runs comes from the script.** Where you or a verifier needs the
-change as text, it is `branch-delta <host> diff --ref <diff_ref>` — whole delta — or the same with
-paths appended. Nobody hand-writes a `git diff`: a brewed command drifts between the orchestrator
-and each verifier, and the run then reads several different changes while reporting one.
+**Every git command this review runs comes from the CLI.** Where you or a verifier needs the
+change as text, it is `ingrain delta diff` — whole delta — or the same with paths appended.
+Nobody hand-writes a `git diff`: a hand-written one drifts between the orchestrator and each
+verifier, and the run then reads several different changes while reporting one.
 → `references/lib/branch-delta.md` § Reading the change itself.
 
 **Fallback — `HEAD`, and only as the fallback.** When no fork point resolves, the script returns
@@ -168,15 +167,18 @@ leave visible:
 
 - `no-divergence` — this branch has no commits since it was cut, so `HEAD` captures **all** of its
   work. The review is **complete**; report it as such.
-- `not-a-git-repository`, `no-commits`, `no-fork-point` (a detached HEAD, a repo with no other
-  branch, `merge-base` failing on a shallow clone — check the `shallow` field) — any *committed*
-  implementation is invisible to `git diff HEAD`. The review is then narrower than intended;
-  state that as a caveat on the result.
+- `shallow-history` — the clone is truncated, so `merge-base` had nothing to reach back to. The
+  routine CI case, and the one to name explicitly: a finished implementation can be sitting in a
+  log this checkout cannot see, so `delta_empty` here is a measurement failure rather than a
+  finding.
+- `not-a-git-repository`, `no-commits`, `no-fork-point` (a detached HEAD, or a repo with no other
+  branch) — any *committed* implementation is invisible to `git diff HEAD`. The review is then
+  narrower than intended; state that as a caveat on the result.
 
 If `delta_empty: true` — nothing committed since the fork point and nothing dirty (on the `HEAD`
 fallback this means only that the working tree is clean) — there is nothing to verify; say so and
-stop. Each verifier re-derives the slice of this diff relevant to its own subject, so a
-dispatch carries the `diff_ref` and leaves the diff itself on disk.
+stop. Each verifier re-derives the slice of this diff relevant to its own subject, so a dispatch
+leaves the diff itself on disk.
 
 ## Robustness levels
 
@@ -211,8 +213,8 @@ the actual code against the actual threat and decide. Two principles bound that 
 Each guidance entry carries **Rule ref ids** (the `Rule refs` field of its
 `## Implementation guidance` entry), and each resolves to a `### <id> — <title>` entry in the
 assessment's own **`## Org rules`** section — same file, three headings up. That section is where
-the plan review persisted each retrieved rule's body verbatim, and it is what lets a verifier judge
-against *how the org implements* the control rather than against a bare title.
+the plan review persisted each retrieved rule's body verbatim, so a verifier judges against *how
+the org implements* the control rather than against a bare title.
 
 **One artifact, so there is nothing to locate.** The rules used to live in a separate
 `rules-<…>.md` sidecar that had to be minted and read alongside the assessment; they now ride in
@@ -221,15 +223,23 @@ the assessment itself, which is already open in front of you.
 - **`## Org rules` has entries** — read the bounded slice you need. A `selected` entry keeps its
   **full body**, which is the specification a rule verifier judges against; an `excluded` entry
   keeps only its heading and `Selection: excluded` line, which is all a recorded non-decision needs.
-- **`## Org rules` is empty** — no org rules were retrieved for this task at planning time (the CLI
-  was absent, unconfigured, or returned nothing). The threat verifiers judge from the threat and
-  the guidance Descriptions alone, and there are no rule verifiers to dispatch. An expected input
-  state, not a gap.
+- **`## Org rules` is empty** — no org rules were retrieved for this task at planning time: the CLI
+  was absent, unconfigured, or returned nothing, or the run is `run_mode: standalone` and never asked.
+  The threat verifiers judge from the threat and the guidance Descriptions alone, and there are no
+  rule verifiers to dispatch. An expected input state, not a gap.
+
+  **One case it is NOT, and it is the one to watch on a resume.** A run that inherited a written
+  analysis should also have inherited its `## Org rules` — the bodies are Testing's specification,
+  and a `selected` rule with no body reaching this pass means the rule axis was lost between the
+  record and here, not that no rule applied. Where the assessment carries selected rules whose
+  bodies are missing, say so rather than reporting a clean empty axis: an empty
+  `## Rule adherence` and a genuinely rules-free change look identical downstream, and only one
+  of them is correct.
 
 For the **threat** dimension the rules are **supporting context only**: they sharpen what "closed"
 looks like for this org, and negative testing proceeds with or without them. A guidance entry whose
 `Rule refs` is `—` contributes its Description alone, and you proceed from that and the threat —
-the entry is never itself judged, because it is the vessel and carries no verdict. For the **rule** dimension a
+the entry is never itself judged, because guidance carries no verdict. For the **rule** dimension a
 selected rule's body is the specification itself.
 
 ## Rule adherence
@@ -242,7 +252,7 @@ and nothing else in the review produces it.
 **Scope is the selected set — read it off `## Org rules`, not off `Rule refs`.** Every entry whose
 `Selection` is `selected` gets exactly one adherence entry: **one per selected rule, no more and
 no fewer**. Selecting a rule at the gate is the developer declaring it governs this change, and
-that declaration is what makes a verdict on it meaningful.
+that declaration is what a verdict on it means something against.
 
 **A pass still under way leaves fewer — on either axis, and that is a state, not a defect.** A
 completed pass leaves one verdict per selected subject; an interrupted one leaves a selected
@@ -253,7 +263,7 @@ than an error, and what you concluded lands. Completeness is this pass's **proce
 the checklist below — never a reason to withhold the verdicts you did reach.
 
 **A selected rule that no guidance implements is still judged** — and it is the case a security
-owner most needs. "not-followed — nothing implements it" is precisely the answer they are looking
+owner most needs. "not-followed — nothing implements it" is the answer they are looking
 for, and scoping to what guidance happened to drive would make it unreachable. Never derive the
 scope from `Rule refs`.
 
@@ -274,7 +284,7 @@ prescribes exist?* — not *what became of the guidance that drives it?*.
 
 **Dropped guidance does not decide it.** Guidance dropped during plan refinement is the usual
 reason a rule ends up `not-followed`, and the justification names the absent control — but a rule
-satisfied by other means still reads `followed`. The verdict tracks the code, never the paperwork.
+satisfied by other means still reads `followed`. The verdict tracks the code, never the plan.
 
 **If the gate selected no rule**, the scope is empty: write no entries and say so in the report.
 That is a legitimate outcome, not a gap.
@@ -291,24 +301,25 @@ The verifier's contract differs from a Development worker's, so state it inline:
 - **Its whole output is what it returns.** Development workers each own a section of the
   assessment file; this one owns the justification and Robustness level it hands back, and you
   conclude and record from it, so one writer owns the file.
-- **Its one shell allowance is the bundled script** — `branch-delta <host> diff --ref <diff_ref>`,
-  with paths appended to narrow it — and nothing else. It never writes a git command of its own:
-  a brewed one drifts between verifiers, and `git diff` shows nothing at all for an untracked
+- **Its one shell allowance is the CLI** — `ingrain delta diff`, with paths appended to narrow
+  it — and nothing else. It never writes a git command of its own:
+  a hand-written one drifts between verifiers, and `git diff` shows nothing at all for an untracked
   file. Read/Grep/Glob covers the rest; the org rules it needs are already on disk, in the
   assessment's own `## Org rules` section.
 - **Fan out.** Each per-threat verifier is independent, so on a host with a subagent primitive
   dispatch them **together**. On the sequential fallback, run them in the same
-  session one at a time, in id order — `T01` first, which is descending risk order.
+  session one at a time, in the order the section holds them — highest risk first, which is
+  how the sort left it. Not id order: a tag names a threat, never its rank.
 
 Dispatch every verifier with the same shape. **Hand off by pointer:** point the verifier at its
 threat entry, the guidance entries naming that threat, and the `## Org rules` entries those
 entries' `Rule refs` name — leaving the file itself on disk for it to open:
 
 ```
-Read <plugin_root>/skills/ingrain-security/references/testing/ingrain-threat-verifier.md — the
-ABSOLUTE path, with plugin_root from the mint JSON pasted in full — as your system prompt.
+Read <skill_dir>/references/testing/ingrain-threat-verifier.md — the
+ABSOLUTE path, with this skill's base directory pasted in full — as your system prompt.
 Read/Grep/Glob on the codebase is your toolset. For the change itself run
-`bash <plugin_root>/skills/ingrain-security/scripts/branch-delta <host> diff --ref <diff_ref>`
+`ingrain delta diff`
 — whole delta — or the same with paths appended for single files. Do NOT write a git command
 of your own. Any org rule you need is already on disk, in the assessment's own `## Org rules`
 section. Your whole output is what you return to me: your justification and level.
@@ -323,11 +334,9 @@ INPUT:
   SUPPORTING CONTEXT on how the org implements this kind of control. Where there are none,
   judge from the threat and the Descriptions alone.
 - The change under review is the delta since this branch diverged from <base_ref> — committed
-  AND uncommitted. Read it with the command above, passing --ref <the resolved diff_ref — the
-  merge-base commit, pasted in full> exactly as given; it is the merge-base, which is what
-  exposes the committed work, and passing it verbatim is what holds every verifier in this
-  run to the same change.
-  <When the HEAD fallback is in effect, say so here instead: "no fork point resolved — diff_ref
+  AND uncommitted. Read it with the command above. It reads the basis this run pinned — the
+  merge-base — so the committed work is in view and every verifier sees the same change.
+  <When the HEAD fallback is in effect, say so here instead: "no fork point resolved — the basis
   is HEAD, so only uncommitted changes are under review.">
 - Evaluate whether <t-id> can still be realized in the code as built. Look for a surviving
   route — an unprotected path, a bypass, a partial application. Judge THE THREAT, not the
@@ -338,7 +347,7 @@ is still reachable), then LEVEL (weak | adequate | strong) for <t-id>, then EVID
 ANYWHERE in the tree — the delta is where you start, not where you stop; an untouched guard or a
 surviving path counts), and — when the level is `weak` — the RESIDUAL PATH (the concrete route by which
 the threat can still be realized, and the change that would close it).
-The justification comes FIRST: it is what I weigh, and writing it first is what grounds the level
+The justification comes FIRST: I weigh it, and writing it first grounds the level
 in evidence. Keep the return to those four lines.
 ```
 
@@ -348,7 +357,7 @@ finding the report exists to surface.
 
 **Guidance naming no threat is not verified here, or anywhere.** A rule-driven entry
 (`Threats: —`) reaches its goal through the rule it implements, and that rule carries the verdict
-— in the adherence pass below. Guidance is the vessel: it has no verdict of its own to conclude,
+— in the adherence pass below. Guidance has no verdict of its own to conclude,
 no table of its own to report, and nothing this pass writes into its section.
 
 **Hold the level a verifier leads with together with its justification** and take both to
@@ -363,10 +372,10 @@ fan-outs share nothing and neither reads the other's output. Same shape, same
 hand-off-by-pointer discipline:
 
 ```
-Read <plugin_root>/skills/ingrain-security/references/testing/ingrain-rule-verifier.md — the
-ABSOLUTE path, with plugin_root from the mint JSON pasted in full — as your system prompt.
+Read <skill_dir>/references/testing/ingrain-rule-verifier.md — the
+ABSOLUTE path, with this skill's base directory pasted in full — as your system prompt.
 Read/Grep/Glob on the codebase is your toolset. For the change itself run
-`bash <plugin_root>/skills/ingrain-security/scripts/branch-delta <host> diff --ref <diff_ref>`
+`ingrain delta diff`
 — whole delta — or the same with paths appended for single files. Do NOT write a git command
 of your own. Your whole output is what you return to me: your justification and verdict.
 INPUT:
@@ -379,9 +388,9 @@ INPUT:
   how the plan INTENDED to apply the rule; they are not the answer, and their absence is not one
   either.
 - The change under review is the delta since this branch diverged from <base_ref> — committed
-  AND uncommitted. Read it with the command above, passing --ref <the resolved diff_ref — the
-  merge-base commit, pasted in full> exactly as given.
-  <When the HEAD fallback is in effect, say so here instead: "no fork point resolved — diff_ref
+  AND uncommitted. Read it with the command above. It reads the basis this run pinned — the
+  merge-base — so the committed work is in view.
+  <When the HEAD fallback is in effect, say so here instead: "no fork point resolved — the basis
   is HEAD, so only uncommitted changes are under review.">
 - Decide whether the control this rule prescribes is present in the code as built. It counts
   however it got there — through the guidance that drives it, by another mechanism, or because
@@ -394,7 +403,7 @@ present, and why that is the verdict), then ADHERENCE (followed | not-followed),
 (file:line ANYWHERE in the tree where the control is present — shared middleware this change
 never touched still counts; when it is ABSENT there is no line to cite, so name where you looked
 and found nothing; or — when you found neither).
-The justification comes FIRST: it is what I weigh, and writing it first is what grounds the
+The justification comes FIRST: I weigh it, and writing it first grounds the
 verdict in evidence. Keep the return to those three lines.
 ```
 
@@ -429,7 +438,7 @@ threat, in this order:
    the level the verifier led with, say what moved it.
 
 **It is recorded on the threat, and nowhere else.** There is no second copy to carry it across
-to: guidance is the vessel a threat is closed through, not a subject of verification, so it takes
+to: guidance describes how a threat is closed, and is not a subject of verification, so it takes
 no Robustness of its own. A reader wanting to know whether a piece of guidance worked reads the
 drivers beside it.
 
@@ -470,22 +479,35 @@ the same discipline as the Robustness, on the other axis. Per rule, in this orde
 Each step is one action; the tracker for them is **Testing — checklist** at the end of this
 file.
 
-0. **Resolve every path in one block, and locate the assessment.** Issue `assessment-mint`
-   and `branch-delta` **together** — the mint with the task's `## Task` Title **verbatim** (see
-   **The assessment file**), `branch-delta` with no title. If **Phase select** already ran this
-   batch this turn, reuse the JSON you are holding rather than paying for it twice; the scripts
-   are deterministic, so either way you get the same values. If you reached Testing by an
-   explicit request ("verify the implementation"), Phase select was skipped and **you must issue
-   the batch here**. If `has_content: false`, you minted the wrong title — recover it from the
-   file and re-issue the mint. If no assessment for this task genuinely exists, state so and
-   **stop** — Development is reached through Phase select, on a later invocation.
-1. **Read the change's shape.** From the batch's `branch-delta` JSON take `base_ref`,
+0. **Resolve every path in one block, and locate the assessment.** Issue `ingrain assessment mint`
+   and `ingrain delta` **together** — the mint with the task's `## Task` Title **verbatim** (see
+   **The assessment file**), the delta with no title. Three ways in, and they take different
+   branches here:
+
+   - **Continued from Development's finalize** (unattended fall-through). You already hold the
+     batch and the file you just wrote. **Do not re-issue either script, and ignore the batch's
+     `has_content` and `selected_*`** — they were measured before Development wrote, so they are
+     stale by construction, and `has_content: false` is the *expected* reading on a first run.
+     The drivers to verify are the ones you gated moments ago. Re-minting here is what
+     `flow.md` § Finalize means by "continue, do not re-enter".
+   - **Routed here by Phase select in this same turn.** Reuse the JSON you are holding rather
+     than paying for it twice: nothing has written to the file since it was measured.
+   - **Reached by an explicit request** ("verify the implementation"). Phase select was skipped,
+     so **issue the batch here**. Only on this branch does `has_content: false` mean you minted
+     the wrong title — recover it from the file and re-issue the mint. If no assessment for this
+     task genuinely exists, state so and **stop** — Development is reached through Phase select,
+     on a later invocation.
+1. **Read the change's shape.** From the batch's `ingrain delta` JSON take `base_ref`,
    `diff_ref` and `changed_files` — the file set arrives resolved, so there is nothing to
    capture (see **The change under review**). **Do not run a diff of your own**: each verifier
-   reads the change for its own subject, and a copy in your context has no reader. `diff_ref`
-   is now fixed for the run: pass that exact string to every verifier. If `fallback: true`,
+   reads the change for its own subject, and a copy in your context has no reader. That call
+   pinned the basis for the run, so every verifier reads the same change. If `fallback: true`,
    report that and its `reason`. If `delta_empty: true`, state "no changes to verify" and
-   **stop**.
+   **stop** — **unless `fallback: true` with `reason` `shallow-history` or `no-fork-point`**,
+   where `delta_empty` measured only the working tree because nothing could count commits.
+   There, stopping reports a finished implementation as no work at all. Read `git log`:
+   implementation present → verify against `HEAD` and report the narrowed basis; genuinely not
+   started → Development. the delta's `instruction` says which case you are in.
 2. **Collect both scopes — one per driver axis.** Read the bounded `## Threats`, `## Org rules`
    and `## Implementation guidance` slices of the assessment file, and derive **two** independent
    scopes from them.
@@ -525,7 +547,7 @@ file.
    field card under each heading. Write only between `#### test` and the end of each entry —
    the three blocks above it are the plan review's — and leave an excluded or undecided
    threat's `#### test` block **empty**, exactly as you found it.
-   **Write nothing into `## Implementation guidance` or `## Org rules`** — the vessel has no
+   **Write nothing into `## Implementation guidance` or `## Org rules`** — guidance has no
    verdict, and the rule Selections are the gate's.
    One write, to the minted `assessment_abs`. On a re-verification (the file was already at
    `Latest stage: testing` and the code changed again), **overwrite** the previous
@@ -535,8 +557,13 @@ file.
    checked" step — the file now records what was verified, so it is also the last moment a
    malformed entry can be caught before the next session inherits it.
    Finally, **sync the verdicts — best-effort**: run
-   `ingrain record verification --assessment "<assessment_abs>"`, **after** the write, never
+   `ingrain record verification`, **after** the write, never
    before (the CLI reads the file off disk). One file, one flag.
+   **Skipped entirely in `run_mode: standalone`**, which has no platform to record to — the mint
+   reports the mode, and unattended it reaches this step by falling through from Development
+   rather than by re-minting, so carry it across. Standalone is chosen precisely so nothing
+   leaves the runner; a `record` attempted against a platform it has no token for reopens the
+   channel that choice closed, and the CLI's failure is not a substitute for not asking.
    → `references/lib/ingrain-cli.md` § Recording the assessment. **A failed sync never fails the
    verification** — report it in one line and carry on to step 7.
 7. **Report to the coding agent.** Present the findings (see **Reporting format**) and close
@@ -549,8 +576,9 @@ Report the concluded results to the coding agent as **visible Markdown output in
 conversation** — **one table per driver axis**, and no table for guidance: it carries no verdict,
 so it has nothing to report. Lead with the threats.
 
-**Threat robustness**, one row per selected threat, **in id order — `T01` first**, the
-descending-risk order Development's re-tag already fixed (the selection may leave gaps; keep it).
+**Threat robustness**, one row per selected threat, **in risk order — highest `Risk score`
+first**, which is the document order Development's sort already left the section in. Take that
+order as it stands rather than sorting by id: the tag identifies a threat and carries no rank.
 If **the gate selected no threat**, say so in one line instead of showing an empty table — "no
 threat was selected for this change, so there is nothing to judge on the threat axis." A rules-only
 review reaches Testing through the OR-route and lands here legitimately, so an empty selected set
@@ -595,17 +623,17 @@ Development.
 ## Testing — checklist
 
 The procedure is **Testing — the flow**; this is the tracker. Tick only what is actually
-done. Work top to bottom; this phase runs to its own end. The `assessment-mint` uses the
-assessment's `## Task` Title **verbatim** — a paraphrase mints a different file and silently
+done. Work top to bottom; this phase runs to its own end. The mint uses the
+assessment's `## Task` Title **verbatim** — a paraphrase mints a different file and
 loses the task. Every read and the finalize write use the absolute `assessment_abs`; the relative
 `assessment_path` is display-only. Hand off by pointer: a dispatch carries paths into the
 assessment and the diff, and each verifier opens them itself. Report the empty cases out loud.
 
-- [ ] 0. `assessment-mint` + `branch-delta` issued in ONE block, title verbatim; assessment located — no assessment for this task → stop
-- [ ] 1. Fork point + `changed_files` read off that batch — no diff of YOUR own; `HEAD` only as a reported fallback; `delta_empty: true` → stop
+- [ ] 0. `ingrain assessment mint` + `ingrain delta` issued in ONE block, title verbatim; assessment located — no assessment for this task → stop
+- [ ] 1. Fork point + `changed_files` read off that batch — no diff of YOUR own; `HEAD` only as a reported fallback; `delta_empty: true` → stop, EXCEPT on `shallow-history`/`no-fork-point`, where it measured nothing → read `git log`
 - [ ] 2. Both scopes collected — ONE PER DRIVER AXIS: `selected` threats (an unnamed threat is still in scope) paired with the guidance naming each, and `selected` `## Org rules` entries (one nothing drives is still in scope); excluded on either axis is out; guidance is context, never a scope; nothing selected on either → set `Latest stage: testing` and stop
 - [ ] 3. Both fan-outs dispatched in ONE block — one verifier per selected threat, one per selected rule; each pointed at `## Org rules` in the SAME file; justification FIRST in every return
 - [ ] 4. Each threat's Robustness concluded — justification weighed BEFORE the level; a level stands only when its evidence carries it; the conclusion is YOURS; recorded on the threat and nowhere else
 - [ ] 5. Each selected rule's Adherence concluded — justification weighed BEFORE the verdict; `followed` stands only when its evidence carries it; NOT read off a threat's Robustness or off whether any guidance drives it
-- [ ] 6. Each SELECTED threat's `#### test` block filled — justification FIRST, then `Robustness`, `Residual path`, `Evidence`; the three blocks above it untouched; an excluded threat's left EMPTY as found; one `## Rule adherence` entry per SELECTED rule; `Latest stage: testing` — YOU write, the verifiers only return; NOTHING written into `## Implementation guidance` or `## Org rules`; then three-checked against the field cards; then `ingrain record verification --assessment` (best-effort, AFTER the write)
+- [ ] 6. Each SELECTED threat's `#### test` block filled — justification FIRST, then `Robustness`, `Residual path`, `Evidence`; the three blocks above it untouched; an excluded threat's left EMPTY as found; one `## Rule adherence` entry per SELECTED rule; `Latest stage: testing` — YOU write, the verifiers only return; NOTHING written into `## Implementation guidance` or `## Org rules`; then three-checked against the field cards; then `ingrain record verification` (best-effort, AFTER the write; skipped in standalone)
 - [ ] 7. Reported to the coding agent — one table per driver axis and none for guidance; `weak` threats named with their residual path, `not-followed` rules named with their reason; the coding agent owns the code changes

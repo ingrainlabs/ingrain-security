@@ -11,25 +11,24 @@ the complete list of files that changed, and the change itself as text.
 
 This file owns the mechanics; the caller owns what to *do* with the result — SKILL.md
 § Phase select, which now reads the mint's resolved `phase` rather than deriving one from
-`delta_empty` — the same delta, resolved once in `scripts/lib/fork-point.sh` and shared by
-both scripts so the two can never disagree; `references/testing/verification-pass.md` for how
-Testing consumes it and the reporting caveats.
+`delta_empty` — the same delta, resolved once inside the binary and shared by `ingrain
+assessment mint` and `ingrain delta` so the two can never disagree;
+`references/testing/verification-pass.md` for how Testing consumes it and the reporting caveats.
 
 ## Resolving the fork point
 
 **Resolve this with the shared script, and let it discover the trunk.** Branches are routinely
 cut from other feature branches, release branches, and long-lived integration branches, so the
-parent is whatever branch this one was actually cut from — which is what the script works out. Sharing one resolver is what keeps
-Phase select and the review agreed on what is under test.
+parent is whatever branch this one was actually cut from, which the script works out. One resolver,
+shared, keeps Phase select and the review agreed on what is under test.
 
-The bundled **`scripts/branch-delta`** script resolves it: it takes every other local and remote
-branch, computes its merge-base with `HEAD`, discards any whose merge-base *is* `HEAD` (those
-contain no divergence), and keeps the merge-base with the **most recent commit date** — the
-nearest branch point. Your SessionStart context carries the ready-to-run command; it is
-read-only, touching git state alone:
+**`ingrain delta`** resolves it: it takes every other local and remote branch, computes its
+merge-base with `HEAD`, discards any whose merge-base *is* `HEAD` (those contain no
+divergence), and keeps the merge-base with the **most recent commit date** — the nearest
+branch point. It is read-only, touching git state alone:
 
 ```ingrain-script
-bash <plugin>/skills/ingrain-security/scripts/branch-delta <host>
+ingrain delta --host <host>
 ```
 
 Where two refs tie on the same merge-base commit the script prefers the local branch name;
@@ -43,7 +42,7 @@ It emits one JSON object. Take these fields and obey its `instruction`:
 | --- | --- |
 | `base_ref` | the parent branch this one was cut from — for the report |
 | `diff_ref` | the merge-base commit — what you actually diff against |
-| `changed_files` | **the review's entry point** — the COMPLETE changed-file set, already resolved: `[{path, status}]` over committed, staged, unstaged and untracked, which no single git command covers. `status` is `added`, `modified`, `deleted`, `type-changed` or `untracked`. `.gitignore` is honoured, so the self-ignoring assessment folder drops out |
+| `changed_files` | **the review's entry point** — the COMPLETE changed-file set, already resolved: `[{path, status}]` over committed, staged, unstaged and untracked, which no single git command covers. `status` is `added`, `modified`, `deleted`, `type-changed` or `untracked` — or, for a state those have no word for, git's own raw letter (`U` unmerged in a half-finished merge, `X`, `B`), which is passed through rather than folded into a catch-all so a pathological tree stays legible. `.gitignore` is honoured, so the self-ignoring assessment folder drops out |
 | `delta_empty` | `true` when the branch delta is empty; `false` when this branch has commits since the fork point, an uncommitted change, or both |
 | `fallback` | `true` when no fork point resolved; `diff_ref` is then `HEAD` |
 | `reason` | which fallback case applies (see the caller's reporting rules) |
@@ -55,9 +54,11 @@ touch", and the review's questions are different ones — *can the threat still 
 surface a rule governs, most of which is code this change never opened. A control that was
 supposed to be added and was not has **no presence in the delta at all**.
 
-**`diff_ref` is the run's fixed basis.** Resolve it once and pass **that exact string** to every
-dispatch for the rest of the run — it is the merge-base, so it exposes the committed
-implementation under review, where `HEAD` would show only uncommitted work.
+**`diff_ref` is the run's fixed basis, and `ingrain delta` pins it.** The pin holds a whole
+fan-out of verifiers to one change while the working tree keeps moving under them, so every
+later `ingrain delta diff` reads the same basis without being handed it. It is the
+merge-base, so it exposes the committed implementation under review, where `HEAD` would show
+only uncommitted work.
 
 The script is deterministic, so a caller already holding its JSON from earlier in the turn
 should reuse that rather than paying for it twice.
@@ -68,13 +69,13 @@ The `diff` subcommand is the **only** way this review reads a diff — nobody wr
 command by hand, orchestrator or verifier:
 
 ```ingrain-script
-bash <plugin>/skills/ingrain-security/scripts/branch-delta <host> diff --ref <diff_ref>
+ingrain delta diff
 ```
 
 Append one or more repository-relative paths to narrow it to those files:
 
 ```ingrain-script
-bash <plugin>/skills/ingrain-security/scripts/branch-delta <host> diff --ref <diff_ref> path/to/file.ts
+ingrain delta diff path/to/file.ts
 ```
 
 Three things it does that a hand-written `git diff` does not:
@@ -86,20 +87,20 @@ Three things it does that a hand-written `git diff` does not:
 - **Output is pinned plain.** `--no-pager --no-color --no-ext-diff`, so a repo whose config sets
   `color.ui = always` or a `diff.external` driver cannot decide what you read. Centralizing the
   commands would buy nothing if each still rendered differently per machine.
-- **`--ref` pins the basis.** Pass the `diff_ref` you were given rather than letting the script
-  re-resolve: that is what holds a whole fan-out of verifiers to one change while the working
-  tree keeps moving under them. Omitting it re-resolves, which is fine for a one-shot look.
+- **The basis is pinned for you.** `ingrain delta` records the fork point it resolved and `diff`
+  reads it back, so a fan-out of verifiers holds to one change with nothing passed between them.
+  A rebase past that fork point discards the pin, since diffing against it would report the
+  parent branch's replayed commits as this branch's work.
 
-An unknown subcommand, a `--ref` with no value, and a path that is neither tracked nor on disk
-are all refused with a message rather than absorbed — a typo must not come back looking like an
-empty diff.
+An unknown subcommand, and a path that is neither tracked nor on disk, are refused with a
+message rather than absorbed — a typo must not come back looking like an empty diff.
 
 ## The implementation is usually already committed
 
 By the time Testing is due, the coding agent has usually **committed** the implementation, so
 the uncommitted delta alone may show only a fraction of the code the guidance was written
 for. Route on `delta_empty`, which counts committed and uncommitted work alike.
-`delta_empty: false` with a clean working tree means the implementation is committed —
-precisely the case Testing exists for.
+`delta_empty: false` with a clean working tree means the implementation is committed — the case
+Testing exists for.
 
 On the `HEAD` fallback, `delta_empty` degrades to the dirty-tree test.

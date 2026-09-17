@@ -4,12 +4,15 @@
  *
  * Live model output varies, so these are intentionally shape-based and loose:
  * presence of a verdict keyword, a stable tag, an ordering — never exact prose.
+ *
+ * Everything here reads `TToolUse` — the host-neutral tool-call shape each backend normalizes
+ * its event stream into (`RunResult.uses`) — never a host's raw events.
  */
 
 import { AssertionError } from "@std/assert";
 import { extractYaml, test as hasFrontmatter } from "@std/front-matter";
-import { dispatchedWorkers } from "./claudeRunner.ts";
-import type { RunResult, StreamEvent } from "./types.ts";
+import type { RunResult, TToolUse } from "./types.ts";
+import { isWorker } from "./workers.ts";
 
 type Pattern = string | RegExp;
 
@@ -25,17 +28,64 @@ const indexOf = (text: string, p: Pattern): number => {
   return m ? m.index : -1;
 };
 
-const usesSkill = (ev: StreamEvent, skill: string): boolean => {
-  if (ev.type !== "assistant") return false;
-  const content = ev.message?.content;
-  if (!Array.isArray(content)) return false;
-  return content.some(
-    // deno-lint-ignore no-explicit-any
-    (b: any) =>
-      b?.type === "tool_use" && b.name === "Skill" &&
-      typeof b.input?.skill === "string" && b.input.skill.endsWith(skill),
-  );
+/**
+ * The hosts' subagent primitives, under every name any of them has shipped under.
+ *
+ * **Names, plural, deliberately.** The name is the host's, not ours, and this detector is what
+ * every dispatch assertion reads — a rename it does not know about turns each positive
+ * assertion red and, far worse, each NEGATIVE one vacuous. That is exactly what happened:
+ * Claude Code's tool became `Agent`, nothing emitted `Task` any more, and `dispatchedWorkers`
+ * returned `[]` for every run — so "the review halted before dispatching a worker" passed
+ * whether or not it had. The same hazard `lib/workers.ts` documents for the roster, reaching
+ * the suite through the host.
+ */
+const SUBAGENT_TOOLS = new Set(["Agent", "Task", "task"]);
+
+/** The subagent dispatch, if the orchestrator made one. */
+export const usesSubagent = (uses: readonly TToolUse[]): boolean =>
+  uses.some((u) => SUBAGENT_TOOLS.has(u.name));
+
+/**
+ * Workers dispatched by the orchestrator, in order of appearance.
+ *
+ * Workers are reference files under the single ingrain-security skill now, not
+ * platform-native agents, so dispatch no longer shows up as a dedicated
+ * platform tool. The orchestrator dispatches a generic subagent told to
+ * read `references/development/<name>.md`, so we recover the worker from the dispatch
+ * prompt. The in-context fallback reads the same reference via the host's skill tool, so
+ * we count that too.
+ */
+export const dispatchedWorkers = (uses: readonly TToolUse[]): string[] => {
+  const workers: string[] = [];
+  for (const u of uses) {
+    if (SUBAGENT_TOOLS.has(u.name)) {
+      const prompt = u.input.prompt;
+      if (typeof prompt === "string") {
+        const m = prompt.match(/references\/development\/([a-z-]+)\.md/);
+        if (m && isWorker(m[1])) {
+          workers.push(m[1]);
+          continue;
+        }
+      }
+    }
+    if (u.name === "Skill" && typeof u.input.skill === "string") {
+      const skill = u.input.skill.split(":").pop() ?? "";
+      if (isWorker(skill)) workers.push(skill);
+    }
+  }
+  return workers;
 };
+
+/** Names of all tools invoked, in order. */
+export const toolNames = (uses: readonly TToolUse[]): string[] => uses.map((u) => u.name);
+
+/** Does any normalized tool use invoke the given host skill? */
+export const usesSkill = (uses: readonly TToolUse[], skill: string): boolean =>
+  uses.some(
+    (u) =>
+      u.name === "Skill" && typeof u.input.skill === "string" &&
+      u.input.skill.endsWith(skill),
+  );
 
 /** At least one of the patterns must be present. */
 export const assertContainsAny = (text: string, patterns: Pattern[], msg?: string): void => {
@@ -86,21 +136,24 @@ export const assertHasScore0to100 = (text: string, msg?: string): void => {
 
 // `assertRiskDescendsByTag` lived here, parsing `T<n> … risk … <0-100>` pairs out of whatever
 // prose or table shape a live scorer produced, to check that risk never rose as the tag index
-// did. Re-tagging is `scripts/threat-retag`'s now, so the same property is asserted on JSON in
-// `hooks/threat-retag.test.ts` — deterministically, and with no prose to parse. A fuzzy matcher
+// did. Re-tagging is `ingrain assessment retag`'s now, so the same property is asserted on JSON
+// in that command's own tests — deterministically, and with no prose to parse. A fuzzy matcher
 // kept for a producer that no longer exists is a test that can only mislead.
 
 /**
  * The orchestrator started the security review (announce / review question / Skill).
  *
- * The middle signal used to be the triage worker's dispatch. That worker is gone — Step 0 is
- * now a question the orchestrator asks directly — so the observable it leaves behind is the
- * question's own wording, which `static/skill.test.ts` pins in the flow file.
+ * The baseline signals are text — the announce wording and the review question, which are the
+ * skill's own language — plus the Skill invocation when the host has that tool. **The wording
+ * is the model's, and it flexes**: hosts without a Skill tool load the skill by reading it, and
+ * the model then says "use/using Ingrain Security", hyphen or space. The trio is deliberately
+ * host-neutral; an artifact-level assertion (a minted assessment) belongs to the case, which
+ * holds the fixture path the matcher does not.
  */
 export const assertReviewStarted = (result: RunResult, msg?: string): void => {
-  const announced = /using ingrain-security/i.test(result.text);
+  const announced = /(use|using)\s+ingrain[- ]?security/i.test(result.text);
   const asked = /run a security review for this change/i.test(result.text);
-  const skillFired = result.events.some((ev) => usesSkill(ev, "ingrain-security"));
+  const skillFired = usesSkill(result.uses, "ingrain-security");
   if (announced || asked || skillFired) return;
   throw new AssertionError(
     `${msg ?? "Expected the review to start"} (no announce / review question / Skill)\n` +
@@ -109,8 +162,8 @@ export const assertReviewStarted = (result: RunResult, msg?: string): void => {
 };
 
 /** Assert a given worker was dispatched by the orchestrator. */
-export const assertWorkerDispatched = (events: StreamEvent[], name: string): void => {
-  const got = dispatchedWorkers(events);
+export const assertWorkerDispatched = (uses: readonly TToolUse[], name: string): void => {
+  const got = dispatchedWorkers(uses);
   if (!got.includes(name)) {
     throw new AssertionError(`Expected '${name}' dispatched; saw: [${got.join(", ")}]`);
   }
@@ -235,29 +288,5 @@ export const assertOnlyBlockFilled = (written: string, filled: string, msg?: str
         );
       }
     }
-  }
-};
-
-/** A line the worker was told to carry across untouched survives verbatim, in the block
- *  that owned it. The risk scorer is the one writer that rewrites whole entries, so this
- *  is what stands between a re-tag and a wiped prior verdict. */
-export const assertBlockCarriedAcross = (
-  written: string,
-  block: string,
-  line: string,
-  msg?: string,
-): void => {
-  const owning = threatEntries(written)
-    .flatMap(phaseBlocksOf)
-    .filter((candidate) => candidate.name === block);
-  if (owning.length === 0) {
-    throw new AssertionError(`${msg ?? "carry-across"}: no \`#### ${block}\` block survived`);
-  }
-  if (!owning.some((candidate) => candidate.body.includes(line))) {
-    throw new AssertionError(
-      `${msg ?? "carry-across"}: "${line}" is not in any \`#### ${block}\` block\n--- blocks ---\n${
-        owning.map((candidate) => candidate.body).join("\n---\n")
-      }`,
-    );
   }
 };

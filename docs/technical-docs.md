@@ -13,7 +13,7 @@ covers that. The normative source for each area is a reference file under
 
 One git-ignored markdown file per unit of work, at
 `.ingrain-security/assessment-<branch-slug>-<task-slug>.md`, minted by
-`scripts/assessment-mint`. It is both the workers' hand-off medium and its own persisted
+`ingrain assessment mint`. It is both the workers' hand-off medium and its own persisted
 record — finalizing it in place *is* persisting it.
 
 Normative spec: [`references/lib/assessment-file.md`](../skills/ingrain-security/references/lib/assessment-file.md).
@@ -21,7 +21,7 @@ Normative spec: [`references/lib/assessment-file.md`](../skills/ingrain-security
 ### Field cards
 
 Every section carries a **field card** — an HTML comment naming that section's fields, their
-order and their exact enumerated values — seeded by `scripts/lib/artifact-template.sh`. A writer
+order and their exact enumerated values — seeded by the CLI's `renderSkeleton.ts`. A writer
 takes the shape from the card, which arrives with the file it must open anyway; the reference is
 read only for what a field *means*.
 
@@ -45,7 +45,10 @@ flow sets the number from the PR's `release:*` label.
 **Version 2 was redefined rather than superseded.** No released plugin has ever emitted a
 `Schema version` line — version 1 is the *absence* of one — so no version-2 artifact exists
 anywhere for the current shape to break. Bumping to 3 would have implied an earlier v2 that
-consumers must still handle.
+consumers must still handle. **The CLI refuses a file declaring none or an older number**
+(uncommitted artifacts, one regeneration away) while tolerating a *higher* one with a
+warning — the ceiling exists so a newer skill cannot break an older CLI, the one direction
+the field still guarantees.
 
 ---
 
@@ -79,7 +82,7 @@ findings between them.
   scorer rewrote them whole and had to carry every block it did not own across verbatim — a prior
   pass's `#### usergate` Selection and `#### test` verdicts included. A live run came back having
   flattened a populated `#### test` block, which reads downstream as "never verified". The re-tag
-  is [`scripts/threat-retag`](../skills/ingrain-security/scripts/threat-retag) now: it moves
+  is `ingrain assessment retag` now: it moves
   entries by line span and never re-types a block, so the carve-out is gone rather than merely
   discouraged. See **The re-tag** below.
 
@@ -136,31 +139,43 @@ and the **implementation guidance** (from two driver sets already in context).
 Three workers were retired on that reasoning — `ingrain-risk-scorer`,
 `ingrain-guidance-generator` and `ingrain-guidance-critic` — which removed three sequential waves
 from every Development run. The scoring worker also did one job that is not judgement at all:
-**the re-tag**, now [`scripts/threat-retag`](../skills/ingrain-security/scripts/threat-retag). See
+**the re-tag**, now `ingrain assessment retag`. See
 **The re-tag** below.
 
 ---
 
-## The re-tag
+## The sort (`ingrain assessment retag`)
 
-Sorting the scored threats into descending-risk order and renumbering them `T01…Tn` is a total
-order over four keys, so it is a script rather than a prompt:
+Sorting the scored threats into descending-risk order is a total order over four keys, so it is a
+script rather than a prompt:
 
-    threat-retag --assessment "<assessment_abs>"
+    ingrain assessment retag --assessment "<assessment_abs>"
 
 Risk score descending → impact → likelihood → the incoming id, which is unique, so the order is
 total and re-running it on an already-sorted section is a fixed point.
 
+**It sorts; it does not renumber.** A threat's `T<nn>` is assigned once, by the generator, and
+belongs to that threat for the life of the task. The name is a misnomer left from when the tag
+was a rank; it is a subcommand now, so nothing invokes it by path and renaming it costs only a
+prose sweep.
+
+**Why the tag stopped being a rank.** It used to be one: sort by risk, renumber from `T01`. That
+made the id move whenever a score moved — and a re-review re-scores every entry, so across two
+runs of the same task `T01` could name two different threats. Anything anchored to the tag then
+described the wrong threat silently, which is fatal to a CI review that posts findings as
+pull-request comments keyed on it: the thread would follow a rank rather than the threat it was
+opened about. Risk order survives as **document** order; priority is read from the `Risk score`
+column every threat table already carries.
+
 **It is also what retired the block rule's one exception.** Moving an entry means moving it, and
 the worker that used to do this was told to rewrite `## Threats` wholesale and carry every block
 it did not own across verbatim — a live run came back having flattened a populated `#### test`
-block, erasing a prior pass's verdicts. The script moves entries by **line span** and rewrites
-nothing but the `T<nn>` token in each heading, so every other block survives byte for byte and no
-writer needs an exemption any more.
+block, erasing a prior pass's verdicts. The script moves entries by **line span** and now re-types
+no line at all, so every block and every heading survives byte for byte.
 
 **It refuses a half-scored section** (`retagged: false`, `reason: unscored-entries`) and leaves
-the file untouched: ids are permanent from here, so an order computed over entries the scoring
-step never reached would freeze the wrong priority with nothing downstream able to correct it.
+the file untouched: an entry the scoring step never reached has no risk to sort on, so it would
+land wherever the comparison dropped it and read as a priority nobody set.
 
 **Context discipline.** The orchestrator holds only compact statuses and pointers, and reads
 bounded slices of the assessment at the gates and at finalize. Retrieval is the single exception:
@@ -213,66 +228,119 @@ checklist rather than enforced as a validation rule.
 
 ---
 
+## Phase select's routing
+
+`resolvePhase`, in the CLI's `commands/assessment/lib/phase.ts`, reads six measured facts and emits `phase` +
+`phase_reason`. The **order the states are tested in is the whole of its meaning**, which is why
+it is a rule in one place rather than prose each caller re-derives.
+
+| `phase_reason` | Fires when | Route |
+|---|---|---|
+| `siblings_present` | no file for this title, but written assessments sit beside it | `requires_judgement` |
+| `fresh_task` | nothing written for this task | `development` |
+| `resume_analysis` | written, but no driver gated on either axis | `development` |
+| `scope_moved` | **the change reached code outside the recorded footprint** | `development` |
+| `verify_now` | drivers gated and a delta exists | `testing` |
+| `delta_unreliable` | drivers gated, tree clean, and no fork point resolved | `requires_judgement` |
+| `implementation_ahead` | drivers gated, tree clean, fork point fine | `development` |
+
+**`scope_moved` is tested before `verify_now`, and that ordering is the point.** They read the
+same delta against different questions — "is there code to verify" versus "is it still the code
+this analysis was built for". Unattended, every run after the first has a delta, so without the
+earlier test a branch that acquires work elsewhere routes to `verify_now` forever: it keeps being
+checked against the first push's threats while coverage falls behind, and the review keeps
+passing. That is the failure worth routing on precisely because it looks like success.
+
+The footprint reaches the mint as `--scope-paths FILE`, one repository-relative folder per line.
+It lives on the platform, so **a local run has no source for it and omits the flag** — and with
+no footprint the verdict is false, leaving the route exactly as it was. `changed_outside_footprint`
+in the CLI's `lib/footprint/changedOutsideFootprint.ts` matches on a **folder boundary**, so `backend/` does not cover
+`backend-legacy/`; a bare string prefix would report a change as covered by an analysis that never
+looked at it.
+
+That lib exists because two scripts now need the same answer to "what did this branch touch", and
+they run in the same Phase-select block. A second implementation could disagree, and the
+disagreement would surface as a route.
+
+## Unattended runs
+
+`INGRAIN_SECURITY_UNATTENDED` carries two facts in one variable: **presence** says no window
+mechanism can reach a person, and its **value** (`connected` | `standalone`) says whether there is
+a platform. The second is not inferable — the skill otherwise reads connectedness off the CLI
+being present, which unattended it always is, baked into the image.
+
+The mint reports both as `unattended` and `run_mode`, because the first gate is Step 0's review
+question — reached before the run has taken a turn of its own, so a signal the orchestrator had to
+go and read for itself would arrive a turn late.
+
+`INGRAIN_SECURITY_BAND` is the second variable, reported as `caller_band` and read **only in
+standalone**: with no
+platform to ask, the caller supplies the gating band (`low` | `medium` | `high`, anything else
+resolving to `high`). A connected run's band is the org's own and arrives on the rule-retrieval
+response, so the mint refuses to report a caller-supplied one there — on a pull request the
+workflow file comes from the branch under review, and precedence stated only in prose would be
+the author's to argue with.
+
+The band → threshold numbers live in the CLI's `phase.ts`, and the mint emits them as
+`threshold_high` / `threshold_medium` / `threshold_low`. One lookup rule serves both modes —
+`threshold_<band>`, the band coming from `caller_band` in standalone and from the retrieval's
+`maturityBand` when connected — so the gate reads a number rather than applying a table from
+prose. It is the one constant that decides what a customer's CI enforces, and Phase 5 quotes it
+into a pull-request comment.
+
+**An unrecognised value resolves to `connected`**, which is the safe direction rather than the
+lenient one: guessing connected when the truth is standalone fails a `record` visibly against a
+platform with no token, while guessing standalone records nothing and says nothing — the silent
+degradation `ingrain assert-synced` exists to catch. The offending value is named in
+`instruction` so a typo is visible rather than merely survivable.
+
+Each gate's unattended resolution, and the band → threshold table it turns on, live in
+`SKILL.md` § Unattended runs — one copy, because Part 1 defers server-side enforcement
+specifically to avoid a second.
+
 ## The trigger layer
 
-The review is worth nothing if it runs after the code. Three mechanisms fire before it, in
-ascending order of how much they can be relied on.
+**There isn't one, and that is a deliberate change.** Up to `v1.2.0` the plugin shipped six
+hooks: a `SessionStart` directive, an `ExitPlanMode` nudge, and a `PreToolUse` gate that
+**denied** a code write on a branch with no recorded `## Triage` verdict. The gate was the only
+mechanism that made the review happen to a session that would otherwise skip it.
 
-| # | Moment | Mechanism | Hosts |
-|---|---|---|---|
-| 1 | Session start | `SessionStart` → a directive naming both trigger moments, plus the substituted script commands | both |
-| 2 | Plan approved | `PostToolUse`/`ExitPlanMode` → a nudge | Claude only |
-| 3 | First unreviewed code write | `PreToolUse` → **deny**, routing the agent into the skill | both |
+All six are gone, and nothing in the plugin replaces the gate. The review is invoked by a user
+prompt or a CI entrypoint; the backstop is an **opt-in** `CLAUDE.md`/`AGENTS.md` block the user
+installs from the docs — the same text `session-start` used to inject, moved from code the
+plugin owns to instructions the user owns.
 
-**1 and 2 are advice; only 3 is mechanical.** That matters most on Codex, which has no
-`ExitPlanMode` event at all — mechanism 3 is the only trigger it can have.
+**Why.** Four reasons, and only the first is tidiness.
 
-**Why the directive no longer carries `SKILL.md`.** It used to. Hosts cap a hook's output
-strings at 10,000 characters, and the payload had grown to 21,994 — so everything past the cap
-was dropped, including the `<INGRAIN-ASSESSMENT-PATHS>` block at character 19,429. That block is
-the one part that *cannot* live in `SKILL.md`, because `plugin_root` only resolves at runtime,
-and Phase select tells the orchestrator to expect it. The inlined copy was redundant — the Skill
-tool loads `SKILL.md` on invoke — so it was the copy that went. The hook now budgets itself to
-9,000 characters and trims the *preamble* if it ever runs over, never the paths block.
+- **The gate only ever worked where we had written an adapter.** Two `hook.json` shapes, two
+  `allow-assessment-write` variants, a Claude-only `exit-plan-mode`, and `run-hook.cmd` — a
+  cmd/bash polyglot whose whole purpose was finding Git Bash on Windows. "Enforced" already
+  meant "enforced on some hosts".
+- **Hooks were the plugin's only always-executing code path.** They ran on every
+  `Write`/`Edit`/`MultiEdit`/`NotebookEdit` and at every session start, parsing
+  attacker-influenceable tool payloads with the developer's full privileges. So a supply-chain
+  compromise of this repository was arbitrary code on every file write, in every session, on
+  every machine that installed it, delivered by a version bump. What ships now is markdown: it
+  can mislead an agent, and it cannot execute.
+- **`jq` left the dependency set.** No skill script ever used it; it was a *soft* dependency of
+  one hook lib, where its absence turned every write decision into "defer" and both write gates
+  quietly stopped deciding.
+- **The review is invoked, not triggered.** With the mechanical half in the `ingrain` binary,
+  the skill is reached from exactly one place — its own opening batch — so a missing
+  prerequisite is one failed command with a stated remedy rather than a run that limps past a
+  skipped step.
 
-**What the gate reads.** One field: `## Triage` → `Verdict:`, which records the user's answer to
-the review question that opens a run. Absent → the question was never put → deny. `minor`
-(declined) or `major` (accepted) → it was → stand aside. Nothing else in the artifact carries
-that fact: `has_content` flips on the first byte any stage writes, and `Latest stage` says how
-far the analysis got — neither says whether the user was *asked*.
+**What it costs, stated rather than discovered.** A team that installs the plugin and reads none
+of the docs gets a skill nobody invokes. The loss is real; what makes it acceptable is that it
+is **visible** — no review ran, and you can see that — where a hook failing open is not. And the
+gate's own escape hatch always was in-band: declining the review recorded `Verdict: minor`, so
+the record showed *assessed, found not security-relevant* rather than nothing at all. That
+property survives, because it belongs to the review question and never to the hook.
 
-The lookup is **branch-scoped**, because a `PreToolUse` hook sees a file write, not a task, and
-the mint keys a path on branch **+ task title**. Branch is the finest identity available there.
-It is also **section-scoped and line-anchored**, for the same reason `count_selected_in_section`
-is: the field card under `## Triage` spells out `Verdict (minor|major)` in its own prose, so a
-loose match would read the card as a decision and report every untouched skeleton as reviewed —
-inverting the gate.
-
-**No dependency may be able to make it fail shut.** A hook that reads "cannot tell" as "not
-reviewed" blocks every write, and the in-band escape cannot help — answering the review question
-writes a `Verdict` the hook still cannot read. So both section-scoped parsers, the gate's
-`branch_review_recorded` and the mint's `count_selected_in_section`, are **bash builtins only**;
-retiring that one `awk` call removed the last runtime dependency whose absence flipped the gate
-from fail-open to fail-shut. Everything else the gate touches degrades the safe way: no `jq`, no
-`git`, no `tr` all end in standing aside. When adding to this path, check which way a missing
-binary sends it.
-
-**A guardrail, not a boundary.** The gate matches the file-editing tools and not `Bash`, so
-`cat > file` walks past it, and every ambiguity — malformed payload, missing `jq`, detached
-HEAD, non-git tree — fails **open**. The agent is a collaborator to be held to a process, not an
-adversary to be contained, and a guardrail that strands a session is worse than one that misses
-a nudge.
-
-**The invariant that inverted.** `allow-assessment-write` documents "never introduce a block" as
-a core property. That is a property of *those hooks*, whose job is removing a prompt — not of
-the hook tree. What holds tree-wide is the **separation**: the hooks that can lift a prompt
-cannot block, and the hook that can block cannot lift one. Both halves are asserted on the
-sources in `tests/static/skill.test.ts`.
-
-The two `PreToolUse` hooks never both express an opinion on one call: `allow-assessment-write`
-defers on everything that is not the assessment file, and the gate defers on everything that is.
-That carve-out is also what stops the gate deadlocking the flow it routes to — the skill has to
-write the very `Verdict` the gate reads.
+**The write grant moved to `allowed-tools`.** `SKILL.md`'s frontmatter scopes `Write` and `Edit`
+to `.ingrain-security/`, which replaces the two `allow-assessment-write` hooks. Where a host
+does not apply a path-scoped rule, the write prompts — a UX regression, not a correctness one,
+and the documented fallback rather than a reason to bring a hook back.
 
 ---
 
@@ -281,13 +349,35 @@ write the very `Verdict` the gate reads.
 | Task | Tier | Runs in CI |
 |---|---|---|
 | `deno task test:static` | prose and wiring assertions, no model calls | yes |
-| `deno task test:parity` | script output contracts, both directions | yes |
-| `deno task test:hooks` | the mint, the write grant, the folder hook, the injected directive, the review gate | yes |
-| `deno task test:shell` | `branch-delta` behaviour + shellcheck | yes |
-| `deno task test:agent` | **live model calls** — one dispatch per worker | no |
-| `deno task test:integration` | full orchestration | no |
+| `deno task test:parity` | task-table wiring | yes |
+| `deno task test:shell` | shellcheck over the three `.github/` release scripts, and the assertion that the plugin ships no executable at all | yes |
+| `deno task test:agent` | **live model calls** on a selected host — one dispatch per worker, plus the directed trigger pair | no |
+| `deno task test:integration` | full orchestration on the selected host | no |
 
-`deno task ci` is the offline tier — lint, fmt and the four suites above it.
+`deno task ci` is the offline tier — lint, fmt and the three suites above it. The live tier's host
+is a harness setting, not a skill property: `INGRAIN_TESTS_AGENT_HOST=claude` (the default) drives
+Claude Code, `INGRAIN_TESTS_AGENT_HOST=opencode` drives OpenCode as configured on the machine, and
+`test:matrix:claude` / `test:matrix:opencode` run the whole live tier on one host. The suite's host
+seam is asserted by tests — shared modules (`matchers`, `reporter`, fixtures) import no backend and
+only `lib/runners/index.ts` may.
+
+`deno task ci` is the offline tier — lint, fmt and the three suites above it.
+
+**`ci` no longer evidences that the review executes**, and that is worth stating rather than
+inferring from a green run. The mint, the delta and the re-tag are the `ingrain` CLI's now, so
+their behavioural tests live in that repo, and three cross-repo agreements live in the
+monorepo's `tests/contract/` — the only tier that can see both:
+
+| Check | Where |
+|---|---|
+| mint · delta · re-tag behaviour | `ingrain/cli/commands/{assessment,delta}/tests/` |
+| field card ↔ `assessment-file.md`, and the band → threshold numbers | `tests/contract/skill-cli/assessmentCards.test.ts` |
+| every documented `ingrain-script` command actually runs | `tests/contract/skill-cli/documentedInvocations.test.ts` |
+
+What `ci` covers here is prose, wiring and the release scripts. **`test:agent` is what evidences
+the review runs at all** — the directed trigger pair especially, since with no hook to inject
+context those are the tests that answer whether a prompt alone starts and runs a review, on the
+harness host the run is pointed at.
 
 **The offline tier cannot see producer behaviour.** It asserts what the prose *says*; only the
 agent tier observes what a worker *does* with it. Both matter, and each catches what the other

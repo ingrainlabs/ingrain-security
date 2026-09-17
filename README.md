@@ -24,10 +24,12 @@ goes on to build.
 Once the work is implemented, the same skill's **Testing** phase checks the code against both
 axes — see [Verifying the implementation](#verifying-the-implementation).
 
-**The plugin stands alone.** The threat review runs entirely on your machine with the plugin
-alone. The optional [`ingrain` CLI](https://docs.ingrainlabs.dev/getting-started/) adds two
-capabilities: it retrieves **your org's security rules** so they become the second driver axis,
-and it **syncs finished assessments** to the Ingrain platform so a team can read them. Sections
+**The review runs entirely on your machine, and it needs two pieces.** This plugin is markdown;
+the review executes through the [`ingrain` CLI](https://docs.ingrainlabs.dev/getting-started/),
+so install both. What is genuinely *optional* is the platform: with an API token the CLI also
+retrieves **your org's security rules** so they become the second driver axis, and **syncs
+finished assessments** so a team can read them. Without one the threat review runs unchanged, on
+its own axis, and nothing leaves your machine. Sections
 marked *(optional — needs the CLI)* cover those.
 
 ## Installation
@@ -44,22 +46,28 @@ codex plugin marketplace add ingrainlabs/ingrain-security
 
 Installs are pinned to the `v<version>` git **tag**.
 
-That is the whole install — the review runs from here.
-
-**Optional — the `ingrain` CLI.** To add org-rule retrieval and platform syncing, install the CLI
-binary and configure its API token: **[Getting started](https://docs.ingrainlabs.dev/getting-started/)**.
+**That is half the install.** This plugin is markdown; the review runs through the `ingrain`
+CLI, so install that too and make sure it is on your editor's `PATH`:
+**[Getting started](https://docs.ingrainlabs.dev/getting-started/)**. Configuring an API token
+on top is optional and adds org-rule retrieval and platform syncing — see
+[Requirements](#requirements).
 
 ## Usage
 
-- **Automatic.** The agent runs the review itself once it knows what it is about to build — in
-  plan mode or straight from the conversation. If it starts writing code before that has
-  happened, the write is stopped and it runs the review first.
-- **Not every change needs one.** The review opens by asking whether this change is
-  security-relevant. Say no and it stops there — that answer is recorded, so the change reads as
+- **Prompted.** The agent runs the review once it knows what it is about to build — in plan
+  mode or straight from the conversation — when something tells it to. **The plugin does not
+  enforce this and blocks nothing**: it ships prose, and if nobody invokes the skill, no review
+  happens. Making it reliable is a one-time, copy-paste block in your project's `CLAUDE.md` or
+  `AGENTS.md`: **[Making the review actually
+  run](https://docs.ingrainlabs.dev/enforcement/running-the-review/)**. In CI the workflow
+  supplies the instruction instead.
+- **Not every change needs one.** When something other than you starts the review — the opt-in
+  block, or the agent deciding at the end of planning — it opens by asking whether this change is
+  security-relevant. Say no and it stops there: that answer is recorded, so the change reads as
   assessed rather than skipped, and you are not asked about it again.
 - **Manual.** Invoke it via the Skill tool, or just ask — e.g.
   *"Use Ingrain Security to threat-model what we just worked out, before I write
-  code."*
+  code."* Asking for it yourself skips that opening question; you have already answered it.
 - At the **threat gate** — and, with the CLI, the **rule gate** alongside it in the same
   moment — you choose what is in scope. Each is an individual include/exclude decision, and
   excluding everything is a valid outcome: threats are recorded as accepted risk, rules as deemed
@@ -67,25 +75,25 @@ binary and configure its API token: **[Getting started](https://docs.ingrainlabs
 
 ## Requirements
 
-| Platform | Requirement |
-|----------|-------------|
-| macOS / Linux | System `bash`, `grep`, `sed` and coreutils — already present. |
-| **Windows** | **[Git for Windows](https://git-scm.com/download/win) is required.** |
-
 | Tool | Used for |
 |------|----------|
-| `bash` | every hook and skill script |
-| [`jq`](https://jqlang.github.io/jq/) | the hooks that read the tool payload, to decide about a file write |
+| **`ingrain` CLI** | **required** — the review runs through it |
 | `git` | resolving the repo root, the branch, and the branch delta to review |
-| `grep`, `sed`, coreutils | resolving the fork point and reading a prior assessment's title |
-| `ingrain` CLI *(optional)* | org-rule retrieval and syncing to the platform |
+| `ingrain` + a platform token *(optional)* | org-rule retrieval and syncing to the platform |
 
-**Why Git for Windows.** The plugin's hooks are bash scripts run through
-[`hooks/run-hook.cmd`](hooks/run-hook.cmd), a cmd/bash polyglot wrapper. On Windows
-it invokes them with the bash it finds at `C:\Program Files\Git\bin\bash.exe` or any
-`bash` on `PATH` (Git Bash / MSYS2 / Cygwin). Installing Git for Windows — whose
-bundled **Git Bash** satisfies this — supplies that bash, and the automatic review then fires as
-it does everywhere else.
+**A plugin install is not enough on its own.** This plugin ships markdown; the review's
+mechanical half — resolving where the assessment lives, working out what the branch changed,
+and ordering threats by risk — is `ingrain assessment mint`, `ingrain delta` and
+`ingrain assessment retag`. Install the CLI first ([installation
+instructions](https://docs.ingrainlabs.dev/commands/install/)) and make sure it is on the
+`PATH` your editor sees — a GUI-launched editor often has a different one from your shell.
+
+If it is missing, the review stops at its first step with a message naming the remedy rather
+than carrying on with a step quietly skipped.
+
+**The platform stays optional.** Without a token the review runs on the threat axis alone: no
+org rules, no syncing. What you lose is stated under [Syncing to the
+platform](#syncing-to-the-platform), not discovered.
 
 ## Permissions & network access
 
@@ -182,7 +190,7 @@ flowchart TD
         majorQ -->|minor — not security-relevant| stop(["Stop — carry on"])
         majorQ -->|major| threats["generate threats → critic"]
         majorQ -->|major, in parallel| rules["retrieve org rules — broad<br/>optional: needs the ingrain CLI"]
-        threats --> score["risk score 0–100<br/>then re-tag into risk order"]
+        threats --> score["risk score 0–100<br/>then sort into risk order"]
         rules --> rcritic["rule critic — prunes<br/>before you see anything"]
         score --> threatgate
         rcritic --> rulegate
@@ -273,7 +281,7 @@ reachable, and violated while every threat is closed.
 
 - A single **assessment file** written into the `.ingrain-security/` folder at your
   project root — `.ingrain-security/assessment-<branch>-<task>.md` (branch- and
-  task-keyed, minted by the `scripts/assessment-mint` script). It is the workers'
+  task-keyed, minted by `ingrain assessment mint`). It is the workers'
   shared hand-off medium *and* its own persisted record, written in place, and is
   git-ignored by default (share one with `git add -f <file>`).
 - The selected findings, **folded into the work in hand**.
@@ -283,13 +291,10 @@ decided. It states its own format under `## Task` as `Schema version`, so tools 
 tell which shape they have; the schema and its history are in the
 [technical docs](docs/technical-docs.md#schema-versioning).
 
-Writes to that one file are approved automatically — by a `PreToolUse` hook on Claude
-Code and a `PermissionRequest` hook on Codex — so the review writes as it works. The grant is
-deliberately narrow: `assessment*.md` files sitting directly in the project's
-`.ingrain-security/` folder, reached by a real path. On Codex, where an edit is an `apply_patch`,
-the patch may add or update exactly those files. The hook's one power is to skip a prompt for
-that narrow set; everything else — including the folder's own `README.md` — follows your normal
-permission flow. Codex asks you to review and trust the hook once, via `/hooks`.
+Writes to that one file are pre-approved through the skill's own `allowed-tools` frontmatter,
+scoped to `.ingrain-security/`, so on a host that honours a path-scoped rule the review writes
+as it works. Everything else follows your normal permission flow.
+
 
 ## Syncing to the platform
 
@@ -313,6 +318,38 @@ the review notes it in one line and carries on to the end.
 **To keep everything local,** deny `ingrain record` in your host's permission settings, or leave
 the CLI unconfigured. A CLI at a release that predates `Schema version: 2` reports an unknown
 subcommand, and the review continues unsynced.
+
+## Unattended / CI
+
+The review normally puts two questions to you — which threats to act on, and which of your org's
+rules govern the change. With nobody at the keyboard there is no one to ask, and picking nothing
+would mean no guidance and no verification pass. So set `INGRAIN_SECURITY_UNATTENDED` — to
+`connected` when the runner has an `ingrain` API token, or `standalone` when it does not — and
+each gate resolves on its own. **It takes one of those two words, not a flag**: anything else is
+read as `connected`, and a runner with no token then attempts uploads it cannot make.
+
+| Gate | What it does unattended |
+| --- | --- |
+| *Is this change worth reviewing?* | Takes **yes** — a needless review is cheap, a missed concern is not |
+| *Which threats to act on?* | Selects everything above your org's **risk threshold**; the rest are reported but not required |
+| *Which org rules apply?* | Accepts all of them, over a set already narrowed to this change |
+
+**The threshold is your configuration, not ours.** Connected, it comes from the maturity band set
+on the buckets covering the repository, so what CI enforces is changed in the product rather than
+in a workflow file — and a band set in a workflow is refused there, because on a pull request that
+file comes from the branch under review. Standalone has no buckets to read, so it takes the band
+from `INGRAIN_SECURITY_BAND` (`low` | `medium` | `high`).
+
+A stricter band means a lower bar: `high` requires work on anything scoring above
+25, `medium` above 50, `low` above 75. With nothing configured anywhere it uses `high` — the
+strictest — so the gate can never fail to resolve.
+
+**Nothing is hidden.** A threat below the threshold is still reported, marked as accepted risk
+rather than required work. The band and the exact threshold applied are recorded in the assessment,
+so a reader can see what the run enforced instead of inferring it.
+
+Standalone skips org-rule retrieval and both uploads and still produces the whole
+threat review — which is also the stronger privacy posture, since nothing leaves the runner.
 
 ## For contributors
 

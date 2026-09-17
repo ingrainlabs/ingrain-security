@@ -2,8 +2,9 @@
  * Live per-worker tests, table-driven. Each case dispatches one worker the way
  * the orchestrator does — its SKILL.md body as the system prompt, plus a freshly
  * minted assessment file as its write target — and asserts the output's *shape*
- * (a verdict keyword, a 0-100 score, risk descending by tag, required fields)
- * over the worker's return AND the file it wrote. Assertions are loose because
+ * (a verdict keyword, a 0-100 score, required fields) over the worker's return AND the
+ * file it wrote. Ordering is NOT among them: risk order is `ingrain assessment retag`'s,
+ * asserted deterministically in that command's own tests rather than parsed out of prose. Assertions are loose because
  * live model output varies.
  *
  * The cases live in a single CASES table — mirroring the WORKERS loop in
@@ -17,7 +18,12 @@ import {
   assertHasScore0to100,
   assertOnlyBlockFilled,
 } from "../lib/matchers.ts";
-import { AGENT_TIMEOUT_MS, mintAssessment, workerDispatchPrompt } from "../lib/claudeRunner.ts";
+import {
+  AGENT_TIMEOUT_MS,
+  mintAssessment,
+  resolveHost,
+  workerDispatchPrompt,
+} from "../lib/runners/index.ts";
 import type { RunResult } from "../lib/types.ts";
 import { runChecked } from "../lib/reporter.ts";
 import { MAJOR_PLAN, RETRIEVED_RULES, TASK_AND_WEAK_MODEL } from "../lib/sampleInputs.ts";
@@ -30,7 +36,7 @@ import { MAJOR_PLAN, RETRIEVED_RULES, TASK_AND_WEAK_MODEL } from "../lib/sampleI
 const WORKER_TOOLS = ["Read", "Grep", "Glob", "Write", "Edit"];
 
 interface AgentCase {
-  /** Worker skill to dispatch (skills/<worker>/SKILL.md). */
+  /** Worker to dispatch (references/development/<worker>.md). */
   worker: string;
   /** Display label for the INPUT/OUTPUT/VERDICT block and the test name. */
   label: string;
@@ -69,9 +75,9 @@ const addedLines = (written: string, seeded: string): string => {
 // Three more left the same way in the speed-up — the risk scorer and the guidance
 // generator/critic, whose steps moved into the orchestrator. The scorer's case is the one
 // worth knowing where it went: its central assertion was that re-tagging moves entries
-// WITHOUT disturbing the blocks it does not own, and that is now a deterministic script with
-// a deterministic test (`hooks/threat-retag.test.ts`) rather than a live worker checked
-// loosely. The same property, pinned harder and for free.
+// WITHOUT disturbing the blocks it does not own, and that is now `ingrain assessment retag`
+// with a deterministic test of its own rather than a live worker checked loosely. The same
+// property, pinned harder and for free.
 const CASES: AgentCase[] = [
   {
     // ingrain-threat-generator (sonnet): produces a threat list with stable tags T1, T2, …
@@ -128,7 +134,7 @@ for (const c of CASES) {
   Deno.test(c.label, async () => {
     const projectDir = await Deno.makeTempDir();
     try {
-      const { assessmentAbs } = await mintAssessment(projectDir, c.label);
+      const { assessmentAbs } = await mintAssessment(projectDir, c.label, resolveHost());
       const seeded = await Deno.readTextFile(assessmentAbs);
       const prompt = await workerDispatchPrompt(c.worker, c.input, assessmentAbs);
 

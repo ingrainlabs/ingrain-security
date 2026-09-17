@@ -1,8 +1,8 @@
 # Dispatch reference — the host mechanism, for both phases
 
 Every worker and every verifier is dispatched as a **fresh worker subagent** told to read its
-reference file — `<plugin_root>/skills/ingrain-security/references/development/<name>.md` for a
-Development worker, `<plugin_root>/skills/ingrain-security/references/testing/<name>.md` for a
+reference file — `<skill_dir>/references/development/<name>.md` for a
+Development worker, `<skill_dir>/references/testing/<name>.md` for a
 Testing verifier — and follow it. That abstraction maps differently onto each host.
 
 **This file owns the MECHANISM only.** The dispatch *prompt* belongs to the phase that sends it:
@@ -43,7 +43,7 @@ Anything with no data dependency on anything else in flight is issued **together
 block** — not one per turn. Each extra turn is a round-trip the run pays for and nothing gains.
 This covers:
 
-- **The two bundled scripts at Phase select** — `assessment-mint` and `branch-delta` are
+- **The two commands at Phase select** — `ingrain assessment mint` and `ingrain delta` are
   read-only and deterministic, and neither reads the other's output. One block, and the values
   are reused for the whole run; no later step re-mints.
 - **The two driver chains after the review question** — the threat chain and the broad rule retrieval have no
@@ -57,9 +57,10 @@ pipeline order in `references/development/flow.md` is a real data dependency, no
 ## Writing the assessment file
 
 **Every change to it goes through the Edit or Write tool** — the orchestrator's and every worker's
-alike. `allow-assessment-write` pre-approves both for this path, so the change lands with no
-permission prompt and the user still sees the before/after. The shell has a different job: it runs
-this plugin's read-only scripts and the `ingrain` CLI, and never edits the assessment file.
+alike. This skill's `allowed-tools` frontmatter grants both, scoped to `.ingrain-security/`, so on
+a host that applies a path-scoped rule the change lands with no permission prompt and the user
+still sees the before/after; where it does not, you are simply prompted — approve and carry on.
+The shell has a different job: it runs the `ingrain` CLI, and never edits the assessment file.
 
 Every field is its own line, but **a write is one call**. A worker writes its whole section in a
 single Write or Edit, and a stage filling fields into entries that already exist makes **one Edit
@@ -69,9 +70,10 @@ costs one call rather than one per line.
 
 An entry's field lines are **not** one contiguous run: `## Threats` entries are divided into
 `#### ` phase blocks, one per writing stage, and replacing first-field-to-last would swallow the
-markers between them. **Every stage writes inside its own marker, with no exception.** Re-tagging
-is `skills/ingrain-security/scripts/threat-retag`'s, and it moves entries by line span without
-re-typing a block, so no stage has cause to rewrite `## Threats` whole.
+markers between them. **Every stage writes inside its own marker, with no exception.** Sorting
+the section into risk order is `ingrain assessment retag`'s, and it moves
+entries by line span without re-typing a line, so no stage has cause to rewrite `## Threats`
+whole.
 
 **The file tells you its own shape.** The mint seeds a **field card** under every section, and that
 card is the write contract — write from it. `references/lib/assessment-file.md` is for what
@@ -81,9 +83,16 @@ a field *means*, not for learning its shape.
 
 Use the host's subagent / task primitive, passing the dispatch prompt and telling
 the subagent to read the worker reference file from
-`<plugin_root>/skills/ingrain-security/references/development/<name>.md`. Dispatch one
+`<skill_dir>/references/development/<name>.md`. Dispatch one
 worker per call and read the returned text. Where the host supports a per-subagent
 model, set the worker's recommended tier; otherwise ignore it (advisory).
+
+**Three hosts have one, and the primitive is named differently on each.** Claude Code and
+Codex call it a subagent or task tool. **OpenCode dispatches by `@mention`**: it distinguishes
+`mode: "primary"` from `mode: "subagent"`, ships `general`, `explore` and `scout` as built-in
+subagents, and invoking one by name spawns a worker session. So the **designed dispatched mode
+applies on OpenCode too** — the sequential fallback below is not the OpenCode path, and reading
+it as one would give up per-worker context and the model tier for no reason.
 
 ## When a session rule gates subagents behind user request
 
@@ -92,6 +101,12 @@ wording you will see is *"unless the user requested it."* Read that as a **permi
 mechanism the host already has**: the rule names the condition that opens it, so the work is to
 obtain that request. The sequential fallback below covers a different case — a host whose only mode
 is the main session.
+
+**Unattended, there is nobody to ask: dispatch.** The signal means no window mechanism can reach
+a person, so the gate the rule describes cannot be opened — and waiting on it stalls the run at its
+first action. The permission the rule seeks is the *user's request*, which an unattended run
+carries by construction: it was started to perform this review. Say in the closing verdict that the
+flow ran dispatched. Everything below is for an attended run.
 
 **Ask the user to allow the subagent flow, before the first dispatch of the run** — Development
 Step 1a's threat generator, or Testing's verifier fan-out. Ask once, up front: one answer covers the whole run,
@@ -140,7 +155,7 @@ command?") straight to the user, so the fetch retries in place.
 
 **Every Development worker is dispatched with exactly five tools: Read, Grep, Glob, Edit and
 Write** — it inspects the plan and repo with the first three, and writes its own section of
-the assessment file with Edit or Write, which `allow-assessment-write` pre-approves for that
+the assessment file with Edit or Write, which this skill's `allowed-tools` grants for that
 path. It works from the rules already on disk — they are in the assessment's own `## Org rules`
 section, so the assessment path you already pass is the only path a worker needs.
 
@@ -149,7 +164,7 @@ with Edit or Write. There is no fallback where it stages the text somewhere else
 transplant.
 
 **A Testing verifier is the mirror image: Read, Grep, Glob and Bash — no Edit, no Write.** It
-needs the shell for one thing only, the bundled `branch-delta <host> diff` command its dispatch
+needs the shell for one thing only, the `ingrain delta diff` command its dispatch
 carries, which is how it reads the change without hand-writing git. Grant it nothing that could
 write the assessment: the orchestrator is the file's single writer during Testing.
 
@@ -171,3 +186,7 @@ The primitive is generic; only the mechanism changes per host:
   if it is declined — `flow.md` § 4b owns why that is the default.
 - **Text fallback** — where the host lacks a windowed primitive, ask the user to
   reply with the ids to include (e.g. `T01 T03`) or `none`.
+- **Unattended — neither branch applies.** No window opens and no reply is waited for: both gates
+  resolve without a person, the threat gate on the run's threshold and the rule gate on
+  accept-all. → `SKILL.md` § Unattended runs. The tables are still displayed; they are the whole
+  of the gate's output there.

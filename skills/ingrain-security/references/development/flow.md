@@ -13,10 +13,9 @@ question and the prior-analysis lookup behind it, the broad org-rule retrieval �
 alongside the threat chain rather than after a gate**, and Step 1 states exactly what that overlap
 is and is not — the risk scoring at Step 3, and the implementation guidance at Step 5.
 
-Each of those three needs fresh eyes on the plan and the repo, which is what a dispatch buys and
-what it is worth a wave for — SKILL.md § Security review loop states the rule. Scoring the threats
-you are about to gate, and writing guidance from two driver sets already in your context, are not
-that.
+Each of those three needs fresh eyes on the plan and the repo, which a dispatch gives them and a
+wave pays for — SKILL.md § Security review loop states the rule. Scoring the threats you are about
+to gate, and writing guidance from two driver sets already in your context, are not that.
 
 This phase produces exactly **two things**: the **assessment file** (the hand-off medium the
 workers and you write section by section, and you finalize) and the modifications to the active
@@ -35,8 +34,8 @@ Dispatch every worker with the same shape. The write target is restated inline b
 is per-run and the worker has no other way to learn it:
 
 ```
-Read <plugin_root>/skills/ingrain-security/references/development/<name>.md — the ABSOLUTE
-path, with plugin_root from the mint JSON pasted in full — and follow it as your system prompt.
+Read <skill_dir>/references/development/<name>.md — the ABSOLUTE
+path, with this skill's base directory pasted in full — and follow it as your system prompt.
 Your ONE permitted write is your own section of the stored analysis file for this run at
 <the minted assessment_abs — the ABSOLUTE path, pasted in full> (section: <## Section for this worker>),
 written to the field card that file already carries under your section: one field per line,
@@ -47,7 +46,7 @@ Write that section in ONE call — a single Write or Edit carrying every entry. 
 filling fields into entries that already exist, it is one Edit per ENTRY, replacing the run
 between your own marker and the next; never one Edit per field.
 The card is the write contract — read
-<plugin_root>/skills/ingrain-security/references/lib/assessment-file.md
+<skill_dir>/references/lib/assessment-file.md
 only if you need what a field MEANS.
 Write to that exact absolute path, character for character as pasted
 above — it is already resolved against the repo root, whose .ingrain-security/ folder
@@ -112,6 +111,20 @@ file.
    `phase: requires_judgement` / `siblings_present` resolves its siblings first, because that
    decides which file this run writes into. Nothing else goes ahead of the question.
 
+   **Whether to ask at all turns on how the run started**, so settle that before opening anything:
+
+   | How this run started | Step 0 |
+   |---|---|
+   | **The user asked for this review** — `/ingrain-security`, or in words | take `Yes` and open no window: they arrived with the answer |
+   | **`unattended: true`, or no window mechanism reachable** | take `Yes` and open no window: nobody to ask, and a needless review costs less than a missed concern |
+   | **Anything else** — the opt-in `CLAUDE.md` / `AGENTS.md` block, a workflow prompt, your own judgement at the end of planning | **ask** |
+
+   The third row is the ordinary case and the reason the question exists: that block is written to
+   over-trigger because one question is cheap, so a run skipping the question there would spend a
+   full review on a typo fix. **Undecidable means ask** — one turn, against a review nobody
+   wanted. A row-one or row-two run writes `Verdict: major` + `Security relevant: true` and
+   carries on into the `major` branch below.
+
    One single-choice window, worded so the answer stands on its own as a record:
 
    > **Run a security review for this change?**
@@ -135,10 +148,9 @@ file.
    no behavioural change, or a non-executable asset.
 
    **Borderline recommends `Yes`.** A needless review is cheap; a missed security concern is
-   expensive. State your reading in one line above the window so the user can correct it — the
-   recommendation is a default, never a decision, and their answer is what gets recorded either
-   way. **No window mechanism reachable** — a non-interactive run — take `Yes`, for the same
-   asymmetry.
+   expensive — the same asymmetry the table's second row takes. State your reading in one line
+   above the window so the user can correct it: the recommendation is a default, never a decision,
+   and their answer is what gets recorded either way. → `SKILL.md` § Unattended runs.
    → `references/lib/dispatch.md` § Selection windows for the host mechanism.
 
    **Write `## Triage` yourself** from the answer — `Verdict: major` + `Security relevant: true`,
@@ -148,7 +160,9 @@ file.
      `## Task` → `Description` (one line on what this change does) beside the `## Triage` you just
      wrote, with `Prior analysis: none` — no lookup ran, and none was owed. The file is otherwise
      left as seeded. Then sync it — best-effort, exactly like the Development finalize:
-     `ingrain record design --assessment "<assessment_abs>"`.
+     `ingrain record design`. **Standalone skips that call**, as
+     every other `record` is skipped: there is no platform to reach, and the mode is set for the
+     whole run rather than per step.
      Then state "no security review needed — minor change" and **STOP**; the question is the whole
      pipeline for a minor change, so carry on building the plan.
 
@@ -162,7 +176,21 @@ file.
      review: one line and carry on.
    - `major` → two things, in this order.
 
-     **Find the prior analysis first.** The mint handed you a **`siblings`** list — the assessments
+     **Find the prior analysis first — and on a resume it is the file you are already holding.**
+
+     **`has_content: true` means this run IS the resume**, so `assessment_abs` already carries
+     the prior analysis and your **Prior analysis pointer is that same path**. Every Development
+     route but `fresh_task` arrives this way — `resume_analysis`, `implementation_ahead` and
+     `scope_moved` all require written content — and unattended, `scope_moved` is the ordinary
+     route after a branch grows. The mint's `siblings` list is **empty by construction** on all
+     of them, because it is populated only when nothing was written for this title. So a run
+     that looked only at `siblings` would find nothing, seed the generator with nothing, and let
+     it re-derive `T01…` over threats that already exist — retiring every tag and every gate
+     decision the file holds — and a tag moving is exactly what a permanent tag forbids, on the
+     most common CI route of all.
+
+     **Only when `has_content: false`** is the prior analysis somewhere else. The mint handed you
+     a **`siblings`** list — the assessments
      already on this branch that this run's title did not produce, already filtered to written
      files and already excluding the file this run is about to write. Read those candidates as
      absolute paths (prefix each with `<project_root>/.ingrain-security/`).
@@ -211,22 +239,29 @@ file.
    (the Surfaces you wrote seed the search; extend beyond them).
    **If Step 0's lookup left you a Prior analysis pointer**, also point it at that snapshot's
    `## Threats` and `## Implementation guidance` so it **seeds from the prior analysis**,
-   re-derived against the current plan. It writes one `### T<n>` entry per
+   re-derived against the current plan. **On a resume that pointer is the worker's own write
+   target**, so say so in the dispatch — *"the `## Threats` already in that file is the prior
+   analysis; carry each surviving threat's `T<nn>` across and take the next free id only for a
+   genuinely new one"*. Without that sentence the worker reads its target as an empty section to
+   fill, and the tags it overwrites are the ones a posted review is anchored on.
+   It writes one `### T<n>` entry per
    threat into `## Threats` and returns a pointer. Ids are assigned in discovery order and are
-   **provisional** — stable through the critique so its feedback keys line up, then re-tagged into
-   risk order at Step 3.
+   **permanent from that moment** — through the critique, through Step 3's sort, and through every
+   later run of this task. A resumed generator carries each surviving threat's tag across with it.
 
-   **1b — Retrieve the org rules, broadly. Yours alone, no worker.** They are ingested knowledge —
+   **1b — Retrieve the org rules, broadly. Yours alone, no worker.** **Skipped entirely in
+   `run_mode: standalone`** — there is no platform to ask, so leave `## Org rules` empty, say so in
+   one line, and the review runs on the threat axis alone. They are ingested knowledge —
    how *this* team implements auth, validation, secrets, crypto — reached by semantic search over
    the `ingrain` CLI, and this is the review's **one** retrieval pass. It keys on **the plan, the
    `## Triage` Surfaces and `## Affected paths`** — all on disk from Step 0 — and **never on gate
-   selections**, which is what lets it run here rather than after a gate.
+   selections**, so it can run here rather than after a gate.
 
-   **Cast a wide net.** Missing a governing rule is the costly failure, and precision is restored
-   by the critique that follows rather than by asking fewer questions: run a query per distinct
-   security feature the change touches, and prefer more queries and higher limits to a narrow
-   sweep. Pass **`--assessment "<assessment_abs>"`** so the search narrows to the rules governing
-   the folders you named in `## Affected paths`.
+   **Retrieve broadly.** A rule that governs the change and is missed never reaches the user, and
+   the critique that follows restores precision, so asking fewer questions gains nothing: run a
+   query per distinct security feature the change touches, and prefer more queries and higher
+   limits to a narrow sweep. The search narrows itself to the rules governing the folders you
+   named in `## Affected paths`, read from the assessment the mint recorded.
 
    **Ask them all in ONE call.** Every question is known before the first answer — they key on the
    plan, the Surfaces and `## Affected paths`, all on disk — so nothing about query 2 depends on
@@ -237,6 +272,13 @@ file.
 
    Write what comes back — id, title and **full body verbatim**, with `Selection: —` — into
    **`## Org rules`** in the assessment. Nothing retrieved → leave the section empty.
+
+   **Unattended: keep `maturityBand` from that same response — it is the org's gate, and this is
+   the only step it passes through.** Two dispatch waves and the scoring step sit between here
+   and § 4a, which is where it is finally used, and nothing else fetches it: dropped, the gate
+   degrades to the strictest bar and records a band the org never set, which reads as correct.
+   It is present even on a zero-result response. Read the mint's `threshold_<band>` key for it to
+   get the number § 4a applies. Standalone has no such response and uses `caller_band` instead.
    → `references/lib/ingrain-cli.md` owns the probe, the query and the failure taxonomy;
    `references/lib/assessment-file.md` § `## Org rules` owns the section's schema.
 
@@ -274,11 +316,11 @@ file.
 
    **A pruned rule is never presented and never recorded.** Machine judgment here is retrieval
    refinement — the same category as the search ranking — and only *user* decisions reach the
-   record. The accepted trade: a critic false-positive **you do not catch** is recoverable only by
-   re-review, and that is what buys a curated set the user can vouch for wholesale.
+   record. The cost: a critic false-positive **you do not catch** is recoverable only by
+   re-review. In exchange the user gets a curated set they can accept in one choice.
 
 3. **Risk score — yours, no worker.** Judgement and bookkeeping, in that order: you score, then a
-   script re-tags. **Read the frozen `## Threats` slice once** — this is the bounded read the
+   script sorts. **Read the frozen `## Threats` slice once** — this is the bounded read the
    context-window discipline permits, and it is the same one the threat gate needs, so it is made
    here and serves both.
 
@@ -301,33 +343,32 @@ file.
    `Criticality` for the change as a whole. **Keep your one-line justification for that residual in
    hand**: the section has no field for it, and the closing verdict is where it lands.
 
-   **Then re-tag, with the script — never by hand.** It sorts the entries into descending-risk
-   order and renumbers them contiguously from `T01`, the most dangerous threat. Unlike the Phase
-   select batch, SessionStart does not inject this one ready to run: paste `plugin_root` and
-   `assessment_abs` in from the mint JSON, both in full.
+   **Then sort, with the command — never by hand.** It moves the entries into descending-risk
+   order and **renumbers nothing**: every threat keeps the tag it was written under.
 
    ```ingrain-script
-   bash <plugin>/skills/ingrain-security/scripts/threat-retag --assessment "<assessment_abs>"
+   ingrain assessment retag
    ```
 
-   Entries move by line span, so every phase block travels with its threat byte for byte and only
-   the `T<nn>` token in a heading is rewritten. **Take the new ids from its JSON**, which is the
-   whole of what the threat gate's table needs beside the entry text you already read:
+   Entries move by line span and no line is rewritten, so every heading and every phase block
+   travels byte for byte. **Take the display order from its JSON** — with the entry text you have
+   already read, that is everything the threat gate's table needs:
 
    - **`retagged`** — `true` when the file was rewritten. Read it before anything else.
-   - **`threats`** — the new order, `T01` first. Each carries its new **`tag`**, the
-     **`previous_tag`** it had when you scored it, its **`title`**, **`risk_score`** and
-     **`criticality`**. **The ids you were holding are stale from here** — take every one from
-     this list.
+   - **`threats`** — the new **document order**, highest risk first. Each carries its **`tag`**,
+     its **`title`**, **`risk_score`** and **`criticality`**. **The ids you are holding are still
+     good** — none of them moved. Take the *order* from this list, not the ids.
    - **`reason`** and **`malformed`** — why nothing was rewritten, when `retagged` is `false`.
      `unscored-entries` means an entry has no readable `Risk score` and `malformed` names it:
-     fill that block and run the script again. Re-tagging a half-scored list would freeze the
-     wrong priority permanently, so it refuses whole rather than ordering what it can.
-   - Obey the `instruction` field, as with every bundled script.
+     fill that block and run the script again. An unscored entry has nothing to sort on, so it
+     refuses whole rather than ordering what it can.
+   - Obey the `instruction` field, as with every `ingrain` command.
 
    **This is the last stage that may reorder.** Threat ids pick up their first references at
-   Step 5, when guidance names them. From here **the id is the priority** and is permanent:
-   every stage that shows threats shows them in **id order** — the ids are the sort.
+   Step 5, when guidance names them — and they have been permanent since the generator wrote
+   them, so those references were always safe. From here **risk order is the document order**:
+   every stage that shows threats shows them in that order, reading the `Risk score` column.
+   Never sort by id — a tag identifies a threat and carries no rank.
 
 4. **The user gates — one moment, two axes.** Follow **How to ask the user**. Present the threat
    gate and then the rule gate in the **same message**: they are one decision point about one
@@ -336,19 +377,27 @@ file.
    **4a — The threat gate: which threats to act on.** The user must understand each threat without
    re-reading the plan. In order:
 
-   1. **Take** the scored threats from Step 3 — the entry text you read there, under the ids the
-      re-tag returned; no second read.
+   1. **Take** the scored threats from Step 3 — the entry text you read there, under the ids they
+      have carried since the generator wrote them; no second read.
       **Run the three-check on what Step 3 had in front of it.** Where the entries themselves are
       missing, re-dispatch `ingrain-threat-generator`; where a `#### score` block is wrong or
       incomplete, it is yours to fix — Step 3 wrote it.
-   2. **Display** the scored threats as a Markdown table **in id order — `T01` first**, which the
-      re-tag already sorted into descending risk. Take the ids as the order.
+   2. **Display** the scored threats as a Markdown table **in risk order — highest `Risk score`
+      first**, which is the order the sort returned. Take that order as given; do not sort by id.
    3. **Present** one single-choice window per threat; mark high/critical recommended.
+      **Unattended, open no window and decide by the threshold** — the table above is still
+      displayed, which is the whole of the gate's output here — every threat scoring above the
+      threshold is `selected`, every threat at or below it is `excluded`.
+      **Take the number, do not derive it**: read the mint's `threshold_<band>` key — the band
+      being `caller_band` in standalone, and the `maturityBand` kept at Step 1b when connected.
+      → `SKILL.md` § Unattended runs owns where the band comes from and the degrade to strictest.
+      Then **write `Gating band` and `Gating threshold` into `## Risk score`**, so what the run
+      enforced is on the record beside what it found rather than inferred from the selections.
    4. **Record** each threat's `Selection` into its **`#### usergate` block** (act on it →
       `selected`, accept the risk → `excluded`; `undecided` only if the user is explicitly
       unsure) — that block is yours and the three around it are not, so write between its
       marker and the next and leave `#### gen`, `#### score` and `#### test` untouched. A
-      mistyped `Selection` here silently drops a threat from Testing's scope.
+      mistyped `Selection` here drops a threat from Testing's scope, and nothing reports it.
 
    | Column | Contents |
    |--------|----------|
@@ -372,10 +421,15 @@ file.
       retrieval that could not run** — where Step 1b already reported the CLI absent,
       unconfigured, or scoped to an unregistered repository, say the section is empty *for that
       reason* instead. "No org rule applies" would claim a review nobody performed.
+      **In `run_mode: standalone` the reason is the mode**: retrieval never ran because there is no
+      platform, so say *that* — neither "no rule applies" nor a CLI fault, both of which would
+      misdescribe a deliberate configuration as an absence or a failure.
    2. **Display** the curated rules as a Markdown table.
    3. **Offer accept-all first** — a single choice covering every presented rule. It is the
       expected answer, and it is the user vouching for a curated set rather than an ungated one.
       Behind it, per-rule windows for the case where a retrieval miss survived the critique.
+      **Unattended, take accept-all and open no window** — it is already the default here, over
+      a set the retrieval scoped to this change and the critique pruned.
    4. **Record** each entry's `Selection` in `## Org rules` (applies here → `selected`, does not
       apply → `excluded`). Accept-all writes every entry `selected` in one edit.
 
@@ -386,9 +440,9 @@ file.
    | **Why it may apply here** | which part of *this* change it lands on |
 
    **Selection is the adherence scope.** A `selected` rule is judged at Testing — including one no
-   guidance ends up implementing, which is precisely the case a security owner needs to see. An
+   guidance ends up implementing, which is the case a security owner most needs to see. An
    `excluded` rule is recorded as deemed inapplicable and left unjudged. Both travel to the
-   platform: an exclusion is governable because it is never silent.
+   platform: an exclusion is governable because it is recorded rather than dropped.
 
    **4c — Route on what both gates selected.** In the **gate message above** — not a later one —
    **name the run's assessment file** (its relative `assessment_path`) and **the plan file** these
@@ -416,7 +470,7 @@ file.
      and both the CLI and the platform refuse such a file outright.
    - **`Rule refs` may only name a `selected` rule**, and each id is **copied whole and verbatim**
      from `## Org rules` — never abbreviated to a prefix. An id is an exact-match key, so a
-     shortened copy silently names no rule at all.
+     shortened copy names no rule at all and no error says so.
    - **One entry may serve several threats *and* several rules — write it once, naming them all.**
      A single control routinely closes two threats *and* satisfies the rule that prescribes it.
      Copying it per driver reads as several pieces of work everywhere downstream.
@@ -426,10 +480,15 @@ file.
 
    **Order the list by what an entry is worth, never by which axis drove it** — the two axes are
    symmetric, and sorting rule-driven work to the bottom as a class contradicts that on the one
-   surface the user reads. Threat-driven entries rank by the **lowest threat id** each one closes
-   (the ids are in risk order, so that is the highest risk it addresses); a rule-driven-only entry
-   ranks by the **Yield** it claims, interleaved with them rather than appended after them; ties
-   break by higher Yield, then lower Effort.
+   surface the user reads. Threat-driven entries rank by the **highest `Risk score`** among the
+   threats each one closes; a rule-driven-only entry ranks by the **Yield** it claims,
+   interleaved with them rather than appended after them; ties break by higher Yield, then lower
+   Effort.
+
+   **Read the score, not the id.** This used to say "lowest threat id, since the ids are in risk
+   order" — true only while the tag was a rank. A tag is now an identity assigned at discovery,
+   so the lowest id is the *earliest-found* threat and ranking by it would sort the user's work
+   list by the order threats happened to occur to a worker.
 
    **Then check your own coverage, before you leave this step.** Everything it needs is in front of
    you, so it costs no read:
@@ -484,20 +543,24 @@ last thing the user reads, and the only place three otherwise-homeless statement
 
 - **any selected driver left unaddressed** — the replacement for the deleted `## Coverage`
   section, which is why it is a sentence rather than a section: no derived join to keep honest;
-- **the plan-level residual risk, with your one-line justification for it** — `## Risk score` holds
-  `Score` and `Criticality` and nothing else, so the reasoning you formed at Step 3 has no field to
+- **the plan-level residual risk, with your one-line justification for it** — `## Risk score` has
+  no field for reasoning (its four are `Score`, `Criticality`, and unattended the two `Gating`
+  ones), so the reasoning you formed at Step 3 has no field to
   sit in and is said here or nowhere;
 - **whether the sync landed**, in the same line if it did and one line of its own if it did not.
 
 The both-gates-empty route reaches this step too: there the verdict names the accepted risks and
-the rules deemed inapplicable, which is the whole of what that review produced.
+the rules deemed inapplicable, which is all that review produced.
 
-**On a re-assessment, empty `## Rule adherence` back to its heading and card.** Those entries were
-judged against the previous implementation and the previous rule scope, so once the analysis is
-rewritten they describe a revision that no longer exists — and any whose rule the new gate did not
-select has fallen out of adherence scope entirely, which the CLI rejects rather than syncs.
-Clearing it restores the section to the state Testing expects to write into. Nothing is lost: the
-platform holds the prior verdicts against the revision they judged.
+**On a re-assessment, empty `## Rule adherence` back to its heading and card, and clear every
+threat's `#### test` block too.** Both hold verdicts judged against the previous implementation
+and the previous scope, so once the analysis is rewritten they describe a revision that no longer
+exists. For rules, any whose rule the new gate did not select has fallen out of adherence scope
+entirely, which the CLI rejects rather than syncs. For threats the failure is quieter and worse:
+Testing only writes into a **selected** threat's block, so a threat selected last time and
+excluded this time would keep a stale verdict forever, on an axis it is no longer in scope for.
+Nothing is lost either way — the platform holds the prior verdicts against the revision they
+judged.
 
 **Run the three-check over the finished file** on the read this step already requires. Here it is
 strict: a field left `—` inside a block whose stage *has* run is itself a defect. A block
@@ -506,9 +569,10 @@ every threat's `#### test` block is empty, and that is the correct finished stat
 to fill in. Everything downstream has this file and nothing else.
 
 **Then sync it — best-effort.** Once the file is written, run
-`ingrain record design --assessment "<assessment_abs>"` so the team sees the analysis. **After**
-the write, never before: the CLI reads the file off disk, so syncing first would send the previous
-state. One file, one flag — the org rules travel inside it.
+`ingrain record design` so the team sees the analysis. **After** the write, never before: the
+CLI reads the file off disk, so syncing first would send the previous state. One file — the org
+rules travel inside it. **Skipped entirely in
+`run_mode: standalone`**, which has no platform to record to.
 → `references/lib/ingrain-cli.md` § Recording the assessment owns the commands and the failure
 taxonomy. **A failed sync never fails the review** — report it in one line and carry on to the
 plan write; the assessment file is the output that matters.
@@ -524,7 +588,7 @@ things:
   (share it with `git add -f <file>`).
 - **The Maintenance instruction** — tell the implementing agent to keep the assessment file
   **in sync** as the implementation changes across iteration loops, and to locate it by
-  **re-running the `assessment-mint` command** from `INGRAIN-ASSESSMENT-PATHS`, writing to
+  **re-running `ingrain assessment mint`** with the recorded Title verbatim, writing to
   the `assessment_abs` it returns. Point it at the mint rather than the relative link: that agent
   runs in a later session with no project root in view. Re-minting is deterministic in
   branch + title, so it resolves to the same file.
@@ -532,6 +596,17 @@ things:
 In plan mode, **name the plan file you write to**; ad-hoc, this is the inline plan. The guidance is
 now part of what the coding agent implements — incorporate it, refine it as you would any other
 part of the plan, and carry on planning.
+
+**3. Unattended only — continue straight into Testing.** Attended, Development ends here: the
+implementation does not exist yet, so there is nothing to verify. Unattended it always does —
+the review runs against a checkout, so every condition Testing routes on is already met, and a
+run that stopped at `record design` would hand back an analysis of code it declined to look at.
+
+**Continue, do not re-enter.** Carry on into `references/testing/verification-pass.md` on the
+drivers you just gated, in this same run. Re-invoking would route correctly and then re-read
+state you are already holding, and it makes one review look like two in the record.
+**Skip it when neither gate selected anything** — there is nothing to verify, which is the same
+condition that sent the review to Finalize without guidance.
 
 ## Development — checklist
 
@@ -542,16 +617,17 @@ fork and run together, as do 2a and 2b.
 The three-check runs at the user gates and at finalize, on the reads those steps already make;
 never on a fresh read of `references/lib/assessment-file.md`.**
 
-- [ ] 0. Review question FIRST, before any lookup or write; `## Triage` + `Description`; `minor` → sync + stop; `major` → prior analysis, Surfaces, paths
+- [ ] 0. Review question FIRST — only if the user did not ask; `## Triage` + `Description`; `minor` → sync + stop; `major` → prior analysis, Surfaces, paths
 - [ ] 1a. Threats generated into `## Threats`, seeded from any prior analysis; all four phase markers seeded, only `#### gen` filled
-- [ ] 1b. Org rules retrieved by YOU, forked with 1a — keyed on plan/Surfaces/paths, not a gate; broad; ALL queries in ONE call; bodies verbatim, `Selection: —`
+- [ ] 1b. Org rules retrieved by YOU, forked with 1a — broad; ALL queries in ONE call; bodies verbatim, `Selection: —`; unattended connected: keep the band
 - [ ] 2a. Threat critique dispatched — one revision at most, then threats frozen
 - [ ] 2b. Rule critique dispatched — YOU applied the prune, keeping any unfounded one; a pruned rule is never presented and never recorded
-- [ ] 3. Risk scored BY YOU — slice read once, every `#### score` filled, residual written, then `scripts/threat-retag` re-tagged (`T01` first)
-- [ ] 4a. Threat gate — table displayed FIRST, in the re-tag's id order, then one window per threat; `Selection` recorded into `#### usergate`
-- [ ] 4b. Rule gate, SAME user moment — curated set only, table FIRST, then accept-all and per-rule windows; `Selection` recorded on every entry
+- [ ] 3. Risk scored BY YOU — slice read once, every `#### score` filled, residual written, then `ingrain assessment retag` sorted by risk (renumbers nothing)
+- [ ] 4a. Threat gate — table FIRST, in risk order (never by id), then one window each; `Selection` into `#### usergate`; unattended: no window, mint threshold
+- [ ] 4b. Rule gate, SAME user moment — curated set only, table FIRST, then accept-all and per-rule windows; `Selection` on every entry; unattended: accept-all
 - [ ] 4c. Routed on the OR of both gates — 1+ selected on either axis proceeds; only both empty ends the review
 - [ ] 5. Guidance written BY YOU from BOTH selected driver sets; every entry names ≥1 driver; a multi-driver entry written ONCE; own coverage check run
 - [ ] Finalize — `Latest stage: development`, `## Org rules` pruned by Selection, both critique sections deleted, cards kept, file three-checked
 - [ ] Plan written — ALL the guidance, the assessment linked, Maintenance stated, and one line telling the user the guidance is theirs to refine here
-- [ ] Synced — `ingrain record design --assessment "<assessment_abs>"` AFTER that write; best-effort, so a failure is one line and never fails the review
+- [ ] Synced — `ingrain record design` AFTER that write; best-effort, never fails the review; skipped in standalone
+- [ ] Unattended only — continued into Testing on the drivers just gated; skipped if both gates chose nothing
