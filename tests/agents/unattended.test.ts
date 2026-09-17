@@ -26,26 +26,33 @@
 
 import { assertEquals } from "@std/assert";
 import {
+  getRunner,
   mintAssessment,
   ORCHESTRATION_MAX_TURNS,
   ORCHESTRATION_TIMEOUT_MS,
-} from "../lib/claudeRunner.ts";
+  resolveHost,
+} from "../lib/runners/index.ts";
 import { runChecked } from "../lib/reporter.ts";
 import { phaseBlocksOf, threatEntries } from "../lib/matchers.ts";
 import { MAJOR_PLAN } from "../lib/sampleInputs.ts";
-import { MAJOR_PROJECT, projectWith } from "../lib/sampleProjects.ts";
+import {
+  MAJOR_PROJECT,
+  MAJOR_PROJECT_IMPLEMENTED,
+  projectWith,
+  SESSION_BRANCH_SLUG,
+} from "../lib/sampleProjects.ts";
 
 /**
  * The band → threshold table, READ FROM THE MINT rather than mirrored.
  *
  * A copy here would be a fourth authority — checked by nothing offline, since the static sweep
- * exempts `tests/`, so a divergence would surface only in this paid tier. `scripts/lib/mint.sh`
- * resolves it and the mint reports it, so the expectation and the run read the same source.
+ * exempts `tests/`, so a divergence would surface only in this paid tier. `ingrain assessment
+ * mint` resolves it and reports it, so the expectation and the run read the same source.
  */
 const THRESHOLD: Record<string, number> = await (async () => {
   const dir = await Deno.makeTempDir();
   try {
-    const { json } = await mintAssessment(dir, "threshold probe");
+    const { json } = await mintAssessment(dir, "threshold probe", resolveHost());
     return {
       high: json.threshold_high as number,
       medium: json.threshold_medium as number,
@@ -57,7 +64,34 @@ const THRESHOLD: Record<string, number> = await (async () => {
 })();
 
 /**
- * Tools an unattended orchestrator needs: the shell for the bundled scripts and the CLI, the
+ * The opening batch went through the CLI, not through git commands of the agent's own.
+ *
+ * `ingrain delta` and `ingrain assessment mint` each leave a branch-keyed file behind; an
+ * agent that resolved the fork point or the assessment path itself leaves neither. Nothing
+ * here pre-runs either — the threshold probe mints into a throwaway dir, and every session
+ * dir is an untouched fixture — so their presence is the agent's own work.
+ *
+ * Checked before the gate, because the batch runs whether or not the run gets that far.
+ */
+const assertCliDroveTheBatch = async (projectDir: string, label: string): Promise<void> => {
+  for (
+    const [file, command] of [
+      [`delta-${SESSION_BRANCH_SLUG}.json`, "ingrain delta"],
+      [`current-${SESSION_BRANCH_SLUG}.json`, "ingrain assessment mint"],
+    ]
+  ) {
+    const landed = await Deno.stat(`${projectDir}/.ingrain-security/${file}`)
+      .then(() => true).catch(() => false);
+    assertEquals(
+      landed,
+      true,
+      `${label}: no ${file} — ${command} never ran, so the run reached the repository some other way`,
+    );
+  }
+};
+
+/**
+ * Tools an unattended orchestrator needs: the shell for the `ingrain` CLI, the
  * read trio for the plan and repo, Write/Edit for the assessment, and the subagent primitive
  * for the worker fan-out.
  */
@@ -73,6 +107,17 @@ const ORCHESTRATOR_TOOLS = ["Bash", "Read", "Grep", "Glob", "Write", "Edit", "Ag
  * cases measure, and `unattended: true` is what must resolve them.
  */
 const PROMPT = `Here is my implementation plan, ready to build. Run the security review.\n\n` +
+  `I am requesting that you dispatch the workers as subagents.\n\n${MAJOR_PLAN}`;
+
+/**
+ * The same plan, already implemented on the branch — the posture CI reviews in.
+ *
+ * `PROMPT` says "ready to build", which is true for every case above and false for the
+ * fall-through: told the code is unwritten AND handed a checkout without it, the model
+ * declines to verify and says why — the right call on that input, and a failing assertion
+ * on this one.
+ */
+const BUILT_PROMPT = `The plan below is implemented on this branch. Run the security review.\n\n` +
   `I am requesting that you dispatch the workers as subagents.\n\n${MAJOR_PLAN}`;
 
 /** Every `## ` section body in a written assessment, keyed by heading. */
@@ -141,6 +186,8 @@ for (const band of ["high", "medium", "low"] as const) {
         },
         async () => {
           const path = `${projectDir}/.ingrain-security`;
+          await assertCliDroveTheBatch(projectDir, `band ${band}`);
+
           const files = [...Deno.readDirSync(path)].filter((e) => e.name.endsWith(".md"));
           assertEquals(files.length > 0, true, "the run minted no assessment at all");
           const written = await Deno.readTextFile(`${path}/${files[0].name}`);
@@ -282,11 +329,11 @@ Deno.test("unattended standalone: no platform call, and a review anyway", async 
         },
       },
       async (r) => {
-        const commands = r.events
-          .filter((ev) => ev.type === "assistant")
-          .flatMap((ev) => (Array.isArray(ev.message?.content) ? ev.message.content : []))
-          .filter((block) => block?.type === "tool_use" && block?.name === "Bash")
-          .map((block) => String(block.input?.command ?? ""));
+        // Asserted over the backend's normalized tool uses rather than over the file: a call
+        // that was made and failed leaves no trace in the assessment, so the file cannot tell
+        // "skipped" from "attempted and refused" — which is precisely the distinction under
+        // test. Both backends normalize their Bash-equivalent calls into `uses`.
+        const commands = getRunner(r.host).bashCommands(r.uses);
 
         const platformCalls = commands.filter((cmd) =>
           /ingrain\s+context\s+security_rules/.test(cmd) || /ingrain\s+record\s+/.test(cmd)
@@ -326,18 +373,24 @@ Deno.test("unattended standalone: no platform call, and a review anyway", async 
 
 Deno.test("unattended: Development falls through into Testing in one pass", async () => {
   // Attended, Development stops because the code does not exist yet. Unattended it never does:
-  // the review runs against a checkout, so every condition Testing routes on is already met,
-  // and a run that stopped at `record design` would hand back an analysis of code it declined
-  // to look at.
+  // the review runs against a checkout that HOLDS the implementation, so every condition
+  // Testing routes on is already met, and a run that stopped at `record design` would hand
+  // back an analysis of code it declined to look at.
+  //
+  // **The checkout is what makes that true, and the cases above do not have it.** Handed
+  // `MAJOR_PROJECT` — the repository before the plan is built — the model reads `/health` and
+  // a passwordless schema, reports that there is no login implementation to verify, and stops.
+  // That is the skill working: Testing against unwritten code returns every threat weak for a
+  // trivial reason.
   //
   // `Latest stage: testing` is the assertion because it is the one thing only the Testing
   // finalize writes — a Development pass that merely mentioned Testing leaves it at
   // `development`.
-  const projectDir = await projectWith(MAJOR_PROJECT);
+  const projectDir = await projectWith(MAJOR_PROJECT_IMPLEMENTED);
   try {
     await runChecked(
       "unattended :: fall-through",
-      PROMPT,
+      BUILT_PROMPT,
       {
         cwd: projectDir,
         streamJson: true,

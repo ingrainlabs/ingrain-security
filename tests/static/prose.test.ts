@@ -14,9 +14,9 @@
  * for a fact to be deleted.
  *
  * **Deliberately not banned: `exactly`.** It is decorative in "exactly the case a security
- * owner needs to see" and load-bearing in "pass the `--ref` exactly as the orchestrator gave
- * it". A pattern that cannot tell those apart would flag correct instructions, which is how a
- * scan earns being switched off.
+ * owner needs to see" and load-bearing in "carry each surviving threat's `T<nn>` with it,
+ * exactly as the snapshot has it". A pattern that cannot tell those apart would flag correct
+ * instructions, which is how a scan earns being switched off.
  */
 
 import { assertEquals } from "@std/assert";

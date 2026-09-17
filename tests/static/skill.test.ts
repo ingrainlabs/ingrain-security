@@ -1,11 +1,10 @@
 /**
- * Static checks on the skill and hook wiring. No model calls. Guards the
- * workflow contract the live tests rely on: the strict step order, the two
- * announce/stop phrases, references to all 7 workers, and a valid SessionStart
- * hook that injects the skill.
+ * Static checks on the skill's wiring. No model calls. Guards the workflow
+ * contract the live tests rely on: the strict step order, the two announce/stop
+ * phrases, and references to all 7 workers.
  */
 
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertGreaterOrEqual, assertStringIncludes } from "@std/assert";
 import { walk } from "@std/fs";
 import { fromFileUrl } from "@std/path";
 import {
@@ -32,18 +31,6 @@ const devDoc = async (): Promise<string> =>
 const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/lib/assessment-file.md`;
 const DISPATCH_REF = `${ROOT}skills/ingrain-security/references/lib/dispatch.md`;
 const VERIFY_REF = `${ROOT}skills/ingrain-security/references/testing/verification-pass.md`;
-const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
-const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
-const SESSION_START = `${ROOT}hooks/scripts/session-start`;
-const ALLOW_HOOK = `${ROOT}hooks/claude/allow-assessment-write`;
-const CODEX_ALLOW_HOOK = `${ROOT}hooks/codex/allow-assessment-write`;
-const ALLOW_LIB = `${ROOT}hooks/scripts/lib/assessment-write.sh`;
-const REVIEW_GATE = `${ROOT}hooks/scripts/require-review-before-write`;
-const ENSURE_DIR = `${ROOT}hooks/scripts/ensure-assessment-dir`;
-const PROJECT_ROOT_LIB = `${ROOT}skills/ingrain-security/scripts/lib/project-root.sh`;
-const PATH_SCRIPT = `${ROOT}skills/ingrain-security/scripts/assessment-mint`;
-const TEMPLATE_LIB = `${ROOT}skills/ingrain-security/scripts/lib/artifact-template.sh`;
-const RETAG_SCRIPT = `${ROOT}skills/ingrain-security/scripts/threat-retag`;
 
 /**
  * Collapse every run of whitespace to one space so a phrase can be asserted as the reader
@@ -92,8 +79,8 @@ Deno.test("SKILL.md: workflow steps are in the required order", async () => {
     "**Risk score — yours",
     "critique/freeze before scoring",
   );
-  assertOrder(flow, "**Risk score — yours", "scripts/threat-retag", "score before the re-tag");
-  assertOrder(flow, "scripts/threat-retag", "**Guidance — yours", "re-tag before guidance");
+  assertOrder(flow, "**Risk score — yours", "ingrain assessment retag", "score before the re-tag");
+  assertOrder(flow, "ingrain assessment retag", "**Guidance — yours", "re-tag before guidance");
   // The rule chain runs in PARALLEL with the threat chain, so it is not ordered against it —
   // but its own two steps are sequential, and the gate cannot precede the prune that curates
   // what it presents. This is decision 12's precondition: wholesale accept-all is only sound
@@ -123,8 +110,8 @@ Deno.test("SKILL.md: the steps the orchestrator kept are named as its own", asyn
   });
 
   await t.step("the sort is the script's, and never done by hand", () => {
-    assertStringIncludes(flow, "Then sort, with the script — never by hand");
-    assertStringIncludes(flow, "scripts/threat-retag --assessment");
+    assertStringIncludes(flow, "Then sort, with the command — never by hand");
+    assertStringIncludes(flow, "ingrain assessment retag");
     // Its refusal has to reach the orchestrator, or a half-scored list is laid out in an
     // order nobody set and read as a priority.
     assertStringIncludes(flow, "unscored-entries");
@@ -226,14 +213,14 @@ Deno.test("the announce and minor-stop phrases live in the phase file, not the s
 Deno.test("dev docs: documents the read-reference dispatch mechanism", async () => {
   const md = await devDoc();
   // Generic-subagent dispatch reads each worker's reference file by path — ABSOLUTE,
-  // built from the mint's `plugin_root`. This assertion previously pinned the relative
+  // built from the skill's own base directory. This assertion previously pinned the relative
   // form, which is the form a dispatched subagent cannot resolve: its cwd is the user's
   // project, so `references/…` lands at `<project>/references/…` and the read errors on
   // the worker's first action. The suite defended that bug; see `dispatchPaths.test.ts`
   // for the scan that now covers every dispatch site rather than this one.
   assertStringIncludes(
     md,
-    "Read <plugin_root>/skills/ingrain-security/references/development/<name>.md",
+    "Read <skill_dir>/references/development/<name>.md",
   );
   // Cross-platform mapping lives in the reference doc.
   assertStringIncludes(md, "references/lib/dispatch.md");
@@ -259,153 +246,13 @@ Deno.test("SKILL.md: mints the assessment path and defers its schema to the refe
   // The file's schema/template is defined in a dedicated reference file, and SKILL.md points
   // at it rather than restating it.
   assertStringIncludes(md, "references/lib/assessment-file.md");
-  // The path is minted by the bundled script (mint), not hand-built.
-  assertStringIncludes(md, "scripts/assessment-mint");
+  // The path is minted by the CLI, not hand-built.
+  assertStringIncludes(md, "ingrain assessment mint");
   // The INVOCATION, not the bare word: "mint" appears throughout both documents as ordinary
   // prose ("the mint", "re-minting"), so it cannot distinguish a documented command. The
-  // script name plus its flag can, and now that the subcommand is gone it is the only form
-  // that reads as one.
-  assertStringIncludes(md, "assessment-mint <host> --title");
+  // command plus its flags can.
+  assertStringIncludes(md, "ingrain assessment mint --host <host> --title");
   assertStringIncludes(md, "assessment_path");
-});
-
-/**
- * The field cards. The skeleton the minter seeds carries a comment under every heading naming
- * that section's fields, their order and their exact values — so a writer takes the shape from
- * the file it must open anyway, instead of paying a full read of the 345-line schema reference.
- * That saving is the whole point of the design, and it survives only while three things hold:
- * the template renders the cards, the skill points writers at them, and the reference stays the
- * owner of what a field MEANS. Losing any one of them puts the mandatory read straight back.
- */
-Deno.test("field cards: the skeleton renders one under every value-bearing section", async () => {
-  const sh = await Deno.readTextFile(TEMPLATE_LIB);
-  // Every section a writer fills carries a card. Task/Triage/Risk score already showed their
-  // labels; these two showed nothing at all before the cards, and hold every enum.
-  assertStringIncludes(sh, "## Threats\n<!--");
-  assertStringIncludes(sh, "## Org rules\n<!--");
-  assertStringIncludes(sh, "## Implementation guidance\n<!--");
-  // The enumerated values live IN the card — that is what removes the reference read.
-  for (
-    const v of [
-      "critical|high|medium|low", // Impact
-      "very high|high|medium|low", // Likelihood
-      "selected|excluded|undecided", // Selection, on a threat
-      "selected|excluded", // Selection, on an org rule — no undecided reaches a sync
-      "weak|adequate|strong", // Robustness
-      "development|testing", // Latest stage
-      "minor|major", // Triage verdict
-    ]
-  ) {
-    assertStringIncludes(sh, v);
-  }
-  // One artifact: there is no second file to card, and no section for a deleted concept.
-  for (const gone of ["## Retrieved rules", "## Per-mitigation mapping", "## Coverage"]) {
-    assertEquals(
-      sh.includes(gone),
-      false,
-      `\`${gone}\` is gone with the sidecar/coverage join — the skeleton must not seed it`,
-    );
-  }
-  // Permanent, not scratch: finalize deletes the critique sections and keeps these, because the
-  // implementing agent and the Testing pass run in later sessions with no reference in context.
-  assertStringIncludes(sh.toLowerCase(), "permanent");
-});
-
-/**
- * Schema ↔ field-card parity for everything this release adds. The reference owns what a field
- * MEANS and the card is what a writer actually reads, so the repo's standing rule is that a
- * field or allowed value changed in one is changed in the other in the same edit. Nothing but a
- * check like this enforces it — and the cost of a miss is a writer producing a shape no
- * consumer accepts, discovered a session later.
- */
-Deno.test("field cards: the schema additions appear in the card as well as the reference", async (t) => {
-  const sh = await Deno.readTextFile(TEMPLATE_LIB);
-  const ref = await Deno.readTextFile(ASSESSMENT_REF);
-
-  await t.step("`## Task` gains Description and a seeded Schema version", () => {
-    // Seeded with its value, not left blank: the version is a property of the schema, not a
-    // choice the writer makes.
-    assertStringIncludes(sh, "\nSchema version: 2\n");
-    assertStringIncludes(sh, "\nDescription:\n");
-    for (const md of [sh, ref]) assertStringIncludes(md, "Schema version");
-  });
-
-  await t.step("threat entries gain the three verification fields, in both places", () => {
-    for (const field of ["Robustness justification", "Residual path", "Evidence"]) {
-      assertStringIncludes(sh, field);
-      assertStringIncludes(ref, field);
-    }
-  });
-
-  await t.step("`## Rule adherence` is carded, with its two-valued enum", () => {
-    assertStringIncludes(sh, "## Rule adherence\n<!--");
-    // The enum lives IN the card — that is what removes the reference read.
-    assertStringIncludes(sh, "followed|not-followed");
-    assertStringIncludes(ref, "`followed`");
-    // The card carries the scope rule too, since it is the part a writer gets wrong: the
-    // SELECTED set, one entry each — including a rule nothing implements — and none for an
-    // excluded one.
-    assertStringIncludes(sh, "SELECTED at the rule gate");
-    assertStringIncludes(sh, "no guidance implements");
-    assertStringIncludes(sh, "gets NO entry");
-  });
-
-  await t.step("`## Org rules` is carded, with the gate decision it records", () => {
-    assertStringIncludes(sh, "## Org rules\n<!--");
-    // Both halves of the decision, and what each one means downstream.
-    assertStringIncludes(sh, "RULE GATE");
-    assertStringIncludes(sh, "adherence is judged over");
-    assertStringIncludes(sh, "deemed inapplicable");
-    // The finalize prune, since it is the writer-facing half a later stage depends on.
-    assertStringIncludes(sh, "keeps its body");
-    for (const md of [sh, ref]) assertStringIncludes(md, "verbatim");
-  });
-
-  await t.step("the anchoring rule reaches the card, not just the reference", () => {
-    // Guidance naming no driver is refused by the CLI and by the platform, so a writer who
-    // only ever reads the card has to learn it there.
-    assertStringIncludes(sh, "AT LEAST ONE driver");
-    assertStringIncludes(ref, "at least one driver");
-    // ...and the multi-driver rule beside it: one entry, one set of drivers, never a copy each.
-    assertStringIncludes(sh, "write it ONCE naming them all");
-    assertStringIncludes(ref, "write it once");
-    // The vessel carries no verdict and no gate decision — the thing this phase removed.
-    assertStringIncludes(sh, "no verdict and no Selection");
-  });
-
-  await t.step("the Rule refs tightening reaches the card", () => {
-    assertStringIncludes(sh, "FULL and verbatim");
-    assertStringIncludes(ref, "never abbreviated, never a prefix");
-  });
-
-  await t.step("`## Affected paths` is carded, with the rules a writer gets wrong", () => {
-    assertStringIncludes(sh, "## Affected paths\n<!--");
-    for (const md of [sh, ref]) {
-      // Folders, not files: a file path narrows to its parent and goes stale as the
-      // implementation moves, which is the mistake worth naming in both places.
-      assertStringIncludes(md, "backend/services/sync/");
-      // A prediction, not a measurement — the reason the section exists at all,
-      // since at Development there is no diff to read.
-      assertStringIncludes(md.toLowerCase(), "prediction");
-      // The traversal rule itself, not a bare "..": `assessment-file.md` also contains `0..N`
-      // in the Implementation-guidance field table, so a two-dot match passes on a different
-      // section entirely and would survive deleting this rule. The optional backticks are why
-      // this is a regex — the card writes `no ../`, the reference writes ``no `../` ``.
-      assertEquals(
-        /no\s+`?\.\.\//.test(md),
-        true,
-        "the `## Affected paths` rule must forbid parent-relative traversal",
-      );
-    }
-  });
-
-  await t.step("an untouched skeleton declares no affected paths", () => {
-    // The section is seeded with the em-dash every unwritten field uses, so a fresh
-    // file states no footprint rather than one bogus entry a search would narrow to.
-    const section = sh.slice(sh.indexOf("## Affected paths"));
-    const body = section.slice(section.indexOf("-->") + 3, section.indexOf("## Triage"));
-    assertEquals(body.trim(), "—");
-  });
 });
 
 /**
@@ -415,8 +262,8 @@ Deno.test("field cards: the schema additions appear in the card as well as the r
  * This guard exists because the docs and the live tests already drifted apart once, in exactly
  * this spot — a matcher asserted re-tagging while the skill told the scoring worker never to
  * renumber, so a worker obeying its instructions failed the agent test. The two ends are the
- * script's own behaviour (tests/hooks/threat-retag.test.ts) and the prose that tells the
- * orchestrator to run it. Nothing but a static check keeps them in step.
+ * command's own behaviour (`ingrain assessment retag`, tested in the `ingrain` repo) and the
+ * prose that tells the orchestrator to run it. Nothing but a static check keeps them in step.
  *
  * The negative sweep below is the load-bearing half. The id-as-rank claim was stated in eight
  * files in six different phrasings, and a grep for any one of them passes with the other five
@@ -425,12 +272,12 @@ Deno.test("field cards: the schema additions appear in the card as well as the r
  * to sort by a field that no longer ranks anything.
  */
 Deno.test("threat ids: a tag is permanent, and nothing still calls it a rank", async (t) => {
-  const retag = flatten(await Deno.readTextFile(RETAG_SCRIPT));
   const md = flatten(await devDoc());
 
-  await t.step("the script states that it sorts and does not renumber", () => {
-    assertStringIncludes(retag, "descending-risk");
-    assertStringIncludes(retag, "does NOT renumber");
+  await t.step("the prose states that the sort does not renumber", () => {
+    // The command's own behaviour is `ingrain/cli/commands/assessment/tests/retag.test.ts`'s.
+    // What this owns is the instruction the orchestrator reads.
+    assertStringIncludes(md, "renumbers nothing");
   });
 
   await t.step("every retired phrasing is gone from every reference file", async () => {
@@ -447,12 +294,11 @@ Deno.test("threat ids: a tag is permanent, and nothing still calls it a rank", a
       [/re-tags the list exactly once|re-tags them once/i, "the list is re-tagged once"],
     ];
 
-    // EVERY shipped file, not just `.md`/`.sh` under `skills/`. The narrower scan this
-    // replaced could not see the two surfaces the claim actually survived on: the bundled
-    // scripts are **extensionless** (`threat-retag`, `assessment-mint`, `branch-delta`), so an
-    // ext filter skipped the one whose `instruction` string a model reads directly; and
-    // `docs/` + `README.md` sit outside `skills/` entirely. `tests/` stays out on purpose —
-    // the `retired` table above states all six phrasings by construction.
+    // EVERY shipped file under `skills/`, plus `docs/` and `README.md`, which sit outside it.
+    // `tests/` stays out on purpose — the `retired` table above states all six phrasings by
+    // construction. The plugin is prose now, so there are no extensionless scripts left to
+    // reach; the `instruction` string a model reads directly moved into the CLI, and its copy
+    // of the claim is pinned by `ingrain/cli/commands/assessment/tests/retag.test.ts`.
     const scanned: string[] = [];
     const offenders: string[] = [];
     for (const root of [`${ROOT}skills`, `${ROOT}docs`]) {
@@ -472,14 +318,24 @@ Deno.test("threat ids: a tag is permanent, and nothing still calls it a rank", a
       }
     }
 
-    // Non-vacuity, twice over: a scan that found nothing, or that quietly stopped covering the
-    // extensionless scripts, would report green against nothing at all.
-    assertEquals(scanned.length > 15, true, `the sweep scanned only ${scanned.length} files`);
-    for (const script of ["threat-retag", "assessment-mint", "branch-delta"]) {
+    // Non-vacuity: a scan that quietly stopped covering the files where the claim actually
+    // lived would report green against nothing. Pinned by NAME rather than by a count — a
+    // threshold passes as long as enough files exist, whatever they are, which is how a sweep
+    // keeps its number while losing the surface it was aimed at.
+    for (
+      const required of [
+        "SKILL.md",
+        "references/lib/assessment-file.md",
+        "references/development/flow.md",
+        "references/development/ingrain-threat-generator.md",
+        "references/testing/verification-pass.md",
+        "README.md",
+      ]
+    ) {
       assertEquals(
-        scanned.some((path) => path.endsWith(`/${script}`)),
+        scanned.some((path) => path.endsWith(required)),
         true,
-        `the sweep no longer reaches the extensionless script ${script}`,
+        `the sweep no longer reaches ${required}, where the retired claim lived`,
       );
     }
     assertEquals(offenders, [], `retired id-as-rank claims survive:\n  ${offenders.join("\n  ")}`);
@@ -513,7 +369,8 @@ Deno.test("threat ids: a tag is permanent, and nothing still calls it a rank", a
       flatten(await Deno.readTextFile(ASSESSMENT_REF)),
       "permanent from that moment",
     );
-    assertStringIncludes(flatten(await Deno.readTextFile(TEMPLATE_LIB)), "never renumbered");
+    // The card's own copy of the claim is checked in
+    // `backend/tests/parity/assessmentCards.test.ts` — the tier that can see the renderer.
   });
 });
 
@@ -569,9 +426,15 @@ Deno.test("unattended: the band table is stated once, at exactly 25/50/75", asyn
   // across repos, which makes "stated once" the property worth pinning. A typo'd threshold
   // does not fail anything — it silently gates the wrong set.
   //
-  // **The authority is `mint.sh`, not SKILL.md.** The numbers were prose the model applied;
-  // they are now resolved in bash and handed to the run, so the prose must point AT them and
-  // never restate them — a restatement is a second authority whether or not it agrees today.
+  // **The authority is `ingrain assessment mint`, not SKILL.md.** The numbers were prose the
+  // model applied; they are now resolved in the binary and handed to the run as
+  // `threshold_<band>`, so the prose must point AT them and never restate them — a restatement
+  // is a second authority whether or not it agrees today.
+  //
+  // This comment named `scripts/lib/mint.sh` until an audit caught it, and so did the sentence
+  // in SKILL.md it was vouching for: the gate agreed with the bug, which is why a sweep of the
+  // prose came back clean. Hence the pointer step below — asserting the prose states no number
+  // says nothing about whether the file it sends a reader to still exists.
   const skill = flatten(await Deno.readTextFile(SKILL));
 
   await t.step("the prose points at the resolved number and states none itself", () => {
@@ -599,31 +462,28 @@ Deno.test("unattended: the band table is stated once, at exactly 25/50/75", asyn
     // three of 25/50/75 to flag a rival inverts the check: a copy is caught only while it still
     // AGREES, and goes unnoticed the moment it drifts — which is the failure this exists to
     // catch. So a rival is any file pairing a band word with a threshold at all.
-    const authority = `${ROOT}skills/ingrain-security/scripts/lib/mint.sh`;
     const statesThreshold = (text: string): boolean =>
       /\b(low|medium|high)\b[^.\n]{0,60}\babove\s+\*?\*?\d{1,3}\b/i.test(text) ||
       /\babove\s+\*?\*?\d{1,3}\b[^.\n]{0,60}\b(low|medium|high)\b/i.test(text);
 
-    // The resolver is the one authority, and it must still carry every number.
-    const resolver = await Deno.readTextFile(authority);
-    for (const [band, n] of [["low", "75"], ["medium", "50"], ["high", "25"]] as const) {
-      assertEquals(
-        new RegExp(`${band}\\)\\s*threshold="${n}"`).test(resolver),
-        true,
-        `mint.sh no longer resolves \`${band}\` to ${n} — the gate reads this, so a change here ` +
-          "is a change to what every unattended run enforces",
-      );
-    }
+    // The resolver itself is the CLI's, so the numbers it carries are asserted where both
+    // repos are visible — `backend/tests/parity/assessmentCards.test.ts`, against the mint's
+    // own emitted `threshold_<band>` fields rather than against its source. What stays here is
+    // the half this repo owns: that no second agent-facing copy of the table exists.
 
     const rivals: string[] = [];
+    let scanned = 0;
     for (const root of [`${ROOT}skills`, `${ROOT}docs`]) {
       for await (const found of walk(root, { includeDirs: false })) {
-        if (found.path === authority) continue;
+        scanned++;
         if (statesThreshold(flatten(await Deno.readTextFile(found.path)))) {
           rivals.push(found.path.slice(ROOT.length));
         }
       }
     }
+    // Cardinality first, per this file's own rule: a walk that stopped matching would make the
+    // `[]` assertion below a tautology rather than a result.
+    assertGreaterOrEqual(scanned, 10, "the rival-copy walk scanned almost nothing");
     assertEquals(
       rivals,
       [],
@@ -648,6 +508,29 @@ Deno.test("unattended: the band table is stated once, at exactly 25/50/75", asyn
         );
       }
     }
+  });
+
+  await t.step("the pointer it sends a reader to actually resolves", async () => {
+    // The gap an audit found: the two steps above assert the prose states no number, which says
+    // nothing about whether the file it names for the real one still exists. It named
+    // `scripts/lib/mint.sh` for a release after that tree was deleted — so the paragraph
+    // governing the one constant that decides what a customer's CI enforces sent every reader
+    // into a directory the plugin no longer ships, and every test here stayed green.
+    //
+    // Asserted as an absence of dead paths rather than a match on the right one: pinning the
+    // exact wording would break on every rephrasing, while a path into a deleted tree is
+    // unambiguously wrong however it is phrased.
+    const authority = section(await Deno.readTextFile(SKILL), "## Unattended runs");
+    for (const dead of ["scripts/", "hooks/", ".sh"]) {
+      assertEquals(
+        authority.includes(dead),
+        false,
+        `the band→threshold paragraph points at \`${dead}\`, which the plugin no longer ships ` +
+          "— a reader auditing the gate finds nothing there",
+      );
+    }
+    // And it still points somewhere: the mint is what resolves the number.
+    assertStringIncludes(flatten(authority), "ingrain assessment mint");
   });
 
   await t.step("the direction is stated, because it reads backwards", () => {
@@ -720,7 +603,7 @@ Deno.test("assessment-file.md: owns the meaning, and stays in step with the card
   assertStringIncludes(md.toLowerCase(), "normative");
   // Three copies of the shape now exist, so the reference carries the anti-drift rule and
   // names the renderer. Without this the card and the schema part ways on the next edit.
-  assertStringIncludes(md, "scripts/lib/artifact-template.sh");
+  assertStringIncludes(md, "renderSkeleton.ts");
   assertStringIncludes(md, "in the same edit");
 });
 
@@ -743,7 +626,7 @@ Deno.test("assessment-file.md: defines the strict on-disk format and its allowed
   assertStringIncludes(md, "a sentence or two"); // reasoning fields: a style, not a char cap
   assertStringIncludes(md, "3–6"); // threat count: soft target, not a hard limit
   // The path is obtained from the bundled path-minting script.
-  assertStringIncludes(md, "scripts/assessment-mint");
+  assertStringIncludes(md, "ingrain assessment mint");
 });
 
 Deno.test("SKILL.md + assessment-file.md: the assessment file name is keyed by branch + task", async () => {
@@ -860,12 +743,46 @@ Deno.test("step 0: the review question is the user's, asked with a recommended d
   assertStringIncludes(skill, "take `Yes` and open no window");
 });
 
+Deno.test("step 0: the question is asked only when something other than the user started the run", async () => {
+  // A user who typed `/ingrain-security` has already answered it, so putting the window back to
+  // them costs a turn and records nothing new. Every other route reaches this step without the
+  // user having chosen it — chiefly the opt-in `CLAUDE.md` block, which `web/docs` states is
+  // written to over-trigger *because* the question is cheap. Drop the question there and that
+  // block spends a full review on a typo fix, so the two paths must stay distinguishable.
+  const flow = section(await Deno.readTextFile(DEV_FLOW), "## Development — the flow");
+  const flat = flatten(flow);
+
+  assertOrder(
+    flow,
+    "Whether to ask at all turns on how the run started",
+    "Run a security review for this change?",
+    "the run's origin decides whether the window opens, so it has to be settled first",
+  );
+
+  assertStringIncludes(flat, "**The user asked for this review**");
+  assertStringIncludes(flat, "take `Yes` and open no window: they arrived with the answer");
+  // The automation routes are named rather than left as "otherwise": a reader who cannot tell
+  // which row they are in defaults to the wrong one.
+  assertStringIncludes(flat, "the opt-in `CLAUDE.md` / `AGENTS.md` block");
+  assertStringIncludes(flat, "**Undecidable means ask**");
+
+  // Exactly two run shapes skip the question. Without this the assertions above pass while a
+  // third exemption sits beside them, which is how "it always asks unless" becomes "it asks if".
+  assertEquals(
+    flat.split("take `Yes` and open no window").length - 1,
+    2,
+    "only a user-asked run and an unattended one may skip the review question",
+  );
+});
+
 Deno.test("the relevance-triage worker is gone from every surface", async () => {
   // A deleted worker leaves three kinds of wreckage: a dispatch nobody can satisfy, a roster
   // entry pointing at a missing file, and prose describing a step that no longer runs. The
   // reference-file lint catches the second only; this catches the other two.
-  for await (const entry of walk(`${ROOT}skills/ingrain-security`, { exts: [".md", ".sh"] })) {
+  let scanned = 0;
+  for await (const entry of walk(`${ROOT}skills/ingrain-security`, { exts: [".md"] })) {
     if (!entry.isFile) continue;
+    scanned++;
     const text = await Deno.readTextFile(entry.path);
     assertEquals(
       /ingrain-relevance-triage|triage worker/.test(text),
@@ -873,6 +790,8 @@ Deno.test("the relevance-triage worker is gone from every surface", async () => 
       `${entry.path} still names the removed relevance-triage worker`,
     );
   }
+  // Without this a walk that matched nothing reports "no wreckage" identically to a clean tree.
+  assertGreaterOrEqual(scanned, 10, "the retired-worker walk scanned almost nothing");
 });
 
 Deno.test("SKILL.md: documents the pointer-based hand-off and context-window discipline", async () => {
@@ -941,29 +860,28 @@ const between = (md: string, start: string, end: string): string => {
   return md.slice(from, to);
 };
 
-Deno.test("the retrieval instruction passes --assessment, so the search is actually scoped", async (t) => {
+Deno.test("retrieval is scoped to the change, not run org-wide", async (t) => {
   const cliRef = await Deno.readTextFile(
     `${ROOT}skills/ingrain-security/references/lib/ingrain-cli.md`,
   );
   const skill = await devDoc();
 
-  await t.step("the reference's retrieval invocation carries the flag", () => {
-    assertStringIncludes(cliRef, 'ingrain context security_rules "<query>" --assessment');
-    // Why it matters, not just that it exists — a writer who understands the flag
-    // is the one who keeps passing it when the surrounding prose is reworked.
+  await t.step("the reference names what the scoping reads", () => {
+    // The CLI defaults the file from the mint's pointer, so there is no flag to pin.
+    // What must survive a rewrite is the reason: a writer who knows the search narrows
+    // by `## Affected paths` is the one who keeps the section written before it runs.
     assertStringIncludes(cliRef, "## Affected paths");
   });
 
-  await t.step("SKILL.md's retrieval step tells the orchestrator to pass it", () => {
-    // Scoped to the step that actually runs the search: `record` and `validate`
-    // take `--assessment` too, so a repo-wide match would pass on their mentions
-    // alone and prove nothing about retrieval.
+  await t.step("SKILL.md's retrieval step says the search is narrowed", () => {
+    // Scoped to the step that actually runs the search, so a repo-wide match on the
+    // phrase elsewhere cannot stand in for it.
     const retrieval = between(
       skill,
       "**1b — Retrieve the org rules",
       "2. **Critique both chains**",
     );
-    assertStringIncludes(retrieval, "--assessment");
+    assertStringIncludes(retrieval, "## Affected paths");
   });
 
   await t.step("the orchestrator is told to write the section before it retrieves", () => {
@@ -1017,201 +935,9 @@ Deno.test("dev docs: dispatches workers with the absolute assessment_abs", async
   assertStringIncludes(md, "<the minted assessment_abs — the ABSOLUTE path, pasted in full>");
 });
 
-Deno.test("session-start: points the orchestrator at assessment_abs", async () => {
-  const hook = await Deno.readTextFile(SESSION_START);
-  assertStringIncludes(hook, "assessment_abs");
-});
-
-Deno.test("session-start: injects the branch-delta runner Phase select routes on", async () => {
-  const hook = await Deno.readTextFile(SESSION_START);
-  // Both prose files promise the ready-to-run command arrives in SessionStart context. Without
-  // the runner the orchestrator hand-rolls a merge-base loop, which is the drift this replaces.
-  assertStringIncludes(hook, "scripts/branch-delta");
-  // Built AND interpolated: a runner that is assembled but never reaches the context block is
-  // the failure this pair catches, and one assertion alone would miss it in either direction.
-  assertStringIncludes(hook, "diff_runner=");
-  assertStringIncludes(hook, "${diff_runner}");
-  // The routing signal itself has to reach the agent, not just the command.
-  assertStringIncludes(hook, "delta_empty");
-});
-
-Deno.test("assessment-mint: emits an instruction and anchors on the git repo root", async () => {
-  const script = await Deno.readTextFile(PATH_SCRIPT);
-  // The script COMPOSES the flat libs — that is its job — and mint.sh holds only the pure
-  // helpers (slugify, count_selected_in_section, resolve_phase) it chains.
-  assertStringIncludes(script, "lib/project-root.sh");
-  assertStringIncludes(script, "lib/mint.sh");
-  assertStringIncludes(script, 'emit_mint_facts "${host}" assessment');
-  // The JSON lives in the script: composing five flat libs is the script's job, and the
-  // emit is the last step of that composition.
-  assertStringIncludes(script, '"instruction":"%s"');
-  // The label-parameterized JSON keeps the assessment field names byte-identical.
-  assertStringIncludes(script, '"%s_abs":"%s"');
-  // Root resolution lives in project-root.sh; the anchoring is covered end-to-end by the
-  // "run from a subdirectory" cases in tests/hooks/assessment-mint.test.ts.
-  assertStringIncludes(await Deno.readTextFile(PROJECT_ROOT_LIB), "rev-parse --show-toplevel");
-});
-
-/**
- * True when `script` really SOURCES `lib` — a `.` command line, in either style the scripts
- * use (`. "${SCRIPT_DIR}/…"` and `if ! . "${SCRIPT_DIR}/…"`).
- *
- * A plain substring search cannot answer this: every source line is preceded by a
- * `# shellcheck source=…/lib/project-root.sh` directive carrying the same text, so a script
- * that DELETED its source line and kept the comment would still pass one. The regression these
- * guards exist to catch would walk straight through.
- */
-async function sourcesLib(script: string, lib: string): Promise<boolean> {
-  const source = new RegExp(String.raw`^(?:if !\s+)?\.\s+\S*lib/${lib}\.sh`, "m");
-  return source.test(await Deno.readTextFile(script));
-}
-
-Deno.test("project-root.sh: is sourced by every script that resolves the project root", async () => {
-  // The lib exists to keep every one of these in lockstep — a copy drifting back into any of
-  // them is the regression this guards. Both hosts' allow-hooks are in the list: they resolve
-  // the project root exactly like the scripts do.
-  for (const script of [PATH_SCRIPT, ENSURE_DIR, ALLOW_HOOK, CODEX_ALLOW_HOOK]) {
-    assertEquals(await sourcesLib(script, "project-root"), true, `${script} must source the lib`);
-  }
-});
-
-Deno.test("assessment-write.sh: is sourced by both allow-hooks", async () => {
-  // The grant itself — the assessment naming and the folder containment check — lives in this
-  // one lib so the two hosts cannot drift apart on what they auto-approve. A hook that inlined
-  // its own check would pass every other test in this file.
-  for (const hook of [ALLOW_HOOK, CODEX_ALLOW_HOOK]) {
-    assertEquals(await sourcesLib(hook, "assessment-write"), true, `${hook} must source the lib`);
-  }
-});
-
 Deno.test("assessment-file.md: names assessment_abs as the write target", async () => {
   const md = await Deno.readTextFile(ASSESSMENT_REF);
   assertStringIncludes(md, "assessment_abs");
-});
-
-Deno.test("hook.json: valid JSON configuring a SessionStart hook", async () => {
-  const hook = JSON.parse(await Deno.readTextFile(HOOK_JSON));
-  const serialized = JSON.stringify(hook);
-  assertStringIncludes(serialized, "SessionStart");
-});
-
-Deno.test("hook.json: both platforms fire SessionStart on the same four sources", async () => {
-  // Claude's matcher was `startup|clear|compact` while Codex's carried `resume` too, so a
-  // RESUMED Claude session got no INGRAIN-ASSESSMENT-PATHS block — and everything downstream
-  // is keyed on it: the mint command, the plugin root, and the Maintenance instruction the
-  // skill writes into every plan file ("re-run the assessment-mint command from your
-  // INGRAIN-ASSESSMENT-PATHS session context"). No fallback existed. Asserted as a SET so a
-  // future divergence fails on whichever side drifts, rather than only on the one spelled here.
-  const sources = async (path: string): Promise<string[]> => {
-    const hook = JSON.parse(await Deno.readTextFile(path));
-    return String(hook.hooks.SessionStart[0].matcher).split("|").sort();
-  };
-  const expected = ["clear", "compact", "resume", "startup"];
-  assertEquals(await sources(HOOK_JSON), expected);
-  assertEquals(await sources(CODEX_HOOK_JSON), expected);
-});
-
-Deno.test("hook.json: both platforms pass their host token to session-start", async () => {
-  // session-start needs the host so it can inject a host-correct assessment-mint command.
-  const claude = JSON.stringify(JSON.parse(await Deno.readTextFile(HOOK_JSON)));
-  const codex = JSON.stringify(JSON.parse(await Deno.readTextFile(CODEX_HOOK_JSON)));
-  assertStringIncludes(claude, "scripts/session-start claude");
-  assertStringIncludes(codex, "scripts/session-start codex");
-  // The assessment-folder hook keeps passing its host token too.
-  assertStringIncludes(claude, "scripts/ensure-assessment-dir claude");
-  assertStringIncludes(codex, "scripts/ensure-assessment-dir codex");
-});
-
-Deno.test("hook.json: Claude registers the PreToolUse auto-approve hook", async () => {
-  // Without this registration the assessment file prompts on every write, which is the
-  // whole reason the hook exists — and nothing else in the suite would notice.
-  const hook = JSON.parse(await Deno.readTextFile(HOOK_JSON));
-  const pre = hook.hooks?.PreToolUse;
-  assertEquals(Array.isArray(pre), true, "PreToolUse must be registered");
-  const serialized = JSON.stringify(pre);
-  assertStringIncludes(serialized, "claude/allow-assessment-write");
-  // The matcher must cover every file-editing tool the hook itself accepts.
-  for (const tool of ["Write", "Edit", "MultiEdit", "NotebookEdit"]) {
-    assertStringIncludes(serialized, tool);
-  }
-});
-
-Deno.test("hook.json: Codex registers the PermissionRequest auto-approve hook", async () => {
-  // Codex's prompt-skipping event is PermissionRequest, not PreToolUse — registering the
-  // hook anywhere else would leave the assessment file prompting on every write.
-  const hook = JSON.parse(await Deno.readTextFile(CODEX_HOOK_JSON));
-  const request = hook.hooks?.PermissionRequest;
-  assertEquals(Array.isArray(request), true, "PermissionRequest must be registered");
-  const serialized = JSON.stringify(request);
-  assertStringIncludes(serialized, "codex/allow-assessment-write");
-  // The matcher must cover every tool name the hook itself accepts. Codex reports
-  // `apply_patch`; Edit and Write are its documented aliases for the same tool.
-  for (const tool of ["apply_patch", "Edit", "Write"]) {
-    assertStringIncludes(serialized, tool);
-  }
-});
-
-Deno.test("hook.json: both hosts register the review gate on PreToolUse", async () => {
-  // The gate is the ad-hoc route's only backstop, and on Codex it is the only mechanical
-  // trigger of any kind — Codex has no ExitPlanMode event, so nothing else there fires before
-  // code is written. Unregistered, it is a script nobody runs and no other test would notice.
-  for (
-    const [path, tools] of [
-      [HOOK_JSON, ["Write", "Edit", "MultiEdit", "NotebookEdit"]],
-      [CODEX_HOOK_JSON, ["apply_patch", "Edit", "Write"]],
-    ] as const
-  ) {
-    const hook = JSON.parse(await Deno.readTextFile(path));
-    const pre = hook.hooks?.PreToolUse;
-    assertEquals(Array.isArray(pre), true, `${path}: PreToolUse must be registered`);
-    const serialized = JSON.stringify(pre);
-    assertStringIncludes(serialized, "require-review-before-write");
-    // Denial is the one decision whose shape is identical on both hosts, which is why this is
-    // ONE script on ONE event rather than a per-host twin like allow-assessment-write.
-    assertStringIncludes(serialized, "scripts/require-review-before-write");
-    // The matcher must cover every tool name the script itself accepts for that host.
-    for (const tool of tools) assertStringIncludes(serialized, tool);
-  }
-});
-
-Deno.test("review gate: is the only hook that may block, and always exits 0", async () => {
-  // The counterpart to the allow-hooks' invariant below. Stated as its own property so the
-  // two cannot quietly swap powers: this one denies or says nothing, and never allows.
-  const gate = await Deno.readTextFile(REVIEW_GATE);
-  assertStringIncludes(gate, '"permissionDecision":"deny"');
-  assertEquals(gate.includes('"permissionDecision":"allow"'), false);
-  assertEquals(gate.includes('"behavior":"allow"'), false);
-
-  // Fail-open is the gate's whole safety story — a guardrail that strands a session is worse
-  // than one that misses a nudge. The EXIT trap is what makes it structural: it covers a bare
-  // `return`, a lib that fails to source, and an abort under `set -u` alike, so no future
-  // branch can forget to fail open. Pinned here because dropping the trap would leave every
-  // existing test passing while the hook started exiting non-zero on the paths nobody tests.
-  assertStringIncludes(gate, "trap 'exit 0' EXIT");
-});
-
-Deno.test("allow-assessment-write: both hooks only ever allow, never deny", async () => {
-  // The core safety property of THESE TWO hooks, asserted on the sources themselves: they can
-  // remove a permission prompt but must never introduce a block. Scoped deliberately — since
-  // the review gate landed, "never blocks" is no longer a property of the hook tree as a
-  // whole, and reading it as one would make the gate look like a violation instead of the one
-  // sanctioned exception. What must hold is the separation: the hooks that can lift a prompt
-  // cannot block, and the hook that can block cannot lift one.
-  const claude = await Deno.readTextFile(ALLOW_HOOK);
-  assertStringIncludes(claude, '"permissionDecision":"allow"');
-  assertEquals(claude.includes('"permissionDecision":"deny"'), false);
-
-  const codex = await Deno.readTextFile(CODEX_ALLOW_HOOK);
-  assertStringIncludes(codex, '"behavior":"allow"');
-  assertEquals(codex.includes('"behavior":"deny"'), false);
-  // Only additive patch verbs are approved: a delete or a move is outside the grant.
-  assertEquals(codex.includes("Delete File: "), false);
-
-  // Both hosts get their grant from the same shared test, so they cannot drift apart on it:
-  // the minter's naming, directly inside the assessment folder.
-  const lib = await Deno.readTextFile(ALLOW_LIB);
-  assertStringIncludes(lib, "assessment*.md");
-  assertStringIncludes(lib, "/.ingrain-security");
 });
 
 /**
@@ -1282,100 +1008,6 @@ Deno.test("SKILL.md: the Testing route is an OR across the two axes", async () =
  * error: the stage that owns the block it moved to will overwrite it, and the stage that
  * should have written it will read an empty block as "my stage has not run".
  */
-const THREAT_BLOCKS = ["gen", "score", "usergate", "test"] as const;
-
-/** The schema's block table, as `[block, [field, …]]` in document order. */
-const blockTable = (ref: string): Array<[string, string[]]> =>
-  [...ref.matchAll(/^\| `#### (\w+)` \| [^|]+ \| ([^|]+) \|$/gm)]
-    .map((row) => [row[1], row[2].split(",").map((field) => field.trim())]);
-
-Deno.test("phase blocks: the card and the schema agree on which block each field sits in", async (t) => {
-  const sh = await Deno.readTextFile(TEMPLATE_LIB);
-  const ref = await Deno.readTextFile(ASSESSMENT_REF);
-  const table = blockTable(ref);
-
-  await t.step("the schema names the four blocks, in the order the stages run", () => {
-    // Cardinality first: a reworded table that stops matching would otherwise empty the
-    // loops below and let every assertion in this test pass while proving nothing.
-    assertEquals(table.map(([block]) => block), [...THREAT_BLOCKS]);
-  });
-
-  // The card's block enumeration, sliced per block. Bounded at the prose that follows it
-  // so a field named in the ownership paragraph cannot be mistaken for a card entry.
-  const card = between(sh, "#### gen", "THE BLOCK IS THE OWNERSHIP RECORD");
-  const regions = THREAT_BLOCKS.map((block, nth) => {
-    const from = card.indexOf(`#### ${block}`);
-    const next = THREAT_BLOCKS[nth + 1];
-    const to = next === undefined ? card.length : card.indexOf(`#### ${next}`);
-    assertEquals(from !== -1, true, `the card does not enumerate \`#### ${block}\``);
-    return card.slice(from, to);
-  });
-
-  /**
-   * A field as the card ENTERS it — the label followed by its value spec, its separating
-   * comma, or the end of a line.
-   *
-   * A bare substring search cannot do this job. The card's `#### test` region explains
-   * that `Robustness justification` is deliberately not called `Justification` — "NOT the
-   * risk-scoring Justification above" — so a plain `includes` reads the `score` block's
-   * field as living in `test` too. That cross-reference is the whole reason the two
-   * rationales stopped being interleaved, so the matcher bends around it rather than the
-   * card losing it.
-   */
-  const declares = (region: string, field: string): boolean =>
-    new RegExp(String.raw`\b${field}\s*(\(|,|$)`, "m").test(region);
-
-  await t.step(
-    "every field the schema assigns to a block appears in that block's card region",
-    () => {
-      for (const [block, fields] of table) {
-        const region = regions[THREAT_BLOCKS.indexOf(block as typeof THREAT_BLOCKS[number])];
-        for (const field of fields) {
-          assertEquals(
-            declares(region, field),
-            true,
-            `the card's \`#### ${block}\` region does not name \`${field}\`, which the schema ` +
-              `assigns to it — the two must change in the same edit`,
-          );
-        }
-      }
-    },
-  );
-
-  await t.step("and appears in exactly one region, so no field has two owners", () => {
-    for (const [, fields] of table) {
-      for (const field of fields) {
-        // The case this catches silently loses data: a field that drifted into a second
-        // block is rewritten by whichever stage owns that block, and the stage that should
-        // have written it reads an empty region as "my stage has not run".
-        const owners = regions.filter((region) => declares(region, field)).length;
-        assertEquals(owners, 1, `\`${field}\` is declared in ${owners} card regions, expected 1`);
-      }
-    }
-  });
-});
-
-Deno.test("phase blocks: only `## Threats` has them, and the rule says why", async () => {
-  const sh = await Deno.readTextFile(TEMPLATE_LIB);
-  const ref = await Deno.readTextFile(ASSESSMENT_REF);
-
-  // The narrowing this phase settled. A block records which of SEVERAL writers owns a
-  // field, and `## Threats` is the one entry written by more than one — so marking any
-  // other section would be claiming a shared ownership that does not exist. Asserted as
-  // the RULE rather than as an exemption list, because a list is what drifts: the reason
-  // survives a new section being added, a list does not.
-  assertStringIncludes(ref, "written by more than one **writer**");
-
-  // No other card seeds a marker. Sliced from the `## Threats` card's end so the
-  // enumeration inside it is not what this matches.
-  const otherCards = sh.slice(sh.indexOf("## Risk score"));
-  assertEquals(
-    /^\s*#### /m.test(otherCards),
-    false,
-    "a section after `## Threats` seeds a `####` marker — only `## Threats` carries blocks",
-  );
-});
-
 Deno.test("phase blocks: each writer names the block it fills, and the seeding rules survive", async (t) => {
   const generator = await Deno.readTextFile(
     `${ROOT}skills/ingrain-security/references/development/ingrain-threat-generator.md`,
@@ -1434,10 +1066,14 @@ Deno.test("phase blocks: each writer names the block it fills, and the seeding r
   });
 
   await t.step("the missing-marker fallback is stated where a writer will meet it", async () => {
-    // The writer-side half of tolerance: the parse tests prove a marker-less file is
-    // READ correctly, and nothing but this tells a writer what to DO with one.
-    const sh = await Deno.readTextFile(TEMPLATE_LIB);
-    assertStringIncludes(sh, "Missing marker? Append your fields at the end of the entry.");
+    // The writer-side half of tolerance: the parse tests prove a marker-less file is READ
+    // correctly, and nothing but this tells a writer what to DO with one. The card's copy
+    // is checked in `backend/tests/parity/assessmentCards.test.ts`, which can see both the
+    // renderer and this reference; here it is the reference's own statement.
+    assertStringIncludes(
+      await Deno.readTextFile(ASSESSMENT_REF),
+      "**If a marker is missing**, append your fields at the end of the entry.",
+    );
   });
 });
 
@@ -1452,7 +1088,7 @@ Deno.test("phase blocks: each writer names the block it fills, and the seeding r
  */
 const skillFiles = async (): Promise<Array<{ path: string; text: string }>> => {
   const files: Array<{ path: string; text: string }> = [];
-  for await (const entry of walk(`${ROOT}skills/ingrain-security`, { exts: [".md", ".sh"] })) {
+  for await (const entry of walk(`${ROOT}skills/ingrain-security`, { exts: [".md"] })) {
     if (entry.isFile) files.push({ path: entry.path, text: await Deno.readTextFile(entry.path) });
   }
   return files;

@@ -1,64 +1,46 @@
 /**
- * Runs ShellCheck over every shell script committed to the repo — the hooks, the
- * assessment mint and the release scripts. Offline, no model calls.
+ * Runs ShellCheck over every shell script committed to the repo, which since the plugin
+ * became prose-only means the three release scripts under `.github/`. Offline, no model
+ * calls.
  *
- * Discovery is shebang-based rather than extension-based on purpose: the hook scripts
- * are deliberately extensionless (see `hooks/run-hook.cmd` for why), so a `*.sh` glob
- * would silently lint only the three release scripts and miss every hook.
+ * **The tier is retained rather than deleted with the scripts it used to lint.** Those
+ * scripts are what cut a release, so dropping the tier would silently stop linting the
+ * one executable surface the repo still has.
  *
- * Lint settings live in the repo-root `.shellcheckrc` — notably `source-path=SCRIPTDIR`,
- * which lets ShellCheck follow the `# shellcheck source=...` directives the hooks use to
- * pull in their shared libs.
+ * Discovery stays shebang-based rather than extension-based: an extensionless script is
+ * exactly what a `*.sh` glob misses, and the second test below asserts that none has
+ * reappeared. Lint settings live in the repo-root `.shellcheckrc`.
  *
  * Requires `shellcheck` on PATH (`brew install shellcheck`); CI installs a pinned build before
  * running `deno task ci`, so this is the only place the shell lint is defined.
  */
 
-import { assert, assertEquals, assertGreaterOrEqual } from "@std/assert";
+import { assertEquals } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 
 const ROOT = fromFileUrl(new URL("../../", import.meta.url));
-
-/** Polyglot bat/bash wrapper for Windows — not a lintable bash script. */
-const EXCLUDED = new Set(["hooks/run-hook.cmd"]);
 
 /**
  * Scripts that must always be linted. Guards against a discovery bug quietly
  * shrinking the set to nothing and leaving the suite green but vacuous.
  *
- * Discovery is `git ls-files`, so this list can only name TRACKED files — which is also the
- * gap it once could not close: discovery was `git ls-files`, so an unstaged or freshly renamed
- * script was silently unlinted and equally absent from here. Discovery now walks the tree, so
- * this list names every script regardless of index state — and a file dropping out of it is a
- * real regression rather than a staging artifact.
+ * Discovery **walks the tree**, so this list names every script regardless of index state and
+ * a file dropping out of it is a real regression rather than a staging artifact. It used to be
+ * `git ls-files`, which scoped the contract to "what is committed" and left a new or freshly
+ * renamed script unlinted under both names at once.
  */
 const EXPECTED = [
+  ".github/publish-release.sh",
   ".github/release.sh",
-  "hooks/claude/allow-assessment-write",
-  "hooks/codex/allow-assessment-write",
-  "hooks/scripts/lib/assessment-write.sh",
-  "hooks/scripts/lib/review-state.sh",
-  "hooks/scripts/ensure-assessment-dir",
-  "hooks/scripts/require-review-before-write",
-  "hooks/scripts/session-start",
-  "skills/ingrain-security/scripts/assessment-mint",
-  "skills/ingrain-security/scripts/branch-delta",
-  "skills/ingrain-security/scripts/lib/artifact-template.sh",
-  "skills/ingrain-security/scripts/lib/assessment-dir.sh",
-  "skills/ingrain-security/scripts/lib/fork-point.sh",
-  "skills/ingrain-security/scripts/lib/json.sh",
-  "skills/ingrain-security/scripts/lib/mint.sh",
-  "skills/ingrain-security/scripts/lib/project-root.sh",
-  "skills/ingrain-security/scripts/threat-retag",
+  ".github/version-bump.sh",
 ];
 
 /**
  * True if the file is shell: it declares a bash/sh shebang, or is named `*.sh` (which
  * catches the sourced libs, who have no shebang by design).
  *
- * Reads the file rather than trusting the path, so an index entry with no file behind it
- * is skipped — `git ls-files` lists staged-but-deleted paths, and mid-rename those would
- * otherwise reach ShellCheck as a "does not exist" fatal.
+ * Reads the file rather than trusting the path, so anything that disappears between the walk
+ * and the read is skipped rather than reaching ShellCheck as a "does not exist" fatal.
  */
 async function isShellScript(path: string): Promise<boolean> {
   let firstLine: string;
@@ -101,8 +83,7 @@ async function runShellCheck(path: string): Promise<{ code: number; report: stri
  * deleted and the new one not at all. Four of the newest files, ~350 lines carrying all of the
  * argv parsing and JSON assembly, were invisible here while the suite reported green.
  *
- * The walk is what `parity/sourceGraph.test.ts` already does, which is why that tier covered
- * them throughout. `SKIPPED_DIRS` replaces what gitignore used to do for free.
+ * `SKIPPED_DIRS` replaces what gitignore used to do for free.
  */
 const SKIPPED_DIRS = new Set([".git", "node_modules", ".helpers", ".variant-runs"]);
 
@@ -116,7 +97,6 @@ async function discoverShellScripts(dir = ROOT, prefix = ""): Promise<string[]> 
       continue;
     }
     if (!entry.isFile) continue;
-    if (EXCLUDED.has(rel)) continue;
     if (await isShellScript(rel)) scripts.push(rel);
   }
   return scripts.sort();
@@ -124,14 +104,47 @@ async function discoverShellScripts(dir = ROOT, prefix = ""): Promise<string[]> 
 
 const scripts = await discoverShellScripts();
 
-Deno.test("discovery: finds the committed shell scripts, and not the polyglot wrapper", () => {
-  // The hooks are extensionless, so a healthy scan finds far more than the 3 *.sh
-  // release scripts. Anything less means discovery has regressed to extension-matching.
-  assertGreaterOrEqual(scripts.length, EXPECTED.length);
-  for (const path of EXPECTED) {
-    assert(scripts.includes(path), `expected ${path} to be linted, got: ${scripts.join(", ")}`);
+Deno.test("discovery: finds the release scripts, and the plugin ships no shell at all", () => {
+  // **The expected set is now exactly the release scripts.** The plugin's own shell — the
+  // three bundled scripts, their seven libs, and the six hooks — moved into the `ingrain`
+  // binary or was deleted with the hook system, so what remains to lint is the three files
+  // under `.github/` that cut releases. Deleting this tier along with them would have
+  // silently stopped linting those.
+  assertEquals(
+    scripts,
+    EXPECTED,
+    "the linted set is not exactly the release scripts — a shell file has appeared in the " +
+      `plugin, or a release script has stopped being discovered: ${scripts.join(", ")}`,
+  );
+});
+
+/**
+ * **The plugin ships no executable file**, asserted as a property rather than as a claim
+ * about one commit.
+ *
+ * With the hooks gone this is what "prose only" means, and it is the security posture the
+ * consolidation bought: a compromise of this repository can mislead an agent, but it cannot
+ * execute anything on a developer's machine. A `.sh` reappearing under `skills/` or `hooks/`
+ * would quietly undo that.
+ */
+Deno.test("the plugin ships no executable file", async () => {
+  const offenders = scripts.filter((path) => !path.startsWith(".github/"));
+  assertEquals(
+    offenders,
+    [],
+    `the plugin must ship markdown only:\n  ${offenders.join("\n  ")}`,
+  );
+
+  for (const gone of ["hooks", "skills/ingrain-security/scripts"]) {
+    const present = await Deno.stat(`${ROOT}${gone}`).then(() => true, () => false);
+    assertEquals(present, false, `${gone}/ was deleted and must not return`);
   }
-  assert(!scripts.includes("hooks/run-hook.cmd"), "the bat/bash polyglot must not be linted");
+
+  const claude = JSON.parse(await Deno.readTextFile(`${ROOT}.claude-plugin/plugin.json`));
+  const codex = JSON.parse(await Deno.readTextFile(`${ROOT}.codex-plugin/plugin.json`));
+  for (const [host, manifest] of [["Claude", claude], ["Codex", codex]] as const) {
+    assertEquals(manifest.hooks, undefined, `${host}'s manifest still registers hooks`);
+  }
 });
 
 for (const path of scripts) {

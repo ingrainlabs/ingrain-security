@@ -13,7 +13,7 @@
         "repo": "ingrainlabs/ingrain-security",
         "ref": "v1.2.0"
       },
-      "description": "Finds the security holes in a change while they are still cheap to fix, then verifies the implementation actually closed them.",
+      "description": "Finds the security holes in a change while they are still cheap to fix, then verifies the implementation actually closed them. Requires the `ingrain` CLI on PATH.",
       "version": "1.2.0",
       "author": { "name": "Ingrain Labs" },
       "repository": "https://github.com/ingrainlabs/ingrain-security",

@@ -26,7 +26,7 @@ config or the network. Probe before querying.
 ## Retrieval
 
 ```bash
-ingrain context security_rules "<query>" --assessment "<assessment_abs>" --json
+ingrain context security_rules "<query>" --json
 ```
 
 - **Retrieve broadly** — more questions, higher limits. Precision is not this step's job: the
@@ -45,10 +45,10 @@ ingrain context security_rules "<query>" --assessment "<assessment_abs>" --json
   broad; with a critique round downstream, a generous limit costs little. It is still not a way
   to cover more ground: a larger limit returns more neighbours of the same point, so it cannot
   reach a topic the query did not aim at. Splitting the query is what covers more ground.
-- **`--assessment <abs>`** — the assessment file, so the CLI can read `## Affected paths` and
-  narrow the search to the org rules governing the code this change will touch. Pass it on
-  every query; the paths are read fresh each time, so a section written after an earlier query
-  still takes effect.
+- **`--assessment <abs>`** — rarely needed. The CLI reads `## Affected paths` from the
+  assessment the mint recorded for this branch and narrows the search to the org rules governing
+  that code. The paths are read fresh on every query, so a section written after an earlier one
+  still takes effect. The flag names a different file.
 
 ### The retrieval loop — every question in one call
 
@@ -61,11 +61,11 @@ for q in "how do we authenticate service-to-service calls" \
          "how do we store and rotate secrets" \
          "how do we validate user input at API boundaries"; do
   printf '\n=== %s\n' "$q"
-  ingrain context security_rules "$q" --assessment "<assessment_abs>" --json
+  ingrain context security_rules "$q" --json
 done
 ```
 
-Substitute your own questions and the absolute assessment path. **Run it sequentially — no `&`:**
+Substitute your own questions. **Run it sequentially — no `&`:**
 the invocations write to one stdout, so backgrounding them interleaves the JSON mid-array and
 costs you the whole batch to save a few seconds.
 
@@ -118,12 +118,12 @@ resolve. Standalone has no platform to ask and takes the band from its caller in
 
 ## Recording the assessment
 
-Two commands, one per phase's finalize. Both take the **absolute** minted paths, and both are
-**best-effort** — see **A failed sync never fails a review** below.
+Two commands, one per phase's finalize. Both are **best-effort** — see **A failed sync never
+fails a review** below.
 
 ```bash
-ingrain record design       --assessment "<assessment_abs>"
-ingrain record verification --assessment "<assessment_abs>"
+ingrain record design
+ingrain record verification
 ```
 
 - **`design`** — run at the **Development finalize**, after the file has been finalized in place.
@@ -156,7 +156,7 @@ and never leave the user thinking the review itself failed. A non-zero exit from
 classifies exactly as in the taxonomy below.
 
 The one thing worth surfacing plainly: if `record` reports the assessment did not validate, that
-is a defect in the **file** — run `ingrain validate --assessment "<assessment_abs>"`, which needs
+is a defect in the **file** — run `ingrain validate`, which needs
 no configuration and no network, and reports every problem at once.
 
 ## Failure taxonomy
@@ -173,8 +173,8 @@ no configuration and no network, and reports every problem at once.
 | `record verification` reports the file is not at `Latest stage: testing` | **Wrong stage** — set it in the finalize write, then re-run |
 | "operation not permitted" / sandbox-denied / permission-required | **Access denied** |
 
-**No revision** is the one with a remedy in your own hands: run `ingrain record design
---assessment "<assessment_abs>"` first, then re-run the verification sync. It is not a CLI fault
+**No revision** is the one with a remedy in your own hands: run `ingrain record design`
+first, then re-run the verification sync. It is not a CLI fault
 and not a file fault — it is ordering, and the CLI names it in its own error.
 
 All but the last **degrade gracefully** — a permission grant would leave them unchanged, so note

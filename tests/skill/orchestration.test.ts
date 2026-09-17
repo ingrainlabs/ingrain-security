@@ -25,19 +25,26 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { assertOrder, assertWorkerDispatched } from "../lib/matchers.ts";
 import {
+  assertOrder,
+  assertWorkerDispatched,
   dispatchedWorkers,
+  toolNames,
+  usesSubagent,
+} from "../lib/matchers.ts";
+import {
   ORCHESTRATION_MAX_TURNS,
   ORCHESTRATION_TIMEOUT_MS,
-  toolNames,
-} from "../lib/claudeRunner.ts";
+  resolveHost,
+} from "../lib/runners/index.ts";
 import { runChecked } from "../lib/reporter.ts";
 import { MAJOR_PLAN } from "../lib/sampleInputs.ts";
 import { MAJOR_PROJECT, projectWith } from "../lib/sampleProjects.ts";
-import type { StreamEvent } from "../lib/types.ts";
+import type { THostBackend, TToolUse } from "../lib/types.ts";
 
 const INTEGRATION = Boolean(Deno.env.get("INTEGRATION"));
+/** The matrix is the tier's: this file resolves its host once, and the deno.json twins select. */
+const HOST: THostBackend = resolveHost();
 
 /**
  * The invoking prompt: the plan, plus the two answers a user would give before the run starts.
@@ -87,9 +94,9 @@ const PROMPT = `Here is my implementation plan, ready to build. Run the security
  * threats on disk with no subagent seen means the work happened through something this harness
  * does not recognise, which is the case that must be shouted about rather than skipped.
  */
-async function dispatchedSomething(events: StreamEvent[], project: string): Promise<boolean> {
-  const used = [...new Set(toolNames(events))];
-  if (used.some((name) => name === "Agent" || name === "Task")) return true;
+async function dispatchedSomething(uses: TToolUse[], project: string): Promise<boolean> {
+  const used = toolNames(uses);
+  if (usesSubagent(uses)) return true;
 
   const threats = await sectionLines(project, "Threats", /^### T\d+\b/);
   const seen = `Tools this run used: ${used.join(", ") || "(none)"}.`;
@@ -102,8 +109,8 @@ async function dispatchedSomething(events: StreamEvent[], project: string): Prom
         `no tool this harness recognises as a subagent dispatch.\n` +
         `  !! Two possible causes, and both make every dispatch assertion here meaningless:\n` +
         `  !!   1. The host RENAMED its subagent tool. Add the new name to SUBAGENT_TOOLS in ` +
-        `lib/claudeRunner.ts. This has happened before: it was 'Task', it is now 'Agent', and ` +
-        `the detector went stale for months without a single test turning red.\n` +
+        `lib/matchers.ts. This has happened before on Claude Code: it was 'Task', it is now ` +
+        `'Agent', and the detector went stale for months without a single test turning red.\n` +
         `  !!   2. The run took the sequential in-context fallback ` +
         `(references/lib/dispatch.md), which is a legal mode but not the one this tier exists ` +
         `to check.\n  !! ${seen}\n`,
@@ -175,7 +182,7 @@ const scoredThreats = (project: string): Promise<string[]> =>
   sectionLines(project, "Threats", /^Criticality:\s*\S/);
 
 Deno.test({
-  name: "orchestration: both driver chains run, and the run halts at the user gates",
+  name: "orchestration: both driver chains run, and the run halts at the user gates" + ` [${HOST}]`,
   ignore: !INTEGRATION,
   fn: async () => {
     const cwd = await projectWith(MAJOR_PROJECT);
@@ -190,7 +197,7 @@ Deno.test({
           cwd,
         },
         async (r) => {
-          const order = dispatchedWorkers(r.events);
+          const order = dispatchedWorkers(r.uses);
           const trace = order.join(" -> ");
 
           // **The halt is checked first, and unconditionally.** It reads the assessment rather
@@ -205,10 +212,10 @@ Deno.test({
             `guidance was written before the user gates — trace: ${trace}`,
           );
 
-          if (!await dispatchedSomething(r.events, cwd)) return;
+          if (!await dispatchedSomething(r.uses, cwd)) return;
 
-          assertWorkerDispatched(r.events, "ingrain-threat-generator");
-          assertWorkerDispatched(r.events, "ingrain-threat-critic");
+          assertWorkerDispatched(r.uses, "ingrain-threat-generator");
+          assertWorkerDispatched(r.uses, "ingrain-threat-critic");
 
           assertOrder(
             trace,
@@ -234,7 +241,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "orchestration: the rule chain is critiqued before the gate presents it",
+  name: "orchestration: the rule chain is critiqued before the gate presents it" + ` [${HOST}]`,
   ignore: !INTEGRATION,
   fn: async () => {
     const cwd = await projectWith(MAJOR_PROJECT);
@@ -249,7 +256,7 @@ Deno.test({
           cwd,
         },
         async (r) => {
-          const order = dispatchedWorkers(r.events);
+          const order = dispatchedWorkers(r.uses);
           const trace = order.join(" -> ");
 
           // The rule chain STOPS at its gate — it does not flow on into guidance. That is the
@@ -264,7 +271,7 @@ Deno.test({
             `guidance was written before the rule gate was answered — trace: ${trace}`,
           );
 
-          if (!await dispatchedSomething(r.events, cwd)) return;
+          if (!await dispatchedSomething(r.uses, cwd)) return;
 
           // **That the rule critic ran at all is the other half of this test**, and it is what
           // makes accept-all sound: it prunes the retrieval's misses before anything is

@@ -3,7 +3,7 @@ name: ci
 # Runs the offline test tier — the tests that need no `claude` CLI, no auth and no
 # model calls — plus lint and format checks, as the single `deno task ci`:
 #
-#   lint · fmt:check · tests/static · tests/hooks · tests/shell
+#   lint · fmt:check · tests/static · tests/parity · tests/shell
 #
 # That is the same command developers run locally, so CI has no test logic of its own to
 # drift from the suite. Shell linting is one of those tests — tests/shell/shellcheck.test.ts

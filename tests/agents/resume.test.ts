@@ -21,8 +21,9 @@ import {
   mintAssessment,
   ORCHESTRATION_MAX_TURNS,
   ORCHESTRATION_TIMEOUT_MS,
+  resolveHost,
   workerDispatchPrompt,
-} from "../lib/claudeRunner.ts";
+} from "../lib/runners/index.ts";
 import { runChecked } from "../lib/reporter.ts";
 import { threatEntries } from "../lib/matchers.ts";
 import { MAJOR_PLAN } from "../lib/sampleInputs.ts";
@@ -182,7 +183,7 @@ Deno.test("resume: a carried-forward threat keeps the tag it arrived with (BR-10
   // the worker to overwrite. Every Development route but `fresh_task` arrives one-file.
   const projectDir = await Deno.makeTempDir();
   try {
-    const target = await mintAssessment(projectDir, PRIOR_TITLE);
+    const target = await mintAssessment(projectDir, PRIOR_TITLE, resolveHost());
     await seedPriorAnalysis(target.assessmentAbs, { rules: false, title: PRIOR_TITLE });
 
     const input = [
@@ -264,7 +265,7 @@ Deno.test("resume: a Testing run judges the org rules it inherited", async () =>
   // then JUDGES them. A run that skipped the rule axis entirely satisfies both of those.
   const projectDir = await projectWith(MAJOR_PROJECT);
   try {
-    const seeded = await mintAssessment(projectDir, RULE_AXIS_TITLE);
+    const seeded = await mintAssessment(projectDir, RULE_AXIS_TITLE, resolveHost());
     await seedPriorAnalysis(seeded.assessmentAbs, { rules: true, title: RULE_AXIS_TITLE });
 
     await runChecked(

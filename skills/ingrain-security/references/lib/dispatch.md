@@ -1,8 +1,8 @@
 # Dispatch reference — the host mechanism, for both phases
 
 Every worker and every verifier is dispatched as a **fresh worker subagent** told to read its
-reference file — `<plugin_root>/skills/ingrain-security/references/development/<name>.md` for a
-Development worker, `<plugin_root>/skills/ingrain-security/references/testing/<name>.md` for a
+reference file — `<skill_dir>/references/development/<name>.md` for a
+Development worker, `<skill_dir>/references/testing/<name>.md` for a
 Testing verifier — and follow it. That abstraction maps differently onto each host.
 
 **This file owns the MECHANISM only.** The dispatch *prompt* belongs to the phase that sends it:
@@ -43,7 +43,7 @@ Anything with no data dependency on anything else in flight is issued **together
 block** — not one per turn. Each extra turn is a round-trip the run pays for and nothing gains.
 This covers:
 
-- **The two bundled scripts at Phase select** — `assessment-mint` and `branch-delta` are
+- **The two commands at Phase select** — `ingrain assessment mint` and `ingrain delta` are
   read-only and deterministic, and neither reads the other's output. One block, and the values
   are reused for the whole run; no later step re-mints.
 - **The two driver chains after the review question** — the threat chain and the broad rule retrieval have no
@@ -57,9 +57,10 @@ pipeline order in `references/development/flow.md` is a real data dependency, no
 ## Writing the assessment file
 
 **Every change to it goes through the Edit or Write tool** — the orchestrator's and every worker's
-alike. `allow-assessment-write` pre-approves both for this path, so the change lands with no
-permission prompt and the user still sees the before/after. The shell has a different job: it runs
-this plugin's read-only scripts and the `ingrain` CLI, and never edits the assessment file.
+alike. This skill's `allowed-tools` frontmatter grants both, scoped to `.ingrain-security/`, so on
+a host that applies a path-scoped rule the change lands with no permission prompt and the user
+still sees the before/after; where it does not, you are simply prompted — approve and carry on.
+The shell has a different job: it runs the `ingrain` CLI, and never edits the assessment file.
 
 Every field is its own line, but **a write is one call**. A worker writes its whole section in a
 single Write or Edit, and a stage filling fields into entries that already exist makes **one Edit
@@ -70,7 +71,7 @@ costs one call rather than one per line.
 An entry's field lines are **not** one contiguous run: `## Threats` entries are divided into
 `#### ` phase blocks, one per writing stage, and replacing first-field-to-last would swallow the
 markers between them. **Every stage writes inside its own marker, with no exception.** Sorting
-the section into risk order is `skills/ingrain-security/scripts/threat-retag`'s, and it moves
+the section into risk order is `ingrain assessment retag`'s, and it moves
 entries by line span without re-typing a line, so no stage has cause to rewrite `## Threats`
 whole.
 
@@ -82,7 +83,7 @@ a field *means*, not for learning its shape.
 
 Use the host's subagent / task primitive, passing the dispatch prompt and telling
 the subagent to read the worker reference file from
-`<plugin_root>/skills/ingrain-security/references/development/<name>.md`. Dispatch one
+`<skill_dir>/references/development/<name>.md`. Dispatch one
 worker per call and read the returned text. Where the host supports a per-subagent
 model, set the worker's recommended tier; otherwise ignore it (advisory).
 
@@ -154,7 +155,7 @@ command?") straight to the user, so the fetch retries in place.
 
 **Every Development worker is dispatched with exactly five tools: Read, Grep, Glob, Edit and
 Write** — it inspects the plan and repo with the first three, and writes its own section of
-the assessment file with Edit or Write, which `allow-assessment-write` pre-approves for that
+the assessment file with Edit or Write, which this skill's `allowed-tools` grants for that
 path. It works from the rules already on disk — they are in the assessment's own `## Org rules`
 section, so the assessment path you already pass is the only path a worker needs.
 
@@ -163,7 +164,7 @@ with Edit or Write. There is no fallback where it stages the text somewhere else
 transplant.
 
 **A Testing verifier is the mirror image: Read, Grep, Glob and Bash — no Edit, no Write.** It
-needs the shell for one thing only, the bundled `branch-delta <host> diff` command its dispatch
+needs the shell for one thing only, the `ingrain delta diff` command its dispatch
 carries, which is how it reads the change without hand-writing git. Grant it nothing that could
 write the assessment: the orchestrator is the file's single writer during Testing.
 

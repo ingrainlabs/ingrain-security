@@ -14,7 +14,7 @@ description: >-
 > orchestrator drives the loop, dispatches every other worker, and owns every other threat.
 >
 > - **Read-only on the codebase.** Use Read, Grep and Glob to inspect the code, and the
->   **bundled `branch-delta` script** — the command is in your dispatch — to read the change.
+>   **`ingrain delta` command** — the command is in your dispatch — to read the change.
 >   That set is your whole toolset; never write a git command of your own. Any org rule you need is already on disk, in the
 >   assessment's own `## Org rules` section. Your entire output is the verdict you return, which
 >   the orchestrator records. This is advisory — the platform relies on you to honor it.
@@ -58,21 +58,21 @@ The orchestrator gives you:
   authoritative guidance on **how it implements** this kind of control. Where none are named, or
   those entries' `Rule refs` are `—`, proceed from the threat and the Descriptions alone: org
   rules are best-effort supporting context here.
-- The **`diff_ref`** to verify against — the merge-base commit where this branch diverged from
-  its parent — and the instruction to test that threat against the **branch diff** at that ref.
+- The instruction to test that threat against the **branch diff** — the change since this branch
+  diverged from its parent, which the `ingrain delta diff` command below reads on its own.
 
 Your dispatch may name **no guidance at all** — the plan selected this threat and nothing was
 written for it, or what was written got dropped during plan refinement. That is an expected case.
 Test it anyway: the change may close the threat incidentally, and if it does not, saying so is the
 finding.
 
-You read the change with the `branch-delta` command your dispatch carries — the whole delta, or
+You read the change with the `ingrain delta` command your dispatch carries — the whole delta, or
 the same command with paths appended for single files. It covers committed **and** uncommitted
 work since the fork point, and prints new (untracked) files as contents, so nothing is invisible
-to you. **Pass the `--ref` exactly as the orchestrator gave it**: that string is the merge-base,
-which is what exposes the committed implementation you are here to test, where `HEAD` would show
-only the uncommitted part. Passing it verbatim is also what holds every verifier in this run to
-the same change. Scope your reading to the files and hunks relevant to your threat.
+to you. It reads the basis this run pinned, which is the merge-base: that is what exposes the
+committed implementation you are here to test, where `HEAD` would show only the uncommitted part,
+and it holds every verifier in this run to the same change. Scope your reading to the files and
+hunks relevant to your threat.
 
 **The delta is your ENTRY POINT, not your boundary.** It tells you what this change did; your
 question is what the code *now* does, and the two are not the same. A threat is closed or left

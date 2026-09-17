@@ -12,14 +12,15 @@ description: >-
   might touch security — it opens by asking whether a review is warranted.
 license: MIT
 compatibility: >-
-  Built for agent hosts that can dispatch subagents (Claude Code, Codex, OpenCode). Requires bash, git, jq
-  and the usual POSIX text tools (grep, sed, coreutils); on Windows, Git for Windows supplies the
-  bash the hooks run through. The optional `ingrain`
-  CLI, plus network access to reach the platform, adds org-rule retrieval and assessment syncing;
-  without it the review runs on the threat axis alone.
+  Built for agent hosts that can dispatch subagents (Claude Code, Codex, OpenCode). Requires the
+  `ingrain` CLI on PATH and git; the review runs through the binary, so a plugin install alone is
+  not enough. Network access to reach the platform is optional and adds org-rule retrieval and
+  assessment syncing; without it the review runs on the threat axis alone.
 metadata:
   author: Ingrain Labs
-allowed-tools: Bash(ingrain context:*) Bash(ingrain record:*)
+allowed-tools: Bash(ingrain --version) Bash(ingrain assessment:*) Bash(ingrain delta:*)
+  Bash(ingrain context:*) Bash(ingrain record:*) Bash(ingrain validate:*)
+  Write(//**/.ingrain-security/**) Edit(//**/.ingrain-security/**)
 ---
 
 <SUBAGENT-STOP>
@@ -50,19 +51,27 @@ phase skips the *routing*, never the mint. Both phases open the assessment at `a
 neither can build that path, so issue the batch below first and carry on into the flow. Testing
 states the same rule at its step 0.
 
-Otherwise **issue both bundled scripts in ONE block** — read-only, deterministic and mutually
-independent, so together they cost a single round-trip. Your SessionStart context carries each one
-ready to run (plugin root and host already substituted):
+**First, confirm the binary is there.** The whole review runs through it, so a missing one means
+there is no review at all — not a step that degrades:
 
 ```ingrain-script
-bash <plugin>/skills/ingrain-security/scripts/assessment-mint <host> --title "<task title>"
-bash <plugin>/skills/ingrain-security/scripts/branch-delta <host>
+ingrain --version
+```
+
+If that fails, **stop and say so in one line**: the `ingrain` CLI is not on PATH, Do not carry on and do not work around it.
+
+Otherwise **issue both commands in ONE block** — read-only, deterministic and mutually
+independent, so together they cost a single round-trip:
+
+```ingrain-script
+ingrain assessment mint --host <host> --title "<task title>"
+ingrain delta --host <host>
 ```
 
 **Every field you will need for the whole run is declared below — keep them all.** No step
 re-mints anything, except the recovery case named under `siblings`. (A run that arrived by a
-**named phase** has not issued the batch at all yet — it issues it here, once.) Obey each script's
-`instruction` field. Both scripts emit more than this; anything not listed here is diagnostic.
+**named phase** has not issued the batch at all yet — it issues it here, once.) Obey each command's
+`instruction` field. Both emit more than this; anything not listed here is diagnostic.
 
 **From the mint —**
 
@@ -70,10 +79,11 @@ re-mints anything, except the recovery case named under `siblings`. (A run that 
   Write/Edit, and finalize. The relative `assessment_path`
   (`.ingrain-security/assessment-<branch-slug>-<task-slug>.md`) is a **display form** only: prose,
   tables and plan-file links.
-- **`plugin_root`** — the absolute root of this plugin, which is **not** the project root and
-  cannot be derived from it. Every worker dispatch pastes it in front of the reference-file path,
-  for the same reason it pastes `assessment_abs` in full: a subagent's cwd is the user's project,
-  so a relative `references/…` resolves to `<project>/references/…` and the read fails outright.
+  **Reference-file paths come from your own base directory, not from this JSON.** The Skill tool
+  states this skill's base directory when it loads you. Every worker dispatch pastes that in front
+  of `references/…`, for the same reason it pastes `assessment_abs` in full: a subagent's cwd is
+  the user's project, so a relative `references/…` resolves to `<project>/references/…` and the
+  read fails outright.
 - **`branch_slug`** — this branch, slugified; empty when HEAD is detached. Step 0's prior-analysis
   lookup matches on it, and it is the branch half of the file's identity — which is
   why re-minting the same task on the same branch resolves to the same file.
@@ -113,23 +123,24 @@ re-mints anything, except the recovery case named under `siblings`. (A run that 
   guesses which sibling is yours: choosing wrong would write into another task's assessment, which
   is the harm the never-glob rule below exists to prevent.
 
-**From `branch-delta` —**
+**From `ingrain delta` —**
 
 - **`delta_empty: false`** means commits since the fork point, an uncommitted change, or both. It
   already fed `phase`, so Phase select needs nothing from it; keep it for context when a route
   looks wrong.
-- **`base_ref` / `diff_ref`** — the parent branch, and the merge-base commit Testing actually diffs
-  against. `diff_ref` is the run's fixed basis: pass it verbatim to every verifier, never re-derive
-  it per dispatch and never substitute HEAD.
+- **`base_ref` / `diff_ref`** — the parent branch, and the merge-base commit the review diffs
+  against. `ingrain delta` pins `diff_ref` for this branch, so every later `ingrain delta diff`
+  reads the same change on its own. Keep the pair for the report, which names the basis it
+  reviewed.
 - **`changed_files`** — **every** file this change touched, already resolved: `[{path, status}]`
   over committed, staged, unstaged and untracked. No single git command covers all four, which is
   why the script does the merge rather than leaving Testing to assemble it. It is the review's
   **starting point, not its boundary** — a threat survives, and a control goes missing, in code
   the change never touched.
-- **Reading the change is the script's job too** — `branch-delta <host> diff --ref <diff_ref>`, or
-  the same with paths appended. Nobody in this review hand-writes a `git diff`: a hand-written one
-  drifts between the orchestrator and each verifier, and the run then reads several different
-  changes while reporting one.
+- **Reading the change is the CLI's job too** — `ingrain delta diff`, or the same with paths
+  appended. Nobody in this review hand-writes a `git diff`: a hand-written one drifts between the
+  orchestrator and each verifier, and the run then reads several different changes while
+  reporting one.
 - **`fallback`** — `true` when no fork point resolved, with `reason` saying why. Read that script's
   `instruction`, which states whether the review is narrowed by it.
   → `references/lib/branch-delta.md` owns the refs and why this, not `git status`, is the signal.
@@ -256,9 +267,9 @@ rather than the convenient one:
 **The threshold is handed to you as a number — never worked out here.** One rule, both modes:
 **read the mint's `threshold_<band>` key** for whichever band applies to you. Higher maturity
 means a *lower* bar — the org holds that area to a stricter standard — and **an unknown or absent
-band degrades to the strictest**, so a gate can never fail to resolve. The numbers live in
-`scripts/lib/mint.sh`; quoting them anywhere else creates a second authority that can drift from
-the one the gate applies.
+band degrades to the strictest**, so a gate can never fail to resolve. The numbers are resolved
+by `ingrain assessment mint` and reach you only as those keys; quoting them anywhere else
+creates a second authority that can drift from the one the gate applies.
 
 **Where the band comes from. There is exactly one source per mode, so there is no precedence
 to weigh:**
@@ -308,7 +319,7 @@ control it prescribes exist. The selections define the scope, one per axis. **Tw
 continues straight into it on the drivers it just gated, carrying the state it holds — no re-mint,
 no second routing pass. Otherwise it fires when
 **Phase select** lands on Testing — an assessment for this task exists, it carries 1+ selected
-driver on either axis, and `scripts/branch-delta` reported `delta_empty: false`.
+driver on either axis, and `ingrain delta` reported `delta_empty: false`.
 **Everything Development does lives in `references/development/flow.md`:** its numbered steps,
 both user gates, the critique rounds, and the org-rule retrieval.
 
@@ -322,12 +333,10 @@ procedure; these are what it cannot infer.
 
 | Situation | Do this |
 |-----------|---------|
-| `.ingrain-security/` appears to be missing | Re-run the mint and use the path it returns. The folder self-ignores, so `git status` stays silent about it — "missing" means the path resolved elsewhere. |
+| `.ingrain-security/` appears to be missing | Re-run `ingrain assessment mint` and use the path it returns. The folder self-ignores, so `git status` stays silent about it — "missing" means the path resolved elsewhere. |
 | Naming the assessment file to a worker | Pass the absolute `assessment_abs`. A worker has no project root in view, so a relative path resolves against the file it was reading and creates a stray folder there. |
 | The minted file looks empty | Correct — the mint seeds a skeleton, so `has_content` stays `false` until a stage writes into it. Fill it in place rather than re-creating the page. |
 | Deciding the phase on a clean tree | Route on `delta_empty`, never `git status`: a fully committed implementation still belongs to Testing. |
-| Writing on Codex | Approval is granted per **patch** — one touching the assessment *and* another file prompts as a whole. Keep assessment edits in their own patch. |
-| A write to `.ingrain-security/` is held in plan mode | Ask the user to allow writes to that folder — one line on which file and why — then retry the same write. The folder is the run's artifact store, separate from the plan file. |
 | Minting in a later session | Use the recorded Title **verbatim**. The mint is keyed on branch + title, so a paraphrase mints a different file and loses the task, with no error. |
 | A worker's section looks correct | Three-check it against its field card at the next gate anyway — an enum typo stays invisible until it breaks in a later session. |
 | About to open the schema reference mid-run | Only for what a field *means*. The card under the section is the entire shape; re-reading the reference to recover it is the cost this skill exists to avoid. |
@@ -335,4 +344,3 @@ procedure; these are what it cannot infer.
 | The `ingrain` fetch was sandbox-blocked | The retrieval (`flow.md` Step 1b) runs in the main session — re-run and let the host's native prompt reach the user. Continue without rules only once they decline. |
 | A guidance entry names no threat | Fine **if** it names a `selected` org rule — that is rule-driven guidance, fully anchored. An entry naming neither is refused by the CLI and by the platform. |
 | The threat gate selected nothing but a rule was accepted | Proceed to guidance. Selected rules alone sustain a round; only *both* gates empty ends the review. |
-| A code write was **denied** by the review gate | Not a permissions fault. No assessment on this branch records a `## Triage` Verdict, so the user has never been asked. Run this skill — the denial is routing you here. If they do not want a review, answer Step 0's question `No`: the recorded `Verdict: minor` opens the gate for the branch. Never route around the block. |

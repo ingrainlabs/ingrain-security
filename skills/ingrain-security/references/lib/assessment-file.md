@@ -10,7 +10,7 @@ shape.
 - **Path.** A single file written directly into `.ingrain-security/` at the project
   root — it is **both** the living working copy the workers write during the run **and**
   its persisted record, so finalizing it in place is the whole of persisting it. The
-  orchestrator mints it: it runs the `scripts/assessment-mint` script
+  orchestrator mints it: it runs the `ingrain assessment mint` script
   once at review start and reuses its **`assessment_abs`** — the
   absolute path — as the write target throughout; the relative `assessment_path` is a
   display form for prose and links only. **Every write goes to the absolute path** — a
@@ -32,7 +32,7 @@ shape.
   (branch unknown → `assessment-<task-slug>.md`; no usable title →
   `assessment-<branch-slug>.md`; both absent → `assessment.md`), and the `assessment-`
   prefix always leads. The folder is **self-ignoring** (an inner `.gitignore` of a bare `*`,
-  seeded by the `ensure-assessment-dir` hook and re-ensured by the script), so the whole
+  seeded by `ingrain assessment mint` on first creation), so the whole
   folder — the ignore file included — stays out of `git status`; sharing a file is an
   explicit `git add -f <file>` opt-in.
 - **Seeded with a skeleton.** The same mint **writes this file's empty skeleton** when it does
@@ -48,7 +48,7 @@ shape.
   there, every value beneath them is still empty.
 - **The field cards carry the shape; this file carries the meaning.** A card is an HTML comment
   under a section heading naming that section's fields, their order and their exact enumerated
-  values — rendered from the spec below by `scripts/lib/artifact-template.sh`. It is where
+  values — rendered from the spec below by the CLI's `renderSkeleton.ts`. It is where
   writers get the shape, because it arrives with the file they must open to write at all, where
   recovering the same shape from this reference costs a full read of it. **This file stays
   normative**: it owns what each field *means*, the reasoning schemas, id permanence and the
@@ -57,17 +57,16 @@ shape.
   cards are **permanent**: finalize deletes the scratch sections and keeps them, because the
   implementing agent and the Testing pass run in later sessions with no reference in context.
   Because of the seeding, **an untouched skeleton reads as `has_content: false`** — exactly
-  like no file at all, so Phase select and the resume check can read it. Two
-  further fields say which
-  empty case you are in — `template_seeded` (this mint wrote the skeleton) and
-  `template_only` (the file is still an untouched skeleton).
-- **Pre-approved.** An `allow-assessment-write` hook auto-approves writes to this file on
-  both hosts — `PreToolUse` on Claude Code, `PermissionRequest` on Codex — so expect **no
-  permission prompt** when writing it. The grant covers only `assessment*.md` directly
-  inside `.ingrain-security/` — which is exactly `assessment_abs`, and one more reason to
-  write there and nowhere else. Any other path you write still prompts the user and stalls
-  the run. On Codex the approval is granted per **patch**: a patch that touches the
-  assessment *and* any other file prompts as a whole, so keep assessment edits in their own
+  like no file at all, so Phase select and the resume check can read it. What the mint's
+  payload adds is the path (`assessment_abs`) and the route, not a file-state
+  commentary: `has_content` is all the file says.
+- **Pre-approved, where the host honours it.** This skill's `allowed-tools` frontmatter
+  grants `Write` and `Edit` scoped to `.ingrain-security/`, so on a host that applies a
+  path-scoped rule there is **no permission prompt** when writing `assessment_abs`. The
+  grant covers that folder and nothing else, which is one more reason to write there and
+  nowhere else — any other path prompts and stalls the run. **Where the host does not apply
+  the scope, you are simply prompted**: approve it and carry on. That is a nuisance rather
+  than a fault, and never a reason to write somewhere else. Keep assessment edits in their own
   patch. In **plan mode** the write is held for the user's approval all the same: ask them
   to allow writes to `.ingrain-security/`, naming this file and what the run needs it for,
   then retry the same write to `assessment_abs`.
@@ -122,8 +121,9 @@ must use **exactly one** of the listed values (lower-case, verbatim).
   rather than synthesised from `## Triage` Surfaces on purpose — synthesis yields prose the
   user never reviewed and cannot correct.
 - **Schema version** — integer, currently `2`. Declares which revision of *this* schema the
-  file follows, so a consumer branches on a stated version instead of sniffing structure
-  (heading-vs-table today, present-vs-absent fields tomorrow). Bump it here **and in the field
+  file follows, so a consumer checks a stated version instead of sniffing structure.
+  The CLI refuses a file stating none or an older number — released artifacts never have —
+  and regenerating the file with the current plugin is the fix. Bump it here **and in the field
   card** whenever a field is added, removed, or given new allowed values.
 
 ### `## Affected paths` — the folders this change is expected to touch
@@ -266,7 +266,7 @@ dropped threat's id is retired rather than reused, and nothing closes up behind 
 pull-request comments keyed on the tag, so a tag that moved with a re-score would leave a thread
 following a rank rather than the threat it was opened about — with nothing on screen to show it.
 
-**`scripts/threat-retag`** sorts the section after the orchestrator has scored it — **document
+**`ingrain assessment retag`** sorts the section after the orchestrator has scored it — **document
 order only, no renumbering**. It orders by **Risk score descending**, breaking ties by impact
 (critical > high > medium > low), then likelihood (very high > high > medium > low), then the id
 ascending — a deterministic total order, so two runs over the same scores lay the section out the
@@ -304,7 +304,7 @@ the threats made those calls themselves, so there is no threshold to record and 
 unwritten — their absence is how an attended run is told apart from one a band decided.
 
 **Recorded so nothing downstream recomputes them.** The band comes from the org's buckets and
-the threshold from the band→score table the skill holds; a reader that needed the number and
+the threshold from the band→score table `ingrain assessment mint` resolves; a reader that needed the number and
 could not find it here would have to carry a second copy of that table, which is the
 cross-repo duplication the whole arrangement exists to avoid. Writing the number down makes
 every later reader a quoter.
@@ -478,9 +478,8 @@ its checklist, not a validation rule.
 ### `## Maintenance (for the implementing agent)`
 - Instruction to keep the file in sync as the implementation evolves.
 - **How that agent locates this file.** It runs in a later session and has no minted path
-  in context, so it must **re-run** the `assessment-mint` command from its
-  `INGRAIN-ASSESSMENT-PATHS` session context and write to the `assessment_abs` it
-  returns. Re-minting is deterministic in branch + title, so it resolves to this same
+  in context, so it must **re-run** `ingrain assessment mint` with this task's Title
+  verbatim and write to the `assessment_abs` it returns. Re-minting is deterministic in branch + title, so it resolves to this same
   file — and the mint is what resolves the path and ensures the folder, so `assessment_abs`
   arrives ready to write to. 
 
@@ -488,9 +487,9 @@ its checklist, not a validation rule.
 
 A finalized file — both critique sections deleted, `## Org rules` pruned by Selection.
 Its static text (the banner and the Maintenance footer) is seeded by
-`scripts/lib/artifact-template.sh` and reproduced here verbatim; keeping the two in step is
+the CLI's `renderSkeleton.ts` and reproduced here verbatim; keeping the two in step is
 manual, so **an edit to either is an edit to both**. The **field cards are elided below** for
-length — a real file carries one under every heading, and `artifact-template.sh` is where they
+length — a real file carries one under every heading, and `renderSkeleton.ts` is where they
 are written.
 
 ```markdown
@@ -499,7 +498,7 @@ are written.
 > Local working artifact produced by ingrain-security — keep in sync as the
 > implementation evolves (see Maintenance below). Git-ignored.
 >
-> Skeleton seeded by `assessment-mint` — fill the sections below; do not
+> Skeleton seeded by `ingrain assessment mint` — fill the sections below; do not
 > re-create the page. Each is empty until the stage that owns it writes it. The comment
 > under each heading is that section's field card — write from it.
 
@@ -619,8 +618,7 @@ names — the comment under each heading. A threat's `T<n>` is permanent and bel
 to that threat alone: add a new threat with the next free one, retire a dropped
 threat's rather than reusing it, and never renumber the ones already there.
 
-To locate this file, re-run the `assessment-mint` command from your
-INGRAIN-ASSESSMENT-PATHS session context and write to the absolute `assessment_abs`
-it returns — it resolves back to this same file. Do not resolve a relative path
+To locate this file, re-run `ingrain assessment mint` with this task's Title verbatim
+and write to the absolute `assessment_abs` it returns — it resolves back to this same file. Do not resolve a relative path
 against the file you are editing, and do not create an `.ingrain-security/` folder.
 ```

@@ -1,12 +1,12 @@
 /**
- * Static checks on the ingrain-security Testing (verification) pass and its hook wiring.
- * No model calls. Guards the verification contract: Testing lives in a reference the
- * slim SKILL.md points at, reads the same per-task assessment file (by ABSOLUTE
- * assessment_abs), dispatches a read-only verifier per SELECTED threat and per SELECTED
- * org rule, concludes each verdict itself by weighing that verifier's justification on its
- * evidence, and records robustness on the threat and adherence on the rule. Testing has no
- * Stop-hook reminder: it runs on the skill's description or an explicit request, and the
- * tail of this file guards that the hook stays removed.
+ * Static checks on the ingrain-security Testing (verification) pass. No model calls.
+ * Guards the verification contract: Testing lives in a reference the slim SKILL.md points
+ * at, reads the same per-task assessment file (by ABSOLUTE assessment_abs), dispatches a
+ * read-only verifier per SELECTED threat and per SELECTED org rule, concludes each verdict
+ * itself by weighing that verifier's justification on its evidence, and records robustness
+ * on the threat and adherence on the rule. Nothing reminds a session to run it — the plugin
+ * ships no hooks — so it runs on the skill's description or an explicit request, and the
+ * tail of this file guards that no reminder has crept back.
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
@@ -35,8 +35,6 @@ const fencedBlock = (md: string): string =>
   [...md.matchAll(/```[^\n]*\n([\s\S]*?)```/g)].map((m) => m[1]).join("\n");
 const ASSESSMENT_REF = `${ROOT}skills/ingrain-security/references/lib/assessment-file.md`;
 const RULES_REF = `${ROOT}skills/ingrain-security/references/lib/rules-file.md`;
-const HOOK_JSON = `${ROOT}hooks/claude/hook.json`;
-const CODEX_HOOK_JSON = `${ROOT}hooks/codex/hook.json`;
 
 /** Testing carries the same flow/checklist split as Development — see skill.test.ts. */
 Deno.test("verification-pass.md: the Testing checklist tracks every step in the flow", async () => {
@@ -83,7 +81,7 @@ Deno.test("SKILL.md: routes to a phase from repo state, then points at the refer
   // The three Testing conditions, and the signals they are read from. The third is the BRANCH
   // DELTA, not the working tree: a fully-committed implementation must still route to Testing.
   assertStringIncludes(md, "has_content");
-  assertStringIncludes(md, "scripts/branch-delta");
+  assertStringIncludes(md, "ingrain delta");
   assertStringIncludes(md, "delta_empty");
   assertStringIncludes(md, "this section is a pointer, and the procedure is in that file");
 });
@@ -100,13 +98,13 @@ Deno.test("verification-pass.md: dispatches the read-only verifier via its refer
   const md = await Deno.readTextFile(VERIFY);
   // The one worker role and the read-reference dispatch mechanism.
   assertStringIncludes(md, "ingrain-threat-verifier");
-  // ABSOLUTE, from the mint's plugin_root: a dispatched subagent has read nothing
+  // ABSOLUTE, from the skill's own base directory: a dispatched subagent has read nothing
   // yet, so a relative path resolves against the USER'S project and the read fails on
   // its first action. This assertion pinned the relative form; see
   // `static/dispatchPaths.test.ts` for the scan that covers every dispatch site.
   assertStringIncludes(
     md,
-    "Read <plugin_root>/skills/ingrain-security/references/testing/ingrain-threat-verifier.md",
+    "Read <skill_dir>/references/testing/ingrain-threat-verifier.md",
   );
   // The read-only constraint is restated for the dispatched subagent.
   assertStringIncludes(md.toLowerCase(), "read-only");
@@ -137,11 +135,11 @@ Deno.test("verification-pass.md: writes to the absolute assessment_abs, minted n
   assertStringIncludes(md, "assessment_abs");
   // The verifier dispatch template must hand out the absolute path, never a relative one.
   assertStringIncludes(md, "<the minted assessment_abs — the ABSOLUTE path, pasted in full>");
-  // The path is minted by the bundled script, and the relative form is display-only. The
-  // full invocation, not the bare word "mint" — that appears throughout as ordinary prose
+  // The path is minted by the CLI, and the relative form is display-only. The full
+  // invocation, not the bare word "mint" — that appears throughout as ordinary prose
   // ("the mint", "re-minting") and so cannot distinguish a documented command.
-  assertStringIncludes(md, "scripts/assessment-mint");
-  assertStringIncludes(md, "assessment-mint <host> --title");
+  assertStringIncludes(md, "ingrain assessment mint");
+  assertStringIncludes(md, "ingrain assessment mint --host <host> --title");
   assertStringIncludes(md, "assessment_path");
   // Same deterministic branch+task file the plan review wrote.
   assertStringIncludes(md, ".ingrain-security/assessment-<branch-slug>-<task-slug>.md");
@@ -180,22 +178,32 @@ Deno.test("verification-pass.md: guards title drift, stays in the Testing phase"
 
 Deno.test("verification-pass.md: verifies the branch diff since the fork point and reuses the assessment schema", async () => {
   const md = await Deno.readTextFile(VERIFY);
-  // The diff basis is the fork point — committed work included, not just the dirty tree — and it
-  // is resolved by the bundled script, so the gate and the review cannot drift apart.
+  // The diff basis is the fork point — committed work included, not just the dirty tree — and
+  // the CLI both resolves and pins it, so the gate and the review cannot drift apart.
   //
   // The raw-git literals this used to pin (`git diff <diff_ref>`, `git status`) are gone on
-  // purpose: every git command the review runs now comes from the script, and a doc naming a
+  // purpose: every git command the review runs now comes from the CLI, and a doc naming a
   // hand-written one is the drift that produced audit H7. What replaces them pins the same
-  // property from the other side — the file must name the script and the ref, and must NOT
-  // hand out a bare diff command.
-  assertStringIncludes(md, "scripts/branch-delta");
+  // property from the other side — the file must name the command, and must NOT hand out a
+  // bare diff command.
+  assertStringIncludes(md, "ingrain delta");
   assertStringIncludes(md, "diff_ref");
-  assertStringIncludes(md, "branch-delta <host> diff --ref <diff_ref>");
+  assertStringIncludes(md, "ingrain delta diff");
   assertEquals(
     /`git diff <diff_ref>`/.test(md),
     false,
     "verification-pass.md hands out a raw `git diff <diff_ref>` again — every git command the " +
-      "review runs comes from the bundled script (audit H7).",
+      "review runs comes from the CLI (audit H7).",
+  );
+  // `ingrain delta` pins the basis and `diff` reads it back, so the run holds to one change
+  // without the model carrying a ref between steps. A doc that goes back to handing `--ref` to
+  // every verifier has reinstated the invariant-by-memory the pin replaced — and it would still
+  // WORK, which is why nothing else here would catch it.
+  assertEquals(
+    /--ref <diff_ref>/.test(md),
+    false,
+    "verification-pass.md hands `--ref <diff_ref>` to verifiers again — the basis is pinned by " +
+      "`ingrain delta`, so no step carries it.",
   );
   // HEAD survives only as the documented fallback, and must stay documented.
   assertStringIncludes(md, "git diff HEAD");
@@ -253,12 +261,12 @@ Deno.test("verifier ref: INTERNAL worker, read-only with a narrow read-only-git 
   // Read-only on the codebase, with read-only git to obtain the diff, and its whole output is
   // the verdict it returns.
   assertStringIncludes(md.toLowerCase(), "read-only");
-  // The verifier is HANDED the ref by the orchestrator and reads the change at that exact
-  // string — the merge-base, which is what exposes the committed implementation. It reaches it
-  // through the bundled script, never a git command of its own.
-  assertStringIncludes(md, "`branch-delta` command your dispatch carries");
+  // The verifier reads the change at the basis the run pinned — the merge-base, which is what
+  // exposes the committed implementation. It reaches it through the CLI, never a git command of
+  // its own, and it is handed no ref to carry.
+  assertStringIncludes(md, "`ingrain delta` command your dispatch carries");
   assertStringIncludes(md, "never write a git command of your own");
-  assertStringIncludes(md, "exactly as the orchestrator gave it");
+  assertStringIncludes(md, "the basis this run pinned");
   // Grades on the Robustness ladder, and leads with the JUSTIFICATION — not the level. The
   // order is the point: a level written first is one the justification then argues for.
   for (const v of ["`weak`", "`adequate`", "`strong`"]) assertStringIncludes(md, v);
@@ -404,11 +412,10 @@ Deno.test("rule verifier ref: INTERNAL read-only worker, one per selected rule, 
   assertStringIncludes(String(fm.description), "reachable solely through a dispatch");
   assertStringIncludes(md.toLowerCase(), "internal worker");
   assertStringIncludes(md.toLowerCase(), "read-only");
-  // Same diff basis as its threat-axis twin, handed down by the orchestrator and read through
-  // the same bundled script.
-  assertStringIncludes(md, "`branch-delta` command your dispatch carries");
+  // Same diff basis as its threat-axis twin, pinned by the run and read through the same CLI.
+  assertStringIncludes(md, "`ingrain delta` command your dispatch carries");
   assertStringIncludes(md, "never write a git command of your own");
-  assertStringIncludes(md, "exactly as the orchestrator gave it");
+  assertStringIncludes(md, "the basis this run pinned");
   // Its verdict vocabulary, and the justification-first ordering the orchestrator weighs.
   for (const v of ["`followed`", "`not-followed`"]) assertStringIncludes(md, v);
   assertOrder(md, "JUSTIFICATION", "ADHERENCE", "the rule verifier leads with its justification");
@@ -429,20 +436,28 @@ Deno.test("rule verifier ref: INTERNAL read-only worker, one per selected rule, 
 Deno.test("verification-pass.md: dispatches one rule verifier per selected rule, in the same block", async () => {
   const md = await Deno.readTextFile(VERIFY);
   assertStringIncludes(md, "ingrain-rule-verifier");
-  // ABSOLUTE, from the mint's plugin_root: a dispatched subagent has read nothing
+  // ABSOLUTE, from the skill's own base directory: a dispatched subagent has read nothing
   // yet, so a relative path resolves against the USER'S project and the read fails on
   // its first action. This assertion pinned the relative form; see
   // `static/dispatchPaths.test.ts` for the scan that covers every dispatch site.
   assertStringIncludes(
     md,
-    "Read <plugin_root>/skills/ingrain-security/references/testing/ingrain-rule-verifier.md",
+    "Read <skill_dir>/references/testing/ingrain-rule-verifier.md",
   );
   // The two fan-outs share nothing, so they cost one round trip, not two.
   assertStringIncludes(md, "in one block");
-  // The dispatch prompt itself must hand over both minted paths plus the rule identity —
-  // assert on the fenced block, since the surrounding prose addresses the orchestrator.
+  // The dispatch prompt itself must hand over the assessment path plus the rule identity, and
+  // name the command that reads the change — assert on the fenced block, since the surrounding
+  // prose addresses the orchestrator. No ref among them: the basis is pinned, not passed.
   const prompt = fencedBlock(section(md, "## How to dispatch a rule verifier"));
-  for (const needed of ["assessment_abs", "## Org rules", "<rule-id>", "diff_ref"]) {
+  for (
+    const needed of [
+      "assessment_abs",
+      "## Org rules",
+      "<rule-id>",
+      "ingrain delta diff",
+    ]
+  ) {
     assertStringIncludes(prompt, needed);
   }
 });
@@ -599,7 +614,7 @@ Deno.test("ingrain-cli.md: documents both syncs and classifies a malformed artif
  * schema file would leave the skill writing a second artifact nothing reads.
  */
 Deno.test("the rules sidecar is gone, in every place that knew about it", async () => {
-  for (const gone of [`${ROOT}skills/ingrain-security/scripts/rules-path`, RULES_REF]) {
+  for (const gone of [RULES_REF]) {
     const present = await Deno.stat(gone).then(() => true, () => false);
     assertEquals(present, false, `${gone} must be deleted — one artifact carries the analysis`);
   }
@@ -626,56 +641,6 @@ Deno.test("the rules sidecar is gone, in every place that knew about it", async 
         `${name} must not name \`${gone}\` — one artifact carries the analysis`,
       );
     }
-  }
-  // The minter and the write grant knew the second label by name; both must have forgotten it.
-  const templateLib = await Deno.readTextFile(
-    `${ROOT}skills/ingrain-security/scripts/lib/artifact-template.sh`,
-  );
-  assertEquals(
-    templateLib.includes('[ "${label}" = "rules" ]'),
-    false,
-    "artifact-template.sh must render one skeleton, not two",
-  );
-  const writeLib = await Deno.readTextFile(
-    `${ROOT}hooks/scripts/lib/assessment-write.sh`,
-  );
-  assertEquals(
-    writeLib.includes("rules*.md"),
-    false,
-    "the write grant must cover the assessment alone",
-  );
-});
-
-/**
- * The Stop-hook reminder was removed: Testing is no longer nudged at the turn boundary, and
- * `verify-check` (both host wrappers + the shared decision lib) is gone with it. Testing now
- * runs on the skill's own description or an explicit request.
- *
- * This guards the removal in both directions. A Stop entry that reappears would fire a hook
- * whose script no longer exists — failing on every turn end, on a file nobody would think to
- * look at — so the registration and the scripts have to stay gone together.
- */
-Deno.test("hook.json: neither host registers a Stop hook", async () => {
-  for (const [host, path] of [["Claude", HOOK_JSON], ["Codex", CODEX_HOOK_JSON]] as const) {
-    const hook = JSON.parse(await Deno.readTextFile(path));
-    assertEquals(hook.hooks?.Stop, undefined, `${host} must not register a Stop hook`);
-    assertEquals(
-      JSON.stringify(hook).includes("verify-check"),
-      false,
-      `${host} must not reference the removed verify-check script`,
-    );
-  }
-});
-
-Deno.test("verify-check: the scripts and shared lib are gone", async () => {
-  const removed = [
-    "hooks/claude/verify-check",
-    "hooks/codex/verify-check",
-    "skills/ingrain-security/scripts/lib/verify-check.sh",
-  ];
-  for (const rel of removed) {
-    const exists = await Deno.stat(`${ROOT}${rel}`).then(() => true, () => false);
-    assertEquals(exists, false, `${rel} was removed with the Stop hook and must not return`);
   }
 });
 

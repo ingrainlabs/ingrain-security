@@ -17,7 +17,7 @@
  * A disposable git repo holding `files`, ready to be handed to a session as its cwd.
  *
  * **Two branches and a real fork point, not one commit.** A single-commit repo on one branch has
- * no branch to diff against: `branch-delta` reports `fallback: true`, `reason: no-fork-point`,
+ * no branch to diff against: `ingrain delta` reports `fallback: true`, `reason: no-fork-point`,
  * `delta_empty: true`, and the whole Testing half of the skill correctly refuses to run — it
  * says "no changes to verify" and stops, and Phase select routes to `requires_judgement`. Any
  * test whose subject is downstream of a delta then measures a refusal instead, and — worse —
@@ -26,6 +26,10 @@
  * So `main` holds the seed and `feature/session` holds one commit on top: `delta_empty: false`
  * with a resolvable merge-base, which is the shape a real pull request has.
  */
+/** The session branch, and its slug — what every artifact the CLI writes is named for. */
+export const SESSION_BRANCH = "feature/session";
+export const SESSION_BRANCH_SLUG = "feature-session";
+
 export async function projectWith(files: Record<string, string>): Promise<string> {
   const dir = await Deno.makeTempDir({ prefix: "ingrain-session-" });
   await Deno.writeTextFile(`${dir}/README.md`, "# fixture\n");
@@ -42,7 +46,7 @@ export async function projectWith(files: Record<string, string>): Promise<string
   // `main` first, carrying only the README — so every file the caller asked for lands in the
   // branch's own delta rather than in its base.
   await git(`git init -q -b main . && git add -A && ${commit} -m base`);
-  await git(`git checkout -q -b feature/session`);
+  await git(`git checkout -q -b ${SESSION_BRANCH}`);
   for (const [name, body] of Object.entries(files)) {
     await Deno.writeTextFile(`${dir}/${name}`, body);
   }
@@ -59,6 +63,52 @@ export const MAJOR_PROJECT: Record<string, string> = {
     "module.exports = app;",
   ].join("\n"),
   "schema.sql": "CREATE TABLE users (id SERIAL PRIMARY KEY, email TEXT NOT NULL);\n",
+};
+
+/**
+ * `MAJOR_PLAN` **already built**, which is the shape CI reviews: a pull request carries the
+ * implementation, so Development gates its drivers and Testing has code to judge in the same
+ * pass. `MAJOR_PROJECT` is the same repository *before* that work, where a fall-through would
+ * verify an implementation that does not exist and report every threat weak for a trivial
+ * reason — which is what the model does when handed it, correctly.
+ *
+ * The implementation is deliberately **flawed in the ways the plan's own threats predict** —
+ * interpolated SQL, a plaintext password comparison, a `Math.random` token — so the verifiers
+ * have something real to find. A clean implementation would make a passing run indistinguishable
+ * from one that verified nothing.
+ */
+export const MAJOR_PROJECT_IMPLEMENTED: Record<string, string> = {
+  "server.js": [
+    "const express = require('express');",
+    "const db = require('./db');",
+    "const app = express();",
+    "app.use(express.json());",
+    "",
+    "app.get('/health', (req, res) => res.send('ok'));",
+    "",
+    "app.post('/login', async (req, res) => {",
+    "  const { email, password } = req.body;",
+    "  const user = await db.query(",
+    "    `SELECT id, password FROM users WHERE email = '${email}'`,",
+    "  );",
+    "  if (!user || user.password !== password) return res.status(401).send('no');",
+    "  const token = Math.random().toString(36).slice(2);",
+    "  await db.query(",
+    "    `INSERT INTO sessions (user_id, token) VALUES (${user.id}, '${token}')`,",
+    "  );",
+    "  res.json({ token });",
+    "});",
+    "",
+    "module.exports = app;",
+  ].join("\n"),
+  "schema.sql": [
+    "CREATE TABLE users (",
+    "  id SERIAL PRIMARY KEY,",
+    "  email TEXT NOT NULL,",
+    "  password TEXT NOT NULL",
+    ");",
+    "CREATE TABLE sessions (user_id INTEGER NOT NULL, token TEXT NOT NULL);",
+  ].join("\n"),
 };
 
 /** What `MINOR_PLAN` says it will change: the hero button's styling and a README typo. */
